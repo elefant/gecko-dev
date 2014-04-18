@@ -1,4 +1,4 @@
-MARIONETTE_TIMEOUT = 50000;
+MARIONETTE_TIMEOUT = 60000;
 
 let HOSTAPD_CONFIG_PATH = '/data/misc/wifi/hostapd/';
 
@@ -32,10 +32,17 @@ let HOSTAPD_CONFIG_LIST = [
 ];
 
 function startTest() {
-  startHostapds(function() {
-    runEmulatorShell(["ps"], function(processes) {
-      is(countProcesses(processes, "hostapd"), HOSTAPD_CONFIG_LIST.length);
-      onHostpadsStarted();
+  let stockHostapds;
+
+  // Get stock hostapd for later use.
+  getProcessDetail('hostapd', function(detail) {
+    stockHostapds = detail;
+
+    startHostapds(function() {
+      getProcessDetail('hostapd', function(detail) {
+        is(detail.length, HOSTAPD_CONFIG_LIST.length + stockHostapds.length);
+        onHostpadsStarted();
+      });
     });
   });
 
@@ -59,16 +66,38 @@ function startTest() {
       checkNetworks();
     }
 
+    function getTestHostapdIndex(aSsid) {
+      for (let i = 0; i < HOSTAPD_CONFIG_LIST.length; i++) {
+        if (HOSTAPD_CONFIG_LIST[i].ssid === aSsid) {
+          return i;
+        }
+      }
+      log(aSsid + ' is stock hostap!');
+      return -1;
+    }
+
     function checkNetworks() {
       let request = wifiManager.getNetworks();
       request.onsuccess = function() {
         log("Networks: " + JSON.stringify(request.result));
         ok(request.result.length);
-        testAssociate(request.result[0]);
+
+        // Chooose the first non-stock hostapd to test.
+        for (let i = 0; i < request.result.length; i++) {
+          let network = request.result[i];
+          if (-1 !== getTestHostapdIndex(network.ssid)) {
+            testAssociate(network);
+            return;
+          }
+        }
+
+        ok(false, 'Test hostapd NOT found.');
+        endTest();
       }
     }
 
     function testAssociate(aNetwork) {
+      log('testAssociate() with ' + aNetwork.ssid);
       setPasswordIfNeeded(aNetwork);
       wifiManager.onstatuschange = function(event) {
         log("event.status: " + event.status);
@@ -89,6 +118,7 @@ function startTest() {
     }
 
     function testDisableWifi() {
+      log('testDisableWifi()');
       navigator.mozSettings.createLock().set({
         'wifi.enabled': false
       }).onerror = function() {
@@ -103,15 +133,10 @@ function startTest() {
     }
 
     function setPasswordIfNeeded(aNetwork) {
-      let i = 0;
-      for (i = 0; i < HOSTAPD_CONFIG_LIST.length; i++) {
-        if (aNetwork.ssid === HOSTAPD_CONFIG_LIST[i].ssid) {
-          break;
-        }
-      }
-
-      if (i === HOSTAPD_CONFIG_LIST.length) {
-        ok(false, 'unknown ssid: ' + aNetwork.ssid);
+      let i = getTestHostapdIndex(aNetwork.ssid);
+      if (-1 === i) {
+        log('unknown ssid: ' + aNetwork.ssid);
+        endTest();
         return;
       }
 
@@ -129,9 +154,45 @@ function startTest() {
       }
     }
 
+    function isStockHostapd(pid) {
+      for (let i = 0; i < stockHostapds.length; i++) {
+        if (stockHostapds[i].pid === pid) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function killNonStockHostapds(aCallback) {
+      let done = 0;
+      getProcessDetail('hostapd', function(runningHostapds) {
+        for (let i = 0; i < runningHostapds.length; i++) {
+          if (!isStockHostapd(runningHostapds[i].pid)) {
+            runEmulatorShell(["kill", "-9", runningHostapds[i].pid], function() {
+              if (++done === runningHostapds.length) {
+                aCallback();
+              }
+            });
+          } else {
+            if (++done === runningHostapds.length) {
+              aCallback();
+            }
+          }
+        }
+      });
+    }
+
+    function endTest() {
+      killNonStockHostapds(function() {
+        getProcessDetail('hostapd', function(detail) {
+          is(detail.length, stockHostapds.length);
+          finish();
+        });
+      });
+    }
+
   }
 }
-
 
 function writeFile(aFileName, aContent, aCallback) {
   // Workaround....
@@ -184,53 +245,28 @@ function startHostapd(aIndex, aCallback) {
   });
 }
 
-function countProcesses(aArrayOfProcesses, aProcess) {
-  let cnt = 0;
-  for (let i = 0; i < aArrayOfProcesses.length; i++) {
-    if (-1 !== aArrayOfProcesses[i].indexOf(aProcess)) {
-      cnt++
-    }
-  }
-  return cnt;
-}
-
-function killall(aProcessNameToKill, aCallback) {
+// Return an array of process detail:
+//   - pname: full process name containing the given short process name.
+//   - pid: process id.
+function getProcessDetail(aProcessName, aCallback) {
+  let detail = [];
   runEmulatorShell(["ps"], function(processes) {
-    let done = 0;
-
     /*
     USER     PID   PPID  VSIZE  RSS     WCHAN    PC         NAME
     root      1     0     284    204   c009e6c4 0000deb4 S /init
     root      2     0     0      0     c0052c64 00000000 S kthreadd
     root      3     2     0      0     c0044978 00000000 S ksoftirqd/0
     */
-
     for (let i = 0; i < processes.length; i++) {
       let tokens = processes[i].split(/\s+/);
       let pname = tokens[tokens.length - 1];
       let pid = tokens[1];
-      ok(true, JSON.stringify(tokens));
-      if (-1 !== pname.indexOf(aProcessNameToKill)) {
-        runEmulatorShell(["kill", "-9", pid], function() {
-          if (++done === processes.length) {
-            aCallback();
-          }
-        });
-      } else {
-        if (++done === processes.length) {
-          aCallback();
-        }
+      if (-1 !== pname.indexOf(aProcessName)) {
+        detail.push({ pname: pname, pid: pid });
       }
     }
-  });
-}
 
-function endTest() {
-  killall('hostapd', function() {
-    runEmulatorShell(["ps"], function(processes) {
-      is(countProcesses(processes, 'hostapd'), 0);
-      finish();
-    });
+    aCallback(detail);
   });
 }
 
