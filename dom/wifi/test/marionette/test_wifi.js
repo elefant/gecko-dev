@@ -234,6 +234,7 @@ function endTest() {
   });
 }
 
+// The permission required by this test case is wifi-manage and settings-write.
 SpecialPowers.pushPermissions([{ "type": "wifi-manage", "allow": 1, "context": window.document }], function() {
-  startTest();
+  SpecialPowers.pushPermissions([{'type': 'settings-write', 'allow': true, 'context': document}], startTest);
 });
