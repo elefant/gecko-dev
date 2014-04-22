@@ -34,17 +34,21 @@ let HOSTAPD_CONFIG_LIST = [
 function startTest() {
   let stockHostapds;
 
-  // Get stock hostapd for later use.
-  getProcessDetail('hostapd', function(detail) {
-    stockHostapds = detail;
+  stopStockHostapd(function(aSuccess) {
+    ok(aSuccess, 'Stopped stock hostapd!');
 
-    startHostapds(function() {
-      getProcessDetail('hostapd', function(detail) {
-        is(detail.length, HOSTAPD_CONFIG_LIST.length + stockHostapds.length);
-        onHostpadsStarted();
+    // Get stock hostapd for later use.
+    getProcessDetail('hostapd', function(detail) {
+      stockHostapds = detail;
+      startHostapds(function() {
+        getProcessDetail('hostapd', function(detail) {
+          is(detail.length, HOSTAPD_CONFIG_LIST.length + stockHostapds.length);
+          onHostpadsStarted();
+        });
       });
     });
   });
+
 
   function onHostpadsStarted() {
     let wifiManager = window.navigator.mozWifiManager;
@@ -186,7 +190,10 @@ function startTest() {
       killNonStockHostapds(function() {
         getProcessDetail('hostapd', function(detail) {
           is(detail.length, stockHostapds.length);
-          finish();
+          startStockHostapd(function(aSuccess) {
+            ok(aSuccess, 'Started stock hostapd!');
+            finish();
+          });
         });
       });
     }
@@ -243,6 +250,42 @@ function startHostapd(aIndex, aCallback) {
       aCallback();
     });
   });
+}
+
+function isServiceRunning(aServiceName, aCallback) {
+  runEmulatorShell(['getprop init.svc.' + aServiceName], function(result) {
+    aCallback('running' === result[0]);
+  });
+}
+
+function serviceControl(aServiceName, aStart, aCallback) {
+  let retryCnt = 10;
+  function isServiceRunningCallback(aIsRunning) {
+    let controlSuccess = (aStart === aIsRunning);
+    if (!controlSuccess && retryCnt-- > 0) {
+      log('Failed to ' + (aStart ? 'Start ' : 'Stop ') + aServiceName + '. Retry: ' + retryCnt);
+      isServiceRunning(aServiceName, isServiceRunningCallback);
+      return;
+    }
+    aCallback(controlSuccess);
+  }
+  runEmulatorShell([(aStart ? 'start ' : 'stop ') + aServiceName], function() {
+    isServiceRunning(aServiceName, isServiceRunningCallback);
+  });
+}
+
+function startStockHostapd(aCallback) {
+  serviceControl('goldfish-hostapd', true, function(aSuccess) {
+    if (aSuccess) {
+      aCallback(true);
+      return;
+    }
+    serviceControl('goldfish-hostapd', true, aCallback);
+  });
+}
+
+function stopStockHostapd(aCallback) {
+  serviceControl('goldfish-hostapd', false, aCallback);
 }
 
 // Return an array of process detail:
