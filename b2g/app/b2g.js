@@ -43,7 +43,7 @@ pref("browser.ignoreNativeFrameTextSelection", true);
 /* cache prefs */
 #ifdef MOZ_WIDGET_GONK
 pref("browser.cache.disk.enable", true);
-pref("browser.cache.disk.capacity", 55000); // kilobytes
+pref("browser.cache.disk.capacity", 200000); // kilobytes
 pref("browser.cache.disk.parent_directory", "/cache");
 #endif
 pref("browser.cache.disk.smart_size.enabled", false);

@@ -59,6 +59,8 @@ GetLoadContextInfo(nsIChannel * aChannel)
     appId = nsILoadContextInfo::NO_APP_ID;
     ib = false;
   }
+  appId = nsILoadContextInfo::NO_APP_ID;
+  ib = false;
 
   bool anon = false;
   nsLoadFlags loadFlags;

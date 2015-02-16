@@ -665,6 +665,9 @@ nsHttpResponseHead::GetAgeValue(uint32_t *result) const
 nsresult
 nsHttpResponseHead::GetMaxAgeValue(uint32_t *result) const
 {
+    // Force max-age value unavailable.
+    return NS_ERROR_NOT_AVAILABLE;
+#if 0
     const char *val = PeekHeader(nsHttp::Cache_Control);
     if (!val)
         return NS_ERROR_NOT_AVAILABLE;
@@ -686,6 +689,7 @@ nsHttpResponseHead::GetMaxAgeValue(uint32_t *result) const
         maxAgeValue = 0;
     *result = static_cast<uint32_t>(maxAgeValue);
     return NS_OK;
+#endif
 }
 
 nsresult
@@ -799,6 +803,8 @@ nsHttpResponseHead::ParseCacheControl(const char *val)
         return;
     }
 
+    // Disable all cache control.
+#if 0
     // search header value for occurrence of "private"
     if (nsHttp::FindToken(val, "private", HTTP_HEADER_VALUE_SEPS))
         mCacheControlPrivate = true;
@@ -811,6 +817,7 @@ nsHttpResponseHead::ParseCacheControl(const char *val)
     // search header value for occurrence of "no-store"
     if (nsHttp::FindToken(val, "no-store", HTTP_HEADER_VALUE_SEPS))
         mCacheControlNoStore = true;
+#endif
 }
 
 void

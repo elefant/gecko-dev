@@ -909,8 +909,8 @@ BrowserElementChild.prototype = {
 
   _getContentDimensions: function() {
     return {
-      width: content.document.body.scrollWidth,
-      height: content.document.body.scrollHeight
+      width: (content.document.body ? content.document.body.scrollWidth : 0),
+      height: (content.document.body ? content.document.body.scrollHeight : 0)
     }
   },
 
@@ -1209,7 +1209,8 @@ BrowserElementChild.prototype = {
         sendAsyncMsg('loadstart');
       }
 
-      if (stateFlags & Ci.nsIWebProgressListener.STATE_STOP) {
+      if (stateFlags & Ci.nsIWebProgressListener.STATE_STOP &&
+          !(stateFlags & Ci.nsIWebProgressListener.STATE_REDIRECTING)) {
         let bgColor = 'transparent';
         try {
           bgColor = content.getComputedStyle(content.document.body)
