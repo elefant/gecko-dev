@@ -18,6 +18,11 @@
 
 #include <system/window.h>
 #include "mozilla/Types.h"
+#include <utils/StrongPointer.h>
+
+namespace android {
+    class IGraphicBufferProducer;
+}
 
 namespace mozilla {
 
@@ -49,6 +54,12 @@ public:
     virtual bool QueueBuffer(ANativeWindowBuffer* buf) = 0;
 
     virtual void UpdateFBSurface(EGLDisplay dpy, EGLSurface sur) = 0;
+
+    virtual void SetVirtualDisplayBuffer(android::sp<android::IGraphicBufferProducer> aVirtualDisplayBuffer)
+    {
+    }
+
+    virtual ANativeWindow* GetVirtualDisplaySurface() { return nullptr; }
 
     /**
      * Set FramebufferSurface ReleaseFence's file descriptor.

@@ -54,6 +54,10 @@ public:
 
     bool Post(buffer_handle_t buf, int fence);
 
+    virtual void SetVirtualDisplayBuffer(android::sp<android::IGraphicBufferProducer> aVirtualDisplayBuffer);
+
+    virtual ANativeWindow* GetVirtualDisplaySurface();
+
 private:
     hw_module_t const*        mModule;
     hw_module_t const*        mFBModule;
@@ -68,6 +72,9 @@ private:
     uint32_t mWidth;
     uint32_t mHeight;
     OnEnabledCallbackType mEnabledCallback;
+
+    android::sp<android::IGraphicBufferProducer> mVirtualDisplayBuffer;
+    android::sp<ANativeWindow> mVirtualDisplaySurface;
 };
 
 }

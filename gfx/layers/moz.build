@@ -367,6 +367,8 @@ LOCAL_INCLUDES += [
 
 FINAL_LIBRARY = 'xul'
 
+LOCAL_INCLUDES += ['/widget/gonk']
+
 if CONFIG['MOZ_DEBUG']:
     DEFINES['D3D_DEBUG_INFO'] = True
 

@@ -29,6 +29,10 @@ class GLContextEGL : public GLContext
                     EGLSurface surface);
 
 public:
+    // FIXME: Change it to a member function of GLContext or GLContextEGL
+    static EGLSurface CreateVirtualDisplaySurface();
+
+public:
     MOZ_DECLARE_REFCOUNTED_VIRTUAL_TYPENAME(GLContextEGL, MOZ_OVERRIDE)
     GLContextEGL(const SurfaceCaps& caps,
                  GLContext* shareContext,
@@ -70,6 +74,9 @@ public:
 
     void SetEGLSurfaceOverride(EGLSurface surf);
 
+    // FIXME: Can we merge this to SetEGLSurfaceOverride?
+    void SetVirtualDisplaySurface(EGLSurface surf);
+
     virtual bool MakeCurrentImpl(bool aForce) MOZ_OVERRIDE;
 
     virtual bool IsCurrent() MOZ_OVERRIDE;
@@ -109,6 +116,9 @@ protected:
     EGLContext mContext;
     nsRefPtr<gfxASurface> mThebesSurface;
     bool mBound;
+
+    // FIXME: Can we merge this to mSurfaceOverride?
+    EGLSurface mVirtualDisplaySurface;
 
     bool mIsPBuffer;
     bool mIsDoubleBuffered;

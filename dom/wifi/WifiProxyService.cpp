@@ -9,6 +9,9 @@
 #include "mozilla/dom/ToJSValue.h"
 #include "nsXULAppAPI.h"
 #include "WifiUtils.h"
+#include <android/log.h>
+
+//#define ALOG(args...)   __android_log_print(ANDROID_LOG_ERROR,  "WifiProxyService", ## args)
 
 #ifdef MOZ_TASK_TRACER
 #include "GeckoTaskTracer.h"

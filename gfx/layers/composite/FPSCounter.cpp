@@ -21,6 +21,9 @@
 #include "prprf.h"                      // for PR_snprintf
 #include "FPSCounter.h"
 
+#include <android/log.h>
+#define ALOG(args...)  __android_log_print(ANDROID_LOG_INFO, "FPSCounter" , ## args)
+
 namespace mozilla {
 namespace layers {
 
@@ -441,6 +444,8 @@ void FPSState::DrawFPS(TimeStamp aNow,
 
   unsigned int fps = unsigned(mCompositionFps.AddFrameAndGetFps(aNow));
   unsigned int txnFps = unsigned(mTransactionFps.GetFPS(aNow));
+
+  ALOG("fps: %d, %d, %d", fps, txnFps, aFillRatio);
 
   DrawDigits(fps, aOffsetX + 0, aOffsetY, aCompositor, effectChain);
   DrawDigits(txnFps, aOffsetX + FontWidth * 4, aOffsetY, aCompositor, effectChain);

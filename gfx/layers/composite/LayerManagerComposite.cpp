@@ -58,9 +58,70 @@
 #include "GeckoProfiler.h"
 #include "TextRenderer.h"               // for TextRenderer
 
+#include <android/log.h>
+#define ALOG(args...)  __android_log_print(ANDROID_LOG_INFO, "LayerManagerComposite" , ## args)
+
 class gfxContext;
 struct nsIntSize;
 
+static struct RenderingStat
+{
+  RenderingStat()
+    : mTimeBase(0)
+  {
+  }
+
+  PRTime mRenderStartTime;
+
+  PRTime mPrimaryRenderingTime;
+  PRTime mPrimarySwapTime;
+  PRTime mPrimaryTraversalTime;
+  PRTime mLastPrimaryEndFrameTime;
+
+  PRTime mVirtualRenderingTime;
+  PRTime mVirtualSwapTime;
+  PRTime mVirtualTraversalTime;
+
+  PRTime mTimeBase;
+
+  void Reset() {
+    mPrimaryRenderingTime = 0;
+    mPrimarySwapTime = 0;
+    mPrimaryTraversalTime = 0;
+    mVirtualRenderingTime = 0;
+    mVirtualSwapTime = 0;
+    mVirtualTraversalTime = 0;
+    mLastPrimaryEndFrameTime = 0;
+    mRenderStartTime = 0;
+  }
+
+  double ToMs(PRTime ts) {
+    return (double)ts / 1000;
+  }
+
+  void FinishPrimaryEndFrame() {
+    if (mLastPrimaryEndFrameTime == 0) {
+      mLastPrimaryEndFrameTime = PR_Now();
+      return;
+    }
+    PRTime now = PR_Now();
+    ALOG("Time from last primary end frame time: %d", (int)(now - mLastPrimaryEndFrameTime));
+    mLastPrimaryEndFrameTime = now;
+  }
+
+  void Dump() {
+    if (mTimeBase == 0) {
+      mTimeBase = mRenderStartTime;
+      return;
+    }
+
+    ALOG("RenderingStat: %5.2lf,    %5.2lf,    %5.2lf, %5.2lf, %5.2lf,      %5.2lf, %5.2lf, %5.2lf",
+          ToMs(mRenderStartTime - mTimeBase),
+          ToMs(mPrimaryRenderingTime + mVirtualRenderingTime),
+          ToMs(mPrimaryRenderingTime), ToMs(mPrimarySwapTime), ToMs(mPrimaryTraversalTime),
+          ToMs(mVirtualRenderingTime), ToMs(mVirtualSwapTime), ToMs(mVirtualTraversalTime));
+  }
+} gRenderingStat;
 
 namespace mozilla {
 namespace layers {
@@ -115,6 +176,7 @@ LayerManagerComposite::LayerManagerComposite(Compositor* aCompositor)
 {
   mTextRenderer = new TextRenderer(aCompositor);
   MOZ_ASSERT(aCompositor);
+  ALOG("Ctor of LayerManagerComposite");
 }
 
 LayerManagerComposite::~LayerManagerComposite()
@@ -160,11 +222,11 @@ void
 LayerManagerComposite::BeginTransaction()
 {
   mInTransaction = true;
-  
+
   if (!mCompositor->Ready()) {
     return;
   }
-  
+
   mIsCompositorReady = true;
 
   mClonedLayerTreeProperties = LayerProperties::CloneFrom(GetRoot());
@@ -174,7 +236,7 @@ void
 LayerManagerComposite::BeginTransactionWithDrawTarget(DrawTarget* aTarget, const nsIntRect& aRect)
 {
   mInTransaction = true;
-  
+
   if (!mCompositor->Ready()) {
     return;
   }
@@ -308,6 +370,9 @@ LayerManagerComposite::EndTransaction(DrawPaintedLayerCallback aCallback,
     ApplyOcclusionCulling(mRoot, opaque);
 
     Render();
+
+    gRenderingStat.Dump();
+
     mGeometryChanged = false;
   } else {
     // Modified layer tree
@@ -609,6 +674,148 @@ LayerManagerComposite::PopGroupForLayerEffects(RefPtr<CompositingRenderTarget> a
                         Matrix4x4());
 }
 
+void LayerManagerComposite::RenderVirtualDisplay() {
+  Rect vdsRect;
+
+  if (!mCompositor->TryVirtualDisplay(&vdsRect)) {
+    return;
+  }
+
+  mCompositor->ClearTargetContext();
+
+  // At this time, it doesn't really matter if these preferences change
+  // during the execution of the function; we should be safe in all
+  // permutations. However, may as well just get the values onces and
+  // then use them, just in case the consistency becomes important in
+  // the future.
+  bool invertVal = gfxPrefs::LayersEffectInvert();
+  bool grayscaleVal = gfxPrefs::LayersEffectGrayscale();
+  float contrastVal = gfxPrefs::LayersEffectContrast();
+  bool haveLayerEffects = (invertVal || grayscaleVal || contrastVal != 0.0);
+
+  nsIntRegion invalid;
+  if (mTarget) {
+    invalid = mTargetBounds;
+  } else {
+    invalid = mInvalidRegion;
+    // Reset the invalid region now that we've begun compositing.
+    mInvalidRegion.SetEmpty();
+  }
+
+  nsIntRect clipRect;
+  //Rect bounds(mRenderBounds.x, mRenderBounds.y, mRenderBounds.width, mRenderBounds.height);
+  Rect actualBounds;
+
+
+  float scaleRatio;
+  float xOffset;
+
+  ALOG("mRenderBounds: %d, %d, %d, %d", mRenderBounds.x,
+                                       mRenderBounds.y,
+                                       mRenderBounds.width,
+                                       mRenderBounds.height);
+
+  float vdsWidthHeightRatio = (float)vdsRect.width / vdsRect.height;
+  float screenWidthHeightRatio = (float)mRenderBounds.width / mRenderBounds.height;
+
+  ALOG("vds (%d, %d) ratio: %f, screen ratio: %f",
+       (int)vdsRect.width, (int)vdsRect.height,
+       vdsWidthHeightRatio, screenWidthHeightRatio);
+
+  if (screenWidthHeightRatio < vdsWidthHeightRatio) {
+    // fit height
+    scaleRatio = (float)vdsRect.height / mRenderBounds.height;
+  } else {
+    // fit width
+    scaleRatio = (float)vdsRect.width / mRenderBounds.width;
+  }
+
+  xOffset = vdsRect.width / 2 - mRenderBounds.width * scaleRatio / 2;
+  xOffset /= scaleRatio;
+
+  ALOG("scaleRatio: %f, xOffset: %f", scaleRatio, xOffset);
+
+  LayerComposite* rootComposite = mRoot->AsLayerComposite();
+
+  gfx::Matrix trans = rootComposite->GetShadowTransform().As2D();
+
+
+  if (mRenderBounds.width > mRenderBounds.height) {
+    trans.PreScale(scaleRatio, scaleRatio);
+    trans = gfx::Matrix::Rotation(-M_PI / 2) * trans;
+    trans.PreTranslate(-mRenderBounds.height, 0);
+  } else {
+    trans.PreScale(scaleRatio, scaleRatio);
+    trans.PreTranslate(xOffset, 0);
+  }
+
+  rootComposite->SetShadowTransform(gfx::Matrix4x4::From2D(trans));
+
+  mRoot->ComputeEffectiveTransforms(gfx::Matrix4x4());
+
+  Rect bounds(mRenderBounds.x, mRenderBounds.y, vdsRect.width, vdsRect.height);
+
+  if (mRoot->GetClipRect()) {
+    clipRect = *mRoot->GetClipRect();
+    Rect rect(clipRect.x, clipRect.y, clipRect.width, clipRect.height);
+    mCompositor->BeginFrame(invalid, &rect, bounds, nullptr, &actualBounds);
+  } else {
+    gfx::Rect rect;
+    mCompositor->BeginFrame(invalid, nullptr, bounds, &rect, &actualBounds);
+    clipRect = nsIntRect(rect.x, rect.y, rect.width, rect.height);
+  }
+
+  if (actualBounds.IsEmpty()) {
+    //mCompositor->GetWidget()->PostRender(this);
+    return;
+  }
+
+  // Allow widget to render a custom background.
+  mCompositor->GetWidget()->DrawWindowUnderlay(this, nsIntRect(actualBounds.x,
+                                                               actualBounds.y,
+                                                               actualBounds.width,
+                                                               actualBounds.height));
+
+  RefPtr<CompositingRenderTarget> previousTarget;
+  if (haveLayerEffects) {
+    previousTarget = PushGroupForLayerEffects();
+  } else {
+    mTwoPassTmpTarget = nullptr;
+  }
+
+  PRTime beginTraversal = PR_Now();
+  // Render our layers.
+  RootLayer()->Prepare(RenderTargetPixel::FromUntyped(clipRect));
+  RootLayer()->RenderLayer(clipRect);
+  gRenderingStat.mVirtualTraversalTime = PR_Now() - beginTraversal;
+
+  if (!mRegionToClear.IsEmpty()) {
+    nsIntRegionRectIterator iter(mRegionToClear);
+    const nsIntRect *r;
+    while ((r = iter.Next())) {
+      mCompositor->ClearRect(Rect(r->x, r->y, r->width, r->height));
+    }
+  }
+
+  if (mTwoPassTmpTarget) {
+    MOZ_ASSERT(haveLayerEffects);
+    PopGroupForLayerEffects(previousTarget, clipRect,
+                            grayscaleVal, invertVal, contrastVal);
+  }
+
+  // Allow widget to render a custom foreground.
+  mCompositor->GetWidget()->DrawWindowOverlay(this, nsIntRect(actualBounds.x,
+                                                              actualBounds.y,
+                                                              actualBounds.width,
+                                                              actualBounds.height));
+
+  PRTime begin = PR_Now();
+  mCompositor->EndFrame();
+  gRenderingStat.mVirtualSwapTime = PR_Now() - begin;
+  mCompositor->EndVirtualDisplay();
+  //mCompositor->SetFBAcquireFence(mRoot);
+}
+
 void
 LayerManagerComposite::Render()
 {
@@ -619,6 +826,9 @@ LayerManagerComposite::Render()
     NS_WARNING("Call on destroyed layer manager");
     return;
   }
+
+  PRTime beginTs = PR_Now();
+  gRenderingStat.mRenderStartTime = beginTs;
 
   // At this time, it doesn't really matter if these preferences change
   // during the execution of the function; we should be safe in all
@@ -669,9 +879,14 @@ LayerManagerComposite::Render()
         printf_stderr("HWComposer: FPS is %g\n", fps);
       }
     }
+
+    RenderVirtualDisplay();
+
     mCompositor->EndFrameForExternalComposition(Matrix());
+
     // Reset the invalid region as compositing is done
     mInvalidRegion.SetEmpty();
+
     mLastFrameMissedHWC = false;
     return;
   } else if (!mTarget) {
@@ -704,7 +919,7 @@ LayerManagerComposite::Render()
 
   if (mRoot->GetClipRect()) {
     clipRect = *mRoot->GetClipRect();
-    Rect rect(clipRect.x, clipRect.y, clipRect.width, clipRect.height);
+    Rect rect(clipRect.x, clipRect.y, clipRect.width / 2, clipRect.height / 2);
     mCompositor->BeginFrame(invalid, &rect, bounds, nullptr, &actualBounds);
   } else {
     gfx::Rect rect;
@@ -730,9 +945,11 @@ LayerManagerComposite::Render()
     mTwoPassTmpTarget = nullptr;
   }
 
+  PRTime beginTraversal = PR_Now();
   // Render our layers.
   RootLayer()->Prepare(RenderTargetPixel::FromUntyped(clipRect));
   RootLayer()->RenderLayer(clipRect);
+  gRenderingStat.mPrimaryTraversalTime = PR_Now() - beginTraversal;
 
   if (!mRegionToClear.IsEmpty()) {
     nsIntRegionRectIterator iter(mRegionToClear);
@@ -761,9 +978,18 @@ LayerManagerComposite::Render()
     PROFILER_LABEL("LayerManagerComposite", "EndFrame",
       js::ProfileEntry::Category::GRAPHICS);
 
+    PRTime beginSwap = PR_Now();
     mCompositor->EndFrame();
+    gRenderingStat.mPrimarySwapTime = PR_Now() - beginSwap;
+    gRenderingStat.FinishPrimaryEndFrame();
     mCompositor->SetFBAcquireFence(mRoot);
   }
+
+  gRenderingStat.mPrimaryRenderingTime = PR_Now() - beginTs;
+
+  PRTime renderVirtualBegin = PR_Now();
+  RenderVirtualDisplay();
+  gRenderingStat.mVirtualRenderingTime = PR_Now() - renderVirtualBegin;
 
   mCompositor->GetWidget()->PostRender(this);
 

@@ -59,6 +59,16 @@
 #include <ui/Fence.h>
 #endif
 
+
+#include "GLContextEGL.h"
+
+#include <android/log.h>
+#define ALOG(args...)  __android_log_print(ANDROID_LOG_INFO, "Gonk" , ## args)
+
+
+// FIXME: Remove this hack...
+nsIntRect gVirtualScreenBounds;
+
 namespace mozilla {
 
 using namespace std;
@@ -82,6 +92,7 @@ CompositorOGL::CompositorOGL(nsIWidget *aWidget, int aSurfaceWidth,
                              int aSurfaceHeight, bool aUseExternalSurfaceSize)
   : mWidget(aWidget)
   , mWidgetSize(-1, -1)
+  , mVirtualDisplaySurface(EGL_NO_SURFACE)
   , mSurfaceSize(aSurfaceWidth, aSurfaceHeight)
   , mHasBGRA(0)
   , mUseExternalSurfaceSize(aUseExternalSurfaceSize)
@@ -215,6 +226,9 @@ CompositorOGL::Initialize()
   MOZ_ASSERT(mGLContext == nullptr, "Don't reinitialize CompositorOGL");
 
   mGLContext = CreateContext();
+
+  // FIXME: I don't like this hack...
+  mGLContextEGL = static_cast<GLContextEGL*>(mGLContext.get());
 
 #ifdef MOZ_WIDGET_ANDROID
   if (!mGLContext)
@@ -611,15 +625,17 @@ CompositorOGL::BeginFrame(const nsIntRegion& aInvalidRegion,
 
   // If the widget size changed, we have to force a MakeCurrent
   // to make sure that GL sees the updated widget size.
-  if (mWidgetSize.width != width ||
-      mWidgetSize.height != height)
-  {
-    MakeCurrent(ForceMakeCurrent);
+  if (EGL_NO_SURFACE == mVirtualDisplaySurface) {
+    if (mWidgetSize.width != width ||
+        mWidgetSize.height != height)
+    {
+      MakeCurrent(ForceMakeCurrent);
 
-    mWidgetSize.width = width;
-    mWidgetSize.height = height;
-  } else {
-    MakeCurrent();
+      mWidgetSize.width = width;
+      mWidgetSize.height = height;
+    } else {
+      MakeCurrent();
+    }
   }
 
   mPixelsPerFrame = width * height;
@@ -658,6 +674,49 @@ CompositorOGL::BeginFrame(const nsIntRegion& aInvalidRegion,
   mGLContext->fClear(LOCAL_GL_COLOR_BUFFER_BIT | LOCAL_GL_DEPTH_BUFFER_BIT);
 #endif
 }
+
+bool
+CompositorOGL::TryVirtualDisplay(gfx::Rect* aVdsRect) {
+  CreateDestroyVirtualDisplaySurfaceIfNeeded();
+
+  if (EGL_NO_SURFACE == mVirtualDisplaySurface) {
+    return false;
+  }
+
+  mGLContextEGL->SetVirtualDisplaySurface(mVirtualDisplaySurface);
+  aVdsRect->width = gVirtualScreenBounds.width;
+  aVdsRect->height = gVirtualScreenBounds.height;
+  return true;
+}
+
+void
+CompositorOGL::EndVirtualDisplay() {
+  if (EGL_NO_SURFACE != mVirtualDisplaySurface) {
+    mGLContextEGL->SetVirtualDisplaySurface(EGL_NO_SURFACE);
+  }
+}
+
+void
+CompositorOGL::CreateDestroyVirtualDisplaySurfaceIfNeeded() {
+  if (GetGonkDisplay()->GetVirtualDisplaySurface() &&
+      EGL_NO_SURFACE == mVirtualDisplaySurface)
+  {
+    ALOG("Creating mVirtualDisplaySurface...");
+    mVirtualDisplaySurface = GLContextEGL::CreateVirtualDisplaySurface();
+    return;
+  }
+
+  if (!GetGonkDisplay()->GetVirtualDisplaySurface() &&
+      EGL_NO_SURFACE != mVirtualDisplaySurface)
+  {
+    ALOG("Destroying mVirtualDisplaySurface...");
+    // Destroy mVirtualDisplaySurface
+    mVirtualDisplaySurface = EGL_NO_SURFACE;
+    mGLContextEGL->SetVirtualDisplaySurface(EGL_NO_SURFACE);
+    return;
+  }
+}
+
 
 void
 CompositorOGL::CreateFBOWithTexture(const IntRect& aRect, bool aCopyFromSource,

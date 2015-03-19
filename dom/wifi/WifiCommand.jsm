@@ -438,6 +438,8 @@ this.WifiCommand = function(aControlMessage, aInterface, aSdkVersion) {
     var commandChain = ["SET device_name "    + detail.deviceName,
                         "SET device_type "    + detail.deviceType,
                         "SET config_methods " + detail.wpsMethods,
+                        "SET wifi_display 1",
+                        "WFD_SUBELEM_SET 0 " + detail.wfdDevInfo,
                         "P2P_SET conc_pref sta",
                         "P2P_FLUSH"];
 
@@ -482,6 +484,11 @@ this.WifiCommand = function(aControlMessage, aInterface, aSdkVersion) {
 
   command.p2pReinvoke = function(netId, address, callback) {
     doBooleanCommand("P2P_INVITE persistent=" + netId + " peer=" + address, "OK", callback);
+  };
+
+  command.listenForRemoteDisplay = function() {
+    debug('Calling listenForRemoteDisplay...');
+    voidControlMessage("listen_for_remote_display", function() {});
   };
 
   //----------------------------------------------------------

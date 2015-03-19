@@ -12,7 +12,7 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/DOMRequestHelper.jsm");
 
-const DEBUG = false;
+const DEBUG = true;
 
 // interface MozWifiP2pGroupOwner implementation.
 
@@ -135,6 +135,8 @@ MozWifiP2pManager.prototype = {
   },
 
   receiveMessage: function(aMessage) {
+    debug(JSON.stringify(aMessage));
+
     let msg = aMessage.json;
     if (msg.mid && msg.mid !== this._id) {
       return;
@@ -308,6 +310,12 @@ MozWifiP2pManager.prototype = {
   setDeviceName: function(newDeviceName) {
     let request = this.createRequest();
     this._sendMessageForRequest("WifiP2pManager:setDeviceName", newDeviceName, request);
+    return request;
+  },
+
+  listenForRemoteDisplay: function() {
+    let request = this.createRequest();
+    this._sendMessageForRequest("WifiP2pManager:listenForRemoteDisplay", null, request);
     return request;
   },
 

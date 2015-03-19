@@ -436,6 +436,9 @@ public:
   // these methods properly.
   virtual nsIWidget* GetWidget() const { return nullptr; }
 
+  virtual bool TryVirtualDisplay(gfx::Rect* aVdsRect) { return false; }
+  virtual void EndVirtualDisplay() {}
+
   /**
    * Debug-build assertion that can be called to ensure code is running on the
    * compositor thread.

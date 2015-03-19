@@ -58,6 +58,7 @@ CompositingRenderTargetOGL::BindRenderTarget()
     }
 
     mCompositor->PrepareViewport(mInitParams.mSize);
+    mGL->fScissor(0, 0, mInitParams.mSize.width, mInitParams.mSize.height);
   }
 
   if (mClearOnBind) {

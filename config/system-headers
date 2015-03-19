@@ -727,6 +727,8 @@ media/AudioEffect.h
 media/AudioSystem.h
 media/ICrypto.h
 media/IOMX.h
+media/IMediaPlayerService.h
+media/IRemoteDisplayClient.h
 media/MediaProfiles.h
 media/MediaRecorderBase.h
 media/openmax/OMX_Audio.h

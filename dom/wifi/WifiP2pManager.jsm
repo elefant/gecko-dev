@@ -12,6 +12,7 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/StateMachine.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/systemlibs.js");
+Cu.import("resource://gre/modules/WifiP2pWfdDevice.jsm");
 
 XPCOMUtils.defineLazyServiceGetter(this, "gSysMsgr",
                                    "@mozilla.org/system-message-internal;1",
@@ -91,6 +92,9 @@ const DEFAULT_P2P_DEVICE_NAME = "FirefoxPhone";
 const P2P_SCAN_TIMEOUT_SEC = 120;
 const DEFAULT_P2P_WPS_METHODS = "virtual_push_button physical_display keypad"; // For wpa_supplicant.
 const DEFAULT_P2P_DEVICE_TYPE = "10-0050F204-5"; // For wpa_supplicant.
+
+const DEFAULT_WFD_CONTROL_PORT = 7236;
+const DEFAULT_WFD_MAX_THROUGHPUT = 50;
 
 const GO_NETWORK_INTERFACE = {
   ip:         "192.168.2.1",
@@ -268,6 +272,10 @@ this.WifiP2pManager = function (aP2pCommand, aNetUtil) {
     aP2pCommand.setDeviceName(newDeivceName, callback);
   };
 
+  manager.listenForRemoteDisplay = function() {
+    aP2pCommand.listenForRemoteDisplay();
+  };
+
   // Parse wps_supplicant event string.
   //
   // @param aEventString The raw event string from wpa_supplicant.
@@ -285,7 +293,8 @@ this.WifiP2pManager = function (aP2pCommand, aNetUtil) {
                        "name='(.*)' " +
                        "config_methods=0x([0-9a-fA-F]+) " +
                        "dev_capab=0x([0-9a-fA-F]+) " +
-                       "group_capab=0x([0-9a-fA-F]+) ").exec(aEventString + ' ');
+                       "group_capab=0x([0-9a-fA-F]+)" +
+                       "( wfd_dev_info=0x000006([0-9a-fA-F]{12}))?").exec(aEventString + ' ');
 
     let tokens = aEventString.split(" ");
 
@@ -296,12 +305,13 @@ this.WifiP2pManager = function (aP2pCommand, aNetUtil) {
 
     if (match) {
       info = {
-        address:   match[1] ? match[1] : null,
-        type:      match[2] ? match[2] : null,
-        name:      match[3] ? match[3] : null,
-        wpsFlag:   match[4] ? parseInt(match[4], 16) : null,
-        devFlag:   match[5] ? parseInt(match[5], 16) : null,
-        groupFlag: match[6] ? parseInt(match[6], 16) : null
+        address:    match[1] ? match[1] : null,
+        type:       match[2] ? match[2] : null,
+        name:       match[3] ? match[3] : null,
+        wpsFlag:    match[4] ? parseInt(match[4], 16) : null,
+        devFlag:    match[5] ? parseInt(match[5], 16) : null,
+        groupFlag:  match[6] ? parseInt(match[6], 16) : null,
+        wfdDevInfo: match[8] ? WifiP2pWfdDevice(match[8]) : null,
       };
     }
 
@@ -632,6 +642,7 @@ function P2pStateMachine(aP2pCommand, aNetUtil) {
       // Step 1: Connect to p2p0 if needed.
       connectToSupplicantIfNeeded(function callback () {
         let detail;
+        let wfdDevice;
 
         // Step 2: Get MAC address.
         if (!_localDevice.address) {
@@ -648,9 +659,16 @@ function P2pStateMachine(aP2pCommand, aNetUtil) {
         }
 
         // Step 3: Enable p2p with the device name and wps methods.
+        wfdDevice = WifiP2pWfdDevice();
+        wfdDevice.deviceType = WifiP2pWfdDevice.DEVICE_TYPE_SOURCE;
+        wfdDevice.sessionAvailable = true;
+        wfdDevice.controlPort = DEFAULT_WFD_CONTROL_PORT;
+        wfdDevice.maxThroughput = DEFAULT_WFD_MAX_THROUGHPUT;
+
         detail = { deviceName: _localDevice.deviceName,
                    deviceType: libcutils.property_get("ro.moz.wifi.p2p_device_type") || DEFAULT_P2P_DEVICE_TYPE,
-                   wpsMethods: libcutils.property_get("ro.moz.wifi.p2p_wps_methods") || DEFAULT_P2P_WPS_METHODS };
+                   wpsMethods: libcutils.property_get("ro.moz.wifi.p2p_wps_methods") || DEFAULT_P2P_WPS_METHODS,
+                   wfdDevInfo: wfdDevice.toHexString() };
 
         aP2pCommand.p2pEnable(detail, function (success) {
           if (!success) {

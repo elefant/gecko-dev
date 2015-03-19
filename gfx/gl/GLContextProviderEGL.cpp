@@ -115,6 +115,11 @@ public:
 
 using namespace mozilla::gfx;
 
+#ifdef MOZ_WIDGET_GONK
+extern nsIntRect gScreenBounds;
+extern nsIntRect gVirtualScreenBounds;
+#endif
+
 namespace mozilla {
 namespace gl {
 
@@ -218,6 +223,7 @@ GLContextEGL::GLContextEGL(
     , mContext(context)
     , mThebesSurface(nullptr)
     , mBound(false)
+    , mVirtualDisplaySurface(EGL_NO_SURFACE)
     , mIsPBuffer(false)
     , mIsDoubleBuffered(false)
     , mCanBindToTexture(false)
@@ -349,6 +355,21 @@ GLContextEGL::ReleaseTexImage()
     return true;
 }
 
+// FIXME: Can we merge this to SetEGLSurfaceOverride?
+void
+GLContextEGL::SetVirtualDisplaySurface(EGLSurface aSurface) {
+    mVirtualDisplaySurface = aSurface;
+
+    EGLSurface surface = (EGL_NO_SURFACE != mVirtualDisplaySurface) ?
+                          mVirtualDisplaySurface :
+                          mSurface;
+
+    sEGLLibrary.fMakeCurrent(EGL_DISPLAY(),
+                             surface,
+                             surface,
+                             mContext);
+}
+
 void
 GLContextEGL::SetEGLSurfaceOverride(EGLSurface surf) {
     if (Screen()) {
@@ -461,12 +482,14 @@ GLContextEGL::SwapBuffers()
 {
     if (mSurface) {
 #ifdef MOZ_WIDGET_GONK
-        if (!mIsOffscreen) {
+        if (!mIsOffscreen && EGL_NO_SURFACE == mVirtualDisplaySurface) {
             if (mHwc) {
                 return mHwc->Render(EGL_DISPLAY(), mSurface);
             } else {
                 return GetGonkDisplay()->SwapBuffers(EGL_DISPLAY(), mSurface);
             }
+        } else if (EGL_NO_SURFACE != mVirtualDisplaySurface) {
+            return sEGLLibrary.fSwapBuffers(EGL_DISPLAY(), mVirtualDisplaySurface);
         } else
 #endif
             return sEGLLibrary.fSwapBuffers(EGL_DISPLAY(), mSurface);
@@ -480,6 +503,29 @@ GLContextEGL::SwapBuffers()
 void
 GLContextEGL::HoldSurface(gfxASurface *aSurf) {
     mThebesSurface = aSurf;
+}
+
+EGLSurface GLContextEGL::CreateVirtualDisplaySurface() {
+    ANativeWindow* virtualDisplaySurface = GetGonkDisplay()->GetVirtualDisplaySurface();
+    if (!virtualDisplaySurface) {
+        MOZ_CRASH("Null virtualDisplaySurface");
+        return nullptr;
+    }
+
+    EGLConfig config;
+    if (!CreateConfig(&config)) {
+        MOZ_CRASH("Failed to create EGLConfig!\n");
+        return nullptr;
+    }
+
+    LOG("Calling sEGLLibrary.fCreateWindowSurface");
+    EGLSurface surface = sEGLLibrary.fCreateWindowSurface(
+        EGL_DISPLAY(), config, virtualDisplaySurface, 0);
+
+    sEGLLibrary.fQuerySurface(EGL_DISPLAY(), surface, LOCAL_EGL_WIDTH, &gVirtualScreenBounds.width);
+    sEGLLibrary.fQuerySurface(EGL_DISPLAY(), surface, LOCAL_EGL_HEIGHT, &gVirtualScreenBounds.height);
+
+    return surface;
 }
 
 already_AddRefed<GLContextEGL>

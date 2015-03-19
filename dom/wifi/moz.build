@@ -26,12 +26,16 @@ EXTRA_JS_MODULES += [
     'WifiCommand.jsm',
     'WifiNetUtil.jsm',
     'WifiP2pManager.jsm',
+    'WifiP2pWfdDevice.jsm',
     'WifiP2pWorkerObserver.jsm',
 ]
+
+LOCAL_INCLUDES += ['/widget/gonk']
 
 if CONFIG['MOZ_WIDGET_TOOLKIT'] == 'gonk':
     UNIFIED_SOURCES = [
         'WifiCertService.cpp',
+        'WifiDisplayManager.cpp',
         'WifiHotspotUtils.cpp',
         'WifiProxyService.cpp',
         'WifiUtils.cpp',

@@ -280,6 +280,11 @@ private:
   void Render();
 
   /**
+   * Render the current layer tree to the virtual display stored in the compositor.
+   */
+  void RenderVirtualDisplay();
+
+  /**
    * Render debug overlays such as the FPS/FrameCounter above the frame.
    */
   void RenderDebugOverlay(const gfx::Rect& aBounds);

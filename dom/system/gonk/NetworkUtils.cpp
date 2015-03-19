@@ -105,7 +105,7 @@ typedef Tuple3<NetdCommand*, CommandChain*, CommandCallback> QueueData;
 // For native function call, non-zero return value means failure.
 #define RETURN_IF_FAILED(rv) do { \
   if (SUCCESS != rv) { \
-    return rv; \
+    ; \
   } \
 } while (0);
 

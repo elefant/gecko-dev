@@ -8,6 +8,7 @@
 #include <cutils/properties.h>
 #include "prinit.h"
 #include "js/CharacterEncoding.h"
+#include "WifiDisplayManager.h"
 
 using namespace mozilla::dom;
 
@@ -454,6 +455,8 @@ bool WpaSupplicant::ExecuteCommand(CommandOptions aOptions,
     aResult.mStatus = mImpl->do_wifi_stop_supplicant(0);
   } else if (aOptions.mCmd.EqualsLiteral("connect_to_supplicant")) {
     aResult.mStatus = mImpl->do_wifi_connect_to_supplicant(aInterface.get());
+  } else if (aOptions.mCmd.EqualsLiteral("listen_for_remote_display")) {
+    mozilla::listenForRemoteDisplay("0.0.0.0:7236");
   } else if (aOptions.mCmd.EqualsLiteral("hostapd_command")) {
     size_t len = BUFFER_SIZE - 1;
     char buffer[BUFFER_SIZE];

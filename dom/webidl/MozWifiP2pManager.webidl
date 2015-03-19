@@ -100,6 +100,8 @@ interface MozWifiP2pManager : EventTarget
    */
   DOMRequest setPairingConfirmation(boolean accepted, optional DOMString pin);
 
+  DOMRequest listenForRemoteDisplay();
+
   /**
    * Set device name.
    *

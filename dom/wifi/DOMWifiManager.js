@@ -12,7 +12,7 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/DOMRequestHelper.jsm");
 
-const DEBUG = false; // set to false to suppress debug messages
+const DEBUG = true; // set to false to suppress debug messages
 
 const DOMWIFIMANAGER_CONTRACTID = "@mozilla.org/wifimanager;1";
 const DOMWIFIMANAGER_CID        = Components.ID("{c9b5f09e-25d2-40ca-aef4-c4d13d93c706}");
@@ -211,6 +211,7 @@ DOMWifiManager.prototype = {
         break;
 
       case "WifiManager:getNetworks:Return:OK":
+        debug('getNetworks returned: ' + JSON.stringify(this._convertWifiNetworks(msg.data)));
         Services.DOMRequest.fireSuccess(request, this._convertWifiNetworks(msg.data));
         break;
 

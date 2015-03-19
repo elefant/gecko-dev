@@ -46,6 +46,10 @@ namespace gfx {
 class Matrix4x4;
 }
 
+namespace gl {
+  class GLContextEGL;
+}
+
 namespace layers {
 
 class CompositingRenderTarget;
@@ -185,7 +189,7 @@ struct CompositorOGLVRObjects {
 class CompositorOGL MOZ_FINAL : public Compositor
 {
   typedef mozilla::gl::GLContext GLContext;
-
+  typedef mozilla::gl::GLContextEGL GLContextEGL;
   friend class GLManagerCompositor;
 
   std::map<ShaderConfigOGL, ShaderProgramOGL*> mPrograms;
@@ -280,6 +284,9 @@ public:
 
   virtual nsIWidget* GetWidget() const MOZ_OVERRIDE { return mWidget; }
 
+  virtual bool TryVirtualDisplay(gfx::Rect* aVdsRect);
+  virtual void EndVirtualDisplay();
+
   GLContext* gl() const { return mGLContext; }
   /**
    * Clear the program state. This must be called
@@ -318,12 +325,19 @@ private:
                         gfx::Float aOpacity,
                         const gfx::Matrix4x4& aTransform);
 
+  void CreateDestroyVirtualDisplaySurfaceIfNeeded();
+
   /** Widget associated with this compositor */
   nsIWidget *mWidget;
   nsIntSize mWidgetSize;
   nsRefPtr<GLContext> mGLContext;
   UniquePtr<GLBlitTextureImageHelper> mBlitTextureImageHelper;
   gfx::Matrix4x4 mProjMatrix;
+
+
+  // FIXME: This is totally a hack!
+  GLContextEGL* mGLContextEGL;
+  EGLSurface mVirtualDisplaySurface;
 
   /** The size of the surface we are rendering to */
   nsIntSize mSurfaceSize;

@@ -17,7 +17,7 @@ Cu.import("resource://gre/modules/WifiNetUtil.jsm");
 Cu.import("resource://gre/modules/WifiP2pManager.jsm");
 Cu.import("resource://gre/modules/WifiP2pWorkerObserver.jsm");
 
-var DEBUG = false; // set to true to show debug messages.
+var DEBUG = true; // set to true to show debug messages.
 
 const WIFIWORKER_CONTRACTID = "@mozilla.org/wifi/worker;1";
 const WIFIWORKER_CID        = Components.ID("{a14e8977-d259-433a-a88d-58dd44657e5b}");
@@ -117,7 +117,7 @@ var WifiManager = (function() {
       unloadDriverEnabled: libcutils.property_get("ro.moz.wifi.unloaddriver") === "1",
       schedScanRecovery: libcutils.property_get("ro.moz.wifi.sched_scan_recover") === "false" ? false : true,
       driverDelay: libcutils.property_get("ro.moz.wifi.driverDelay"),
-      p2pSupported: libcutils.property_get("ro.moz.wifi.p2p_supported") === "1",
+      p2pSupported: true,
       eapSimSupported: libcutils.property_get("ro.moz.wifi.eapsim_supported") === "1",
       ibssSupported: libcutils.property_get("ro.moz.wifi.ibss_supported", "true") === "true",
       ifname: libcutils.property_get("wifi.interface")
@@ -3854,7 +3854,7 @@ this.NSGetFactory = XPCOMUtils.generateNSGetFactory([WifiWorker]);
 
 let debug;
 function updateDebug() {
-  if (DEBUG) {
+  if (true) {
     debug = function (s) {
       dump("-*- WifiWorker component: " + s + "\n");
     };
