@@ -28,7 +28,9 @@ class nsScreenGonk : public nsBaseScreen
     typedef mozilla::hal::ScreenConfiguration ScreenConfiguration;
 
 public:
-    nsScreenGonk(void* nativeScreen);
+    nsScreenGonk::nsScreenGonk(const ScreenConfiguration& aConfig,
+                               uint32_t aId,
+                               void* aNativeWidget);
     ~nsScreenGonk();
 
     NS_IMETHOD GetId(uint32_t* aId);
@@ -39,8 +41,29 @@ public:
     NS_IMETHOD GetRotation(uint32_t* aRotation);
     NS_IMETHOD SetRotation(uint32_t  aRotation);
 
+    uint32_t GetId();
+    nsIntRect GetRect();
+
+    nsIntRect GetNaturalRect();
+    uint32_t GetEffectiveScreenRotation();
+    ScreenConfiguration GetScreenConfiguration();
+
+    bool IsPrimaryScreen();
+
     static uint32_t GetRotation();
     static ScreenConfiguration GetConfiguration();
+
+private:
+    uint32_t mId;
+    int32_t mWidth;
+    int32_t mHeight;
+    int32_t mPixelDepth;
+    uint32_t mRotation;
+    void* mNativeWidget;
+    uint32_t mPhyisicalRotation;
+
+    uint32_t mNaturalWidth;
+    uint32_t mNaturalHeight;
 };
 
 class nsScreenManagerGonk final : public nsIScreenManager
@@ -51,10 +74,22 @@ public:
     NS_DECL_ISUPPORTS
     NS_DECL_NSISCREENMANAGER
 
+    nsCOMPtr<nsScreenGonk> GetPrimaryScreen();
+
+    // The following three functions are "display type" based.
+    // Other than these functions, we should use screen id to
+    // manipulate on nsWindow and GonkDisplay devices.
+    nsCOMPtr<nsScreenGonk> ScreenForType(uint32_t aDisplayType);
+
+    void AddScreen(uint32_t aDisplayType,
+                   const android::sp<android::IGraphicBufferProducer>& aProducer = nullptr);
+
+    void RemoveScreen(uint32_t aDisplayType);
+
 protected:
     ~nsScreenManagerGonk();
 
-    nsCOMPtr<nsIScreen> mOneScreen;
+    nsTArray<nsCOMPtr<nsScreenGonk>> mScreens;
 };
 
 #endif /* nsScreenManagerGonk_h___ */

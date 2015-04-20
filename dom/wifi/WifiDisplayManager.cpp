@@ -46,13 +46,13 @@ public:
     virtual void onDisplayConnected(const sp<IGraphicBufferProducer>& bufferProducer,
             uint32_t width, uint32_t height, uint32_t flags, uint32_t session) {
         ALOGI("Callback onDisplayConnected");
-        mozilla::GetGonkDisplay()->AddDisplay(GonkDisplay::DISPLAY_VIRTUAL, bufferProducer);
+        mozilla::GetScreenManager()->AddScreen(GonkDisplay::DISPLAY_VIRTUAL, bufferProducer);
     }
 
     virtual void onDisplayDisconnected() {
         ALOGI("Callback onDisplayDisconnected");
         enableAudioSubmix(false);
-        mozilla::GetGonkDisplay()->RemoveDisplay(GonkDisplay::DISPLAY_VIRTUAL);
+        mozilla::GetScreenManager()->RemoveScreen(GonkDisplay::DISPLAY_VIRTUAL);
     }
 
     virtual void onDisplayError(int32_t error) {

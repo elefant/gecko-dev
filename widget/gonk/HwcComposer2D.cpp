@@ -266,7 +266,7 @@ void
 HwcComposer2D::Hotplug(int aDisplay, int aConnected)
 {
     if (aConnected) {
-        GetGonkDisplay()->AddDisplay(GonkDisplay::DISPLAY_EXTERNAL);
+        GetScreenManager()->AddScreen(GonkDisplay::DISPLAY_EXTERNAL);
         nsIntSize screenSize;
         ANativeWindow *win = GetGonkDisplay()->GetNativeWindow(GonkDisplay::DISPLAY_EXTERNAL);
         if (win) {
@@ -285,7 +285,7 @@ HwcComposer2D::Hotplug(int aDisplay, int aConnected)
             mLists[GonkDisplay::DISPLAY_EXTERNAL] = listrealloc;
         }
     } else {
-      GetGonkDisplay()->RemoveDisplay(GonkDisplay::DISPLAY_EXTERNAL);
+      GetScreenManager()->RemoveDisplay(GonkDisplay::DISPLAY_EXTERNAL);
     }
 }
 #endif

@@ -166,11 +166,17 @@ protected:
     void UserActivity();
 
 private:
+    // Would it be ever different from mBounds?
+    nsIntRect GetVirtualBound();
+
+    nsCOMPtr<nsScreenGonk> GetScreen();
+
     // This is used by SynthesizeNativeTouchPoint to maintain state between
     // multiple synthesized points
     nsAutoPtr<mozilla::MultiTouchInput> mSynthesizedTouchInput;
 
-    uint32_t mDisplayType;
+    // Used to associate with resident screen.
+    uint32_t mScreenId;
 };
 
 #endif /* nsWindow_h */

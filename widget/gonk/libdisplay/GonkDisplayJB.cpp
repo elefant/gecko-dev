@@ -30,9 +30,6 @@
 #include "GraphicBufferAlloc.h"
 #endif
 #include "BootAnimation.h"
-#include "nsIObserverService.h"
-#include "nsServiceManagerUtils.h"
-#include "nsThreadUtils.h"
 
 using namespace android;
 
@@ -418,42 +415,7 @@ GonkDisplayJB::GetSurfaceformat(const uint32_t aType)
     return 0;
 }
 
-namespace
-{
-class NotifyTask : public nsIRunnable
-{
-public:
-    NS_DECL_ISUPPORTS
-
-public:
-    NotifyTask(nsIDisplayDevice* aDisplayDevice)
-        : mDisplayDevice(aDisplayDevice)
-    {
-    }
-
-    NS_IMETHOD Run()
-    {
-        nsCOMPtr<nsIObserverService> os(do_GetService("@mozilla.org/observer-service;1"));
-        if (!os) {
-            return NS_ERROR_FAILURE;
-        }
-
-        return os->NotifyObservers(mDisplayDevice, "display-change", nullptr);
-    }
-private:
-    nsCOMPtr<nsIDisplayDevice> mDisplayDevice;
-};
-
-NS_IMPL_ISUPPORTS(NotifyTask, nsIRunnable)
-} // end of unnamed namespace
-
-void
-GonkDisplayJB::NotifyDisplayChange(nsIDisplayDevice* aDisplayDevice)
-{
-    NS_DispatchToMainThread(new NotifyTask(aDisplayDevice));
-}
-
-void
+uint32_t
 GonkDisplayJB::AddDisplay(const uint32_t aType,
                           const sp<IGraphicBufferProducer>& aProducer)
 {
@@ -503,10 +465,10 @@ GonkDisplayJB::AddDisplay(const uint32_t aType,
                                GRALLOC_USAGE_HW_RENDER |
                                GRALLOC_USAGE_HW_COMPOSER);
 
-    NotifyDisplayChange(new DisplayDevice(*device));
-
     ALOGI("Add a new DisplayDevice of type:%d, w:%d, h:%d", device->mType,
           device->mWidth,  device->mHeight);
+
+    return aType;
 }
 
 void

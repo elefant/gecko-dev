@@ -56,7 +56,7 @@ public:
 
     bool Post(buffer_handle_t buf, int fence);
 
-    virtual void AddDisplay(
+    virtual uint32_t AddDisplay(
         const uint32_t aType,
         const android::sp<android::IGraphicBufferProducer>& aProducer = nullptr);
 
