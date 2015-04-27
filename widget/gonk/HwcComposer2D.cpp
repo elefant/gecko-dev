@@ -33,6 +33,7 @@
 #include "gfx2DGlue.h"
 #include "gfxPlatform.h"
 #include "VsyncSource.h"
+#include "nsScreenManagerGonk.h"
 
 #if ANDROID_VERSION >= 17
 #include "libdisplay/FramebufferSurface.h"
@@ -285,7 +286,7 @@ HwcComposer2D::Hotplug(int aDisplay, int aConnected)
             mLists[GonkDisplay::DISPLAY_EXTERNAL] = listrealloc;
         }
     } else {
-      GetScreenManager()->RemoveDisplay(GonkDisplay::DISPLAY_EXTERNAL);
+      GetScreenManager()->RemoveScreen(GonkDisplay::DISPLAY_EXTERNAL);
     }
 }
 #endif

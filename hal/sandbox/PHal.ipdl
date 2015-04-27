@@ -61,6 +61,7 @@ struct ScreenConfiguration {
   ScreenOrientation orientation;
   uint32_t colorDepth;
   uint32_t pixelDepth;
+  float dpi;
 };
 
 struct FMRadioOperationInformation {
@@ -104,8 +105,8 @@ child:
     NotifyWakeLockChange(WakeLockInformation aWakeLockInfo);
     NotifyScreenConfigurationChange(ScreenConfiguration aScreenOrientation);
     NotifySwitchChange(SwitchEvent aEvent);
-    NotifySystemClockChange(int64_t aClockDeltaMS); 
-    NotifySystemTimezoneChange(SystemTimezoneChangeInformation aSystemTimezoneChangeInfo); 
+    NotifySystemClockChange(int64_t aClockDeltaMS);
+    NotifySystemTimezoneChange(SystemTimezoneChangeInformation aSystemTimezoneChangeInfo);
 
 parent:
     Vibrate(uint32_t[] pattern, uint64_t[] id, PBrowser browser);
@@ -160,7 +161,7 @@ parent:
     sync LockScreenOrientation(ScreenOrientation aOrientation)
       returns (bool allowed);
     UnlockScreenOrientation();
- 
+
     EnableSwitchNotifications(SwitchDevice aDevice);
     DisableSwitchNotifications(SwitchDevice aDevice);
     sync GetCurrentSwitchState(SwitchDevice aDevice)

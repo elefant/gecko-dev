@@ -575,18 +575,21 @@ GeckoInputReaderPolicy::setDisplayInfo()
                   DISPLAY_ORIENTATION_270,
                   "Orientation enums not matched!");
 
+    nsIntRect screenRect = nsScreenGonk::GetConfiguration().rect();
+
     DisplayViewport viewport;
+
     viewport.displayId = 0;
     viewport.orientation = nsScreenGonk::GetRotation();
-    viewport.physicalRight = viewport.deviceWidth = gScreenBounds.width;
-    viewport.physicalBottom = viewport.deviceHeight = gScreenBounds.height;
+    viewport.physicalRight = viewport.deviceWidth = screenRect.width;
+    viewport.physicalBottom = viewport.deviceHeight = screenRect.height;
     if (viewport.orientation == DISPLAY_ORIENTATION_90 ||
         viewport.orientation == DISPLAY_ORIENTATION_270) {
-        viewport.logicalRight = gScreenBounds.height;
-        viewport.logicalBottom = gScreenBounds.width;
+        viewport.logicalRight = screenRect.height;
+        viewport.logicalBottom = screenRect.width;
     } else {
-        viewport.logicalRight = gScreenBounds.width;
-        viewport.logicalBottom = gScreenBounds.height;
+        viewport.logicalRight = screenRect.width;
+        viewport.logicalBottom = screenRect.height;
     }
     mConfig.setDisplayInfo(false, viewport);
 }

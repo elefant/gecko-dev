@@ -424,7 +424,7 @@ GonkDisplayJB::AddDisplay(const uint32_t aType,
     if (GetDevice(aType)) {
         // TODO: A device of aType is already existed, should we return an
         // error or remove the old one, add the new one automatically?
-        return;
+        return aType;
     }
 
     int32_t values[3];
@@ -483,7 +483,6 @@ GonkDisplayJB::RemoveDisplay(const uint32_t aType)
           device->mWidth,  device->mHeight);
 
     device->mConnected = false;
-    NotifyDisplayChange(new DisplayDevice(*device));
 
     for (int i = 0; i < mDevices.Length(); ++i) {
         if (aType == mDevices[i].mType) {

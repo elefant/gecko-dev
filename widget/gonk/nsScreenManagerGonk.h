@@ -22,17 +22,25 @@
 
 #include "nsBaseScreen.h"
 #include "nsIScreenManager.h"
+#include <utils/StrongPointer.h>
+
+namespace android
+{
+    class IGraphicBufferProducer;
+}
 
 class nsScreenGonk : public nsBaseScreen
 {
     typedef mozilla::hal::ScreenConfiguration ScreenConfiguration;
 
 public:
-    nsScreenGonk::nsScreenGonk(const ScreenConfiguration& aConfig,
-                               uint32_t aId,
-                               void* aNativeWidget);
+    nsScreenGonk(const ScreenConfiguration& aConfig,
+                 uint32_t aId,
+                 void* aNativeWindow);
+
     ~nsScreenGonk();
 
+    // nsIScreen.
     NS_IMETHOD GetId(uint32_t* aId);
     NS_IMETHOD GetRect(int32_t* aLeft, int32_t* aTop, int32_t* aWidth, int32_t* aHeight);
     NS_IMETHOD GetAvailRect(int32_t* aLeft, int32_t* aTop, int32_t* aWidth, int32_t* aHeight);
@@ -43,11 +51,11 @@ public:
 
     uint32_t GetId();
     nsIntRect GetRect();
-
+    float GetDpi();
+    void* GetNativeWindow();
     nsIntRect GetNaturalRect();
     uint32_t GetEffectiveScreenRotation();
     ScreenConfiguration GetScreenConfiguration();
-
     bool IsPrimaryScreen();
 
     static uint32_t GetRotation();
@@ -55,15 +63,16 @@ public:
 
 private:
     uint32_t mId;
-    int32_t mWidth;
-    int32_t mHeight;
-    int32_t mPixelDepth;
+    int32_t  mWidth;
+    int32_t  mHeight;
+    int32_t  mPixelDepth;
+    int32_t  mColorDepth;
     uint32_t mRotation;
-    void* mNativeWidget;
-    uint32_t mPhyisicalRotation;
-
+    void*    mNativeWindow;
+    uint32_t mPhysicalRotation;
     uint32_t mNaturalWidth;
     uint32_t mNaturalHeight;
+    float    mDpi;
 };
 
 class nsScreenManagerGonk final : public nsIScreenManager
@@ -86,10 +95,14 @@ public:
 
     void RemoveScreen(uint32_t aDisplayType);
 
+    void AddPrimaryScreen();
+
 protected:
     ~nsScreenManagerGonk();
 
     nsTArray<nsCOMPtr<nsScreenGonk>> mScreens;
 };
+
+nsCOMPtr<nsScreenManagerGonk> GetScreenManager();
 
 #endif /* nsScreenManagerGonk_h___ */

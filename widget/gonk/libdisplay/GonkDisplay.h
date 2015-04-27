@@ -68,7 +68,9 @@ public:
     virtual uint32_t AddDisplay(
         const uint32_t aType,
         const android::sp<android::IGraphicBufferProducer>& aProducer = nullptr)
-    {}
+    {
+        return aType;
+    }
 
     /**
      *
@@ -92,7 +94,6 @@ public:
      */
     virtual int GetPrevFBAcquireFd(const uint32_t aType = DISPLAY_PRIMARY) = 0;
 
-protected:
     virtual DisplayDevice* GetDevice(const uint32_t aType) = 0;
 };
 

@@ -66,7 +66,6 @@ public:
 
     virtual int32_t GetSurfaceformat(const uint32_t aType = DISPLAY_PRIMARY);
 
-protected:
     virtual DisplayDevice* GetDevice(const uint32_t aType);
 
 private:

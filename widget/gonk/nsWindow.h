@@ -44,6 +44,8 @@ struct InputContext;
 struct InputContextAction;
 }
 
+class nsScreenGonk;
+
 class nsWindow : public nsBaseWidget
 {
 public:
@@ -135,7 +137,7 @@ public:
 
     void ConfigureAPZControllerThread() override;
 
-    uint32_t GetDisplayType() { return mDisplayType; }
+    uint32_t GetDisplayType();
 
 protected:
     nsWindow* mParent;
@@ -167,7 +169,7 @@ protected:
 
 private:
     // Would it be ever different from mBounds?
-    nsIntRect GetVirtualBound();
+    nsIntRect GetVirtualBounds();
 
     nsCOMPtr<nsScreenGonk> GetScreen();
 

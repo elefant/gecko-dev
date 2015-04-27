@@ -21,6 +21,8 @@
 #include "mozilla/Types.h"
 #include "nsIDisplayDevice.h"
 
+#define EXPORT MOZ_EXPORT __attribute__ ((weak))
+
 class nsWindow;
 
 namespace android {
@@ -30,17 +32,22 @@ class FramebufferSurface;
 namespace mozilla {
 class GonkDisplayJB;
 
-class DisplayDevice : public nsIDisplayDevice {
+class MOZ_EXPORT DisplayDevice : public nsIDisplayDevice {
   friend class GonkDisplayJB;
   friend class nsWindow;
 public:
   NS_DECL_ISUPPORTS
   NS_DECL_NSIDISPLAYDEVICE
 
-  DisplayDevice();
-  DisplayDevice(uint32_t aType);
-  DisplayDevice(const DisplayDevice& aDisplayDevice);
-  ~DisplayDevice();
+  EXPORT DisplayDevice();
+  EXPORT DisplayDevice(uint32_t aType);
+  EXPORT DisplayDevice(const DisplayDevice& aDisplayDevice);
+  EXPORT ~DisplayDevice();
+
+  EXPORT void SetConnected(bool aConnected);
+
+  EXPORT int32_t GetSurfaceformat();
+  EXPORT float GetXdpi();
 
 private:
   uint32_t mType;

@@ -55,10 +55,9 @@
 #include "mozilla/TouchEvents.h"
 #include "nsThreadUtils.h"
 #include "HwcComposer2D.h"
-
-#include "nsIObserverService.h"
+#include "nsIDisplayDevice.h"
 #include "nsServiceManagerUtils.h"
-#include "nsThreadUtils.h"
+#include <gui/IGraphicBufferProducer.h>
 
 #define LOG(args...)  __android_log_print(ANDROID_LOG_INFO, "Gonk" , ## args)
 #define LOGW(args...) __android_log_print(ANDROID_LOG_WARN, "Gonk", ## args)
@@ -144,14 +143,6 @@ displayEnabledCallback(bool enabled)
     NS_DispatchToMainThread(enabled ? sScreenOnEvent : sScreenOffEvent);
 }
 
-nsCOMPtr<nsScreenManagerGonk> GetScreenManager()
-{
-    nsCOMPtr<nsIScreenManager> screenMgr
-        = do_GetService("@mozilla.org/gfx/screenmanager;1");
-
-    return static_cast<nsScreenManagerGonk*>(screenMgr.get());
-}
-
 } // anonymous namespace
 
 NS_IMPL_ISUPPORTS_INHERITED0(nsWindow, nsBaseWidget)
@@ -159,7 +150,6 @@ NS_IMPL_ISUPPORTS_INHERITED0(nsWindow, nsBaseWidget)
 nsWindow::nsWindow()
 {
     mFramebuffer = nullptr;
-    mDisplayType = GonkDisplay::DISPLAY_PRIMARY;
 
     if (sScreenInitialized)
         return;
@@ -440,7 +430,8 @@ nsWindow::Create(nsIWidget *aParent,
     // the necessary attributes like mWindowType.
     BaseCreate(aParent, aRect, aInitData);
 
-    uint32_t displayType = aParent ? ((nsWindow*)aParent)->mDisplayType :
+    // FIXME: Required to handle screen id and display type conversion.
+    uint32_t displayType = aParent ? ((nsWindow*)aParent)->mScreenId :
                            GetDisplayTypeFromInitData(aInitData);
 
     // Currently one display type can only have one instance, so
@@ -641,7 +632,7 @@ nsWindow::GetNativeData(uint32_t aDataType)
 {
     switch (aDataType) {
     case NS_NATIVE_WINDOW:
-        return GetGonkDisplay()->GetNativeWindow(mScreenId);
+        return GetScreen()->GetNativeWindow();
     }
     return nullptr;
 }
@@ -786,7 +777,7 @@ nsWindow::EndRemoteDrawing()
 float
 nsWindow::GetDPI()
 {
-    return GetScreen()->GetXdpi(mDisplayType);
+    return GetScreen()->GetDpi();
 }
 
 double
@@ -820,7 +811,7 @@ nsWindow::GetLayerManager(PLayerTransactionChild* aShadowManager,
         if (mLayerManager->GetBackendType() == LayersBackend::LAYERS_CLIENT) {
             ClientLayerManager* manager =
                 static_cast<ClientLayerManager*>(mLayerManager.get());
-            uint32_t rotation = GetScreen()->GetEffectiveScreenRotation();
+            uint32_t screenRotation = GetScreen()->GetEffectiveScreenRotation();
             manager->SetDefaultTargetConfiguration(mozilla::layers::BufferMode::BUFFER_NONE,
                                                    ScreenRotation(screenRotation));
         }
@@ -904,9 +895,9 @@ nsWindow::GetNaturalBounds()
 nsCOMPtr<nsScreenGonk>
 nsWindow::GetScreen()
 {
-    nsCOMPtr<nsScreenGonk> screen;
+    nsCOMPtr<nsIScreen> screen;
     GetScreenManager()->ScreenForId(mScreenId, getter_AddRefs(screen));
-    return screen;
+    return static_cast<nsScreenGonk*>(screen.get());
 }
 
 bool
@@ -924,7 +915,7 @@ nsWindow::GetComposer2D()
     // TODO: We are skipping hwc for rendering remote window with Wifidisplay,
     // but probable not in the case of "external" display via HDMI?
     // FIXME
-    if (mDisplayType == GonkDisplay::DISPLAY_VIRTUAL) {
+    if (mScreenId == GonkDisplay::DISPLAY_VIRTUAL) {
         return nullptr;
     }
 
@@ -935,22 +926,30 @@ nsWindow::GetComposer2D()
     return nullptr;
 }
 
+uint32_t
+nsWindow::GetDisplayType()
+{
+    return mScreenId;
+}
+
 // nsScreenGonk.cpp
 
 nsScreenGonk::nsScreenGonk(const ScreenConfiguration& aConfig,
                            uint32_t aId,
-                           void* aNativeWidget)
+                           void* aNativeWindow)
     : mId(aId)
     , mWidth(aConfig.rect().width)
     , mHeight(aConfig.rect().height)
     , mPixelDepth(aConfig.pixelDepth())
     , mColorDepth(aConfig.colorDepth())
     , mRotation(0)
-    , mNativeWidget(aNativeWidget)
-    , mPhyisicalRotation(aConfig.rotation())
+    , mNativeWindow(aNativeWindow)
+    //, mPhyisicalRotation(aConfig.orientation())
     , mNaturalWidth(aConfig.rect().width)
-    , mNaturalWidth(aConfig.rect().height)
+    , mNaturalHeight(aConfig.rect().height)
+    , mDpi(aConfig.dpi())
 {
+    // FIXME: convert aConfig.orientation() to mPhysicalRotation.
 }
 
 nsScreenGonk::~nsScreenGonk()
@@ -1008,7 +1007,7 @@ nsScreenGonk::GetAvailRect(int32_t *outLeft,  int32_t *outTop,
 uint32_t
 nsScreenGonk::GetEffectiveScreenRotation()
 {
-    return (mScreenRotation + mPhysicalScreenRotation) % (360 / 90);
+    return (mRotation + mPhysicalRotation) % (360 / 90);
 }
 
 static uint32_t
@@ -1035,7 +1034,8 @@ nsScreenGonk::GetPixelDepth(int32_t *aPixelDepth)
 NS_IMETHODIMP
 nsScreenGonk::GetColorDepth(int32_t *aColorDepth)
 {
-    return GetPixelDepth(aColorDepth);
+    *aColorDepth = mColorDepth;
+    return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -1063,7 +1063,7 @@ nsScreenGonk::SetRotation(uint32_t aRotation)
         mWidth = mNaturalHeight;
         mHeight = mNaturalWidth;
     } else {
-        mWidth = mNaturalWitdh;
+        mWidth = mNaturalWidth;
         mHeight = mNaturalHeight;
     }
 
@@ -1076,10 +1076,28 @@ nsScreenGonk::SetRotation(uint32_t aRotation)
     return NS_OK;
 }
 
+nsIntRect
+nsScreenGonk::GetNaturalRect()
+{
+    return nsIntRect(0, 0, mNaturalWidth, mNaturalHeight);
+}
+
+float
+nsScreenGonk::GetDpi()
+{
+    return mDpi;
+}
+
+void*
+nsScreenGonk::GetNativeWindow()
+{
+    return mNativeWindow;
+}
+
 // NB: This isn't gonk-specific, but gonk is the only widget backend
 // that does this calculation itself, currently.
 static ScreenOrientation
-ComputeOrientation(uint32_t aRotation, const nsIntSize& aScreenRect)
+ComputeOrientation(uint32_t aRotation, const nsIntSize& aScreenSize)
 {
     bool naturallyPortrait = (aScreenSize.height > aScreenSize.width);
     switch (aRotation) {
@@ -1124,8 +1142,47 @@ nsScreenGonk::GetScreenConfiguration() {
     // NB: perpetuating colorDepth == pixelDepth illusion here, for
     // consistency.
     return ScreenConfiguration(nsIntRect(0, 0, mWidth, mHeight), orientation,
-                               mPixelDepth, mPixelDepth);
+                               mPixelDepth, mPixelDepth, 0);
 }
+
+namespace
+{
+class NotifyTask : public nsIRunnable
+{
+public:
+    NS_DECL_ISUPPORTS
+
+public:
+    NotifyTask(nsIDisplayDevice* aDisplayDevice)
+        : mDisplayDevice(aDisplayDevice)
+    {
+    }
+
+    virtual ~NotifyTask() {}
+
+    NS_IMETHOD Run()
+    {
+        nsCOMPtr<nsIObserverService> os(do_GetService("@mozilla.org/observer-service;1"));
+        if (!os) {
+            return NS_ERROR_FAILURE;
+        }
+
+        return os->NotifyObservers(mDisplayDevice, "display-change", nullptr);
+    }
+private:
+    nsCOMPtr<nsIDisplayDevice> mDisplayDevice;
+};
+
+NS_IMPL_ISUPPORTS(NotifyTask, nsIRunnable)
+
+void
+NotifyDisplayChange(nsIDisplayDevice* aDisplayDevice)
+{
+    NS_DispatchToMainThread(new NotifyTask(aDisplayDevice));
+}
+
+} // end of unnamed namespace
+
 
 NS_IMPL_ISUPPORTS(nsScreenManagerGonk, nsIScreenManager)
 
@@ -1171,9 +1228,11 @@ nsScreenManagerGonk::AddScreen(uint32_t aDisplayType,
     property_get("ro.sf.hwrotation", propValue, "0");
     uint32_t physicalRotation = atoi(propValue) / 90;
 
-    uint32_t colorDepth = SurfaceFormatToColorDepth(device->mSurfaceformat);
+    uint32_t colorDepth = SurfaceFormatToColorDepth(device->GetSurfaceformat());
 
-    ScreenConfiguration config(screenRect, physicalRotation, colorDepth, colorDepth);
+    ScreenConfiguration config(screenRect, physicalRotation, colorDepth,
+                               colorDepth, device->GetXdpi());
+
     nsScreenGonk* screen = new nsScreenGonk(config, id, win);
 
     mScreens.AppendElement(screen);
@@ -1190,9 +1249,9 @@ nsScreenManagerGonk::RemoveScreen(uint32_t aDisplayType)
     // GonkDisplay::RemoveDisplay mutating the content of the reference.
     DisplayDevice* device = GetGonkDisplay()->GetDevice(screen->GetId());
     DisplayDevice* deviceCopy = new DisplayDevice(*device);
-    deviceCopy->mConnected = false;
+    deviceCopy->SetConnected(false);
 
-    GetGonkDisplay()::RemoveDisplay(aDisplayType);
+    GetGonkDisplay()->RemoveDisplay(aDisplayType);
 
     NotifyDisplayChange(deviceCopy);
 }
@@ -1200,7 +1259,7 @@ nsScreenManagerGonk::RemoveScreen(uint32_t aDisplayType)
 NS_IMETHODIMP
 nsScreenManagerGonk::GetPrimaryScreen(nsIScreen **outScreen)
 {
-    for (int i = 0; i < mScreens.Length(); i++) {
+    for (size_t i = 0; i < mScreens.Length(); i++) {
         if (mScreens[i]->IsPrimaryScreen()) {
             NS_IF_ADDREF(*outScreen = mScreens[i].get());
             return NS_OK;
@@ -1214,16 +1273,16 @@ nsScreenManagerGonk::GetPrimaryScreen(nsIScreen **outScreen)
 nsCOMPtr<nsScreenGonk>
 nsScreenManagerGonk::GetPrimaryScreen()
 {
-    nsCOMPtr<nsScreenGonk> primaryScreen;
+    nsCOMPtr<nsIScreen> primaryScreen;
     nsScreenManagerGonk::GetPrimaryScreen(getter_AddRefs(primaryScreen));
-    return primaryScreen;
+    return static_cast<nsScreenGonk*>(primaryScreen.get());
 }
 
 NS_IMETHODIMP
 nsScreenManagerGonk::ScreenForId(uint32_t aId,
                                  nsIScreen **outScreen)
 {
-    for (int i = 0; i < mScreens.Length(); i++) {
+    for (size_t i = 0; i < mScreens.Length(); i++) {
         if (mScreens[i]->GetId() == aId) {
             NS_IF_ADDREF(*outScreen = mScreens[i].get());
             return NS_OK;
@@ -1249,9 +1308,9 @@ nsScreenManagerGonk::ScreenForRect(int32_t inLeft,
 NS_IMETHODIMP
 nsScreenManagerGonk::ScreenForNativeWidget(void *aWidget, nsIScreen **outScreen)
 {
-    for (int i = 0; i < mScreens.Length(); i++) {
-        if (aWidget == mScreens[i]->mNativeWidget) {
-            NS_IF_ADDREF(*outScreen = mScreens[i]);
+    for (size_t i = 0; i < mScreens.Length(); i++) {
+        if (aWidget == mScreens[i]->GetNativeWindow()) {
+            NS_IF_ADDREF(*outScreen = mScreens[i].get());
             return NS_OK;
         }
     }
@@ -1274,37 +1333,10 @@ nsScreenManagerGonk::GetSystemDefaultScale(float *aDefaultScale)
     return NS_OK;
 }
 
-namespace
+nsCOMPtr<nsScreenManagerGonk> GetScreenManager()
 {
-class NotifyTask : public nsIRunnable
-{
-public:
-    NS_DECL_ISUPPORTS
+    nsCOMPtr<nsIScreenManager> screenMgr
+        = do_GetService("@mozilla.org/gfx/screenmanager;1");
 
-public:
-    NotifyTask(nsIDisplayDevice* aDisplayDevice)
-        : mDisplayDevice(aDisplayDevice)
-    {
-    }
-
-    NS_IMETHOD Run()
-    {
-        nsCOMPtr<nsIObserverService> os(do_GetService("@mozilla.org/observer-service;1"));
-        if (!os) {
-            return NS_ERROR_FAILURE;
-        }
-
-        return os->NotifyObservers(mDisplayDevice, "display-change", nullptr);
-    }
-private:
-    nsCOMPtr<nsIDisplayDevice> mDisplayDevice;
-};
-
-NS_IMPL_ISUPPORTS(NotifyTask, nsIRunnable)
-} // end of unnamed namespace
-
-void
-nsScreenManagerGonk::NotifyDisplayChange(nsIDisplayDevice* aDisplayDevice)
-{
-    NS_DispatchToMainThread(new NotifyTask(aDisplayDevice));
+    return static_cast<nsScreenManagerGonk*>(screenMgr.get());
 }

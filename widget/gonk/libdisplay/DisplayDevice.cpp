@@ -75,4 +75,19 @@ NS_IMETHODIMP DisplayDevice::GetWidth(int32_t *aWidth)
 	return NS_OK;
 }
 
+void DisplayDevice::SetConnected(bool aConnected)
+{
+	mConnected = aConnected;
+}
+
+int32_t DisplayDevice::GetSurfaceformat()
+{
+	return mSurfaceformat;
+}
+
+float DisplayDevice::GetXdpi()
+{
+	return mXdpi;
+}
+
 }
