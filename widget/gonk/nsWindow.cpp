@@ -440,25 +440,15 @@ nsWindow::Create(nsIWidget *aParent,
           this, aParent, aRect.width, aRect.height, mWindowType, displayType);
 
 
-    // Currently one display type can only have one instance, so
-    // display type is enough to get the associated screen.
-    //
-    // Note that if in the future one display type could have multiple
-    // instances, we need to pass more information other than display type
-    // and extend |nsScreenManagerGonk::ScreenForType|. This is the only
-    // place where display type is used. For all subsequent code, we will use
-    // screen id to represent the screen that the window is associated with.
-    //
-    // The screen needs to be created prior to new a window on top.
-    // For primary screen, we create it in the first time we hit the ctor
-    // of nsWindow. For other type of screen, use |nsScreenManagerGonk::AddScreen|
-    // and |nsScreenManagerGonk::RemoveScreen| to add/remove screen.
+    // TODO: TBD. In this version we use display type to get the associated screen.
+    // However, it might be changed to using the screen id carried by aInitData.
+    // No matter what approach is adopted, nsWindow will only maintain the screen id
+    // but not the display type.
     nsCOMPtr<nsScreenGonk> screen = GetScreenManager()->ScreenForType(displayType);
     if (!screen) {
         MOZ_CRASH("The screen type %d should be created beforehand.", displayType);
     }
 
-    // We only need to store the screen id for all later uses.
     mScreenId = screen->GetId();
     SLOG("mScreenId is initialized to %d", mScreenId);
 
@@ -1094,6 +1084,7 @@ nsScreenGonk::SetRotation(uint32_t aRotation)
     nsAppShell::NotifyScreenRotation();
 
     for (unsigned int i = 0; i < sTopWindows.Length(); i++) {
+        // Only resize the top level window which belongs to this screen.
         if (sTopWindows[i]->GetScreenId() == mId) {
             sTopWindows[i]->Resize(mWidth, mHeight, true);
         }
