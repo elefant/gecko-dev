@@ -149,6 +149,8 @@ NS_IMPL_ISUPPORTS_INHERITED0(nsWindow, nsBaseWidget)
 
 nsWindow::nsWindow()
 {
+    SLOG("nsWindow::nsWindow()");
+
     mFramebuffer = nullptr;
 
     if (sScreenInitialized)
@@ -160,7 +162,7 @@ nsWindow::nsWindow()
     ClearOnShutdown(&sScreenOffEvent);
     GetGonkDisplay()->OnEnabled(displayEnabledCallback);
 
-    // Create primary screen for query before we notify the shell.
+    // Create primary screen for query before notifying nsAppShell.
     GetScreenManager()->AddPrimaryScreen();
 
     sScreenInitialized = true;
@@ -434,6 +436,10 @@ nsWindow::Create(nsIWidget *aParent,
     uint32_t displayType = aParent ? ((nsWindow*)aParent)->mScreenId :
                            GetDisplayTypeFromInitData(aInitData);
 
+    SLOG("nsWindow::Create this=%p, aParent=%p, aRect=(%d, %d), mWindowType=%d, displayType=%d",
+          this, aParent, aRect.width, aRect.height, mWindowType, displayType);
+
+
     // Currently one display type can only have one instance, so
     // display type is enough to get the associated screen.
     //
@@ -454,6 +460,7 @@ nsWindow::Create(nsIWidget *aParent,
 
     // We only need to store the screen id for all later uses.
     mScreenId = screen->GetId();
+    SLOG("mScreenId is initialized to %d", mScreenId);
 
     mBounds = aRect;
 
@@ -551,6 +558,8 @@ nsWindow::Resize(double aX,
                  double aHeight,
                  bool   aRepaint)
 {
+    SLOG("Resize(%lf, %lf) [mScreenId=%d]", aWidth, aHeight, mScreenId);
+
     mBounds = nsIntRect(NSToIntRound(aX), NSToIntRound(aY),
                         NSToIntRound(aWidth), NSToIntRound(aHeight));
     if (mWidgetListener)
@@ -579,6 +588,8 @@ nsWindow::IsEnabled() const
 NS_IMETHODIMP
 nsWindow::SetFocus(bool aRaise)
 {
+    SLOG("nsWindow::SetFocus, this=%p, [mScreenId=%d]", this, mScreenId);
+
     if (aRaise)
         BringToTop();
 
@@ -848,9 +859,8 @@ nsWindow::BringToTop()
     sTopWindows.RemoveElement(this);
     sTopWindows.InsertElementAt(0, this);
 
-    if (mWidgetListener) {
+    if (mWidgetListener)
         mWidgetListener->WindowActivated();
-    }
 
     Invalidate(GetVirtualBounds());
 }
@@ -936,6 +946,7 @@ nsWindow::GetDisplayType()
 
 nsScreenGonk::nsScreenGonk(const ScreenConfiguration& aConfig,
                            uint32_t aId,
+                           uint32_t aPhysicalRotation,
                            void* aNativeWindow)
     : mId(aId)
     , mWidth(aConfig.rect().width)
@@ -944,12 +955,16 @@ nsScreenGonk::nsScreenGonk(const ScreenConfiguration& aConfig,
     , mColorDepth(aConfig.colorDepth())
     , mRotation(0)
     , mNativeWindow(aNativeWindow)
-    //, mPhyisicalRotation(aConfig.orientation())
+    , mPhysicalRotation(aPhysicalRotation)
     , mNaturalWidth(aConfig.rect().width)
     , mNaturalHeight(aConfig.rect().height)
     , mDpi(aConfig.dpi())
 {
-    // FIXME: convert aConfig.orientation() to mPhysicalRotation.
+    SLOG("nsScreenGonk is created! mId=%d, mWidth=%d, mHeight=%d, mPixelDepth=%d,
+          mColorDepth=%d, mRotation=%d, mNativeWindow=%p, mPhysicalRotation=%d,
+          mNaturalWidth=%d, mNaturalHeight=%d, mDpi=%f",
+          mId, mWidth, mHeight, mPixelDepth, mColorDepth, mRotation, mNativeWindow,
+          mPhysicalRotation, mNaturalWidth, mNaturalHeight, mDpi);
 }
 
 nsScreenGonk::~nsScreenGonk()
@@ -1049,6 +1064,8 @@ NS_IMETHODIMP
 nsScreenGonk::SetRotation(uint32_t aRotation)
 {
     // TODO: Should we limit this operation to primary screen only?
+
+    SLOG("nsScreenGonk::SetRotation to %d, mId=%d", aRotation, mId);
 
     if (!(aRotation <= ROTATION_270_DEG))
         return NS_ERROR_ILLEGAL_VALUE;
@@ -1205,6 +1222,7 @@ nsScreenManagerGonk::ScreenForType(uint32_t aDisplayType)
 void
 nsScreenManagerGonk::AddPrimaryScreen()
 {
+    SLOG("nsScreenManagerGonk::AddPrimaryScreen");
     return AddScreen(GonkDisplay::DISPLAY_PRIMARY);
 }
 
@@ -1212,6 +1230,8 @@ void
 nsScreenManagerGonk::AddScreen(uint32_t aDisplayType,
                                const android::sp<android::IGraphicBufferProducer>& aProducer)
 {
+    SLOG("nsScreenManagerGonk::AddScreen (%d, %p)", aDisplayType, aProducer.get());
+
     // Request gonk layer to create native context first for later use.
     uint32_t id = GetGonkDisplay()->AddDisplay(aDisplayType, aProducer);
 
@@ -1230,10 +1250,10 @@ nsScreenManagerGonk::AddScreen(uint32_t aDisplayType,
 
     uint32_t colorDepth = SurfaceFormatToColorDepth(device->GetSurfaceformat());
 
-    ScreenConfiguration config(screenRect, physicalRotation, colorDepth,
+    ScreenConfiguration config(screenRect, eScreenOrientation_None, colorDepth,
                                colorDepth, device->GetXdpi());
 
-    nsScreenGonk* screen = new nsScreenGonk(config, id, win);
+    nsScreenGonk* screen = new nsScreenGonk(config, id, physicalRotation, win);
 
     mScreens.AppendElement(screen);
 
@@ -1243,6 +1263,8 @@ nsScreenManagerGonk::AddScreen(uint32_t aDisplayType,
 void
 nsScreenManagerGonk::RemoveScreen(uint32_t aDisplayType)
 {
+    SLOG("nsScreenManagerGonk::RemoveScreen(%d)", aDisplayType);
+
     nsCOMPtr<nsScreenGonk> screen = ScreenForType(aDisplayType);
 
     // We need to make a copy of the device to prevent from

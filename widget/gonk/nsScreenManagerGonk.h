@@ -36,6 +36,7 @@ class nsScreenGonk : public nsBaseScreen
 public:
     nsScreenGonk(const ScreenConfiguration& aConfig,
                  uint32_t aId,
+                 uint32_t aPhysicalRotation,
                  void* aNativeWindow);
 
     ~nsScreenGonk();
