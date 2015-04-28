@@ -471,7 +471,11 @@ nsWindow::Create(nsIWidget *aParent,
         mBounds = GetScreen()->GetRect();
     }
 
+    SLOG("mBounds is initialized to (%d, %d, %d, %d), ",
+          mBounds.x, mBounds.y, mBounds.width, mBounds.height);
+
     if (!IS_TOPLEVEL()) {
+        SLOG("this=%p is not top level window. Return.", this);
         return NS_OK;
     }
 
@@ -558,7 +562,7 @@ nsWindow::Resize(double aX,
                  double aHeight,
                  bool   aRepaint)
 {
-    SLOG("Resize(%lf, %lf) [mScreenId=%d]", aWidth, aHeight, mScreenId);
+    SLOG("Resize(%lf, %lf) [mScreenId=%d], this=%p", aWidth, aHeight, mScreenId, this);
 
     mBounds = nsIntRect(NSToIntRound(aX), NSToIntRound(aY),
                         NSToIntRound(aWidth), NSToIntRound(aHeight));
@@ -567,7 +571,7 @@ nsWindow::Resize(double aX,
 
     // FIXME:
     if (aRepaint) {
-        Invalidate(GetVirtualBounds());
+        Invalidate(mBounds);
     }
 
     return NS_OK;
@@ -680,6 +684,8 @@ nsWindow::ReparentNativeWidget(nsIWidget* aNewParent)
 NS_IMETHODIMP
 nsWindow::MakeFullScreen(bool aFullScreen, nsIScreen*)
 {
+    SLOG("nsWindow::MakeFullScreen [this=%p, aScreen=%p]", this, aScreen);
+
     if (mWindowType != eWindowType_toplevel) {
         // Ignore fullscreen request for non-toplevel windows.
         NS_WARNING("MakeFullScreen() on a dialog or child widget?");
@@ -693,11 +699,11 @@ nsWindow::MakeFullScreen(bool aFullScreen, nsIScreen*)
         // toplevel widget, so it doesn't make sense to ever "exit"
         // fullscreen.  If we do, we can leave parts of the screen
         // unpainted.
-        nsIntRect virtualBounds = GetVirtualBounds();
-        Resize(virtualBounds.x,
-               virtualBounds.y,
-               virtualBounds.width,
-               virtualBounds.height,
+        nsIntRect screenRect = GetScreen()->GetRect();
+        Resize(screenRect.x,
+               screenRect.y,
+               screenRect.width,
+               screenRect.height,
                /*repaint*/true);
     }
     return NS_OK;
@@ -851,6 +857,8 @@ nsWindow::GetLayerManager(PLayerTransactionChild* aShadowManager,
 void
 nsWindow::BringToTop()
 {
+    SLOG("BringToTop [this=%p]", this);
+
     if (!sTopWindows.IsEmpty()) {
         if (nsIWidgetListener* listener = sTopWindows[0]->GetWidgetListener())
             listener->WindowDeactivated();
@@ -862,14 +870,7 @@ nsWindow::BringToTop()
     if (mWidgetListener)
         mWidgetListener->WindowActivated();
 
-    Invalidate(GetVirtualBounds());
-}
-
-nsIntRect
-nsWindow::GetVirtualBounds()
-{
-    // Use screen rect as the window bounds.
-    return GetScreen()->GetRect();
+    Invalidate(mBounds);
 }
 
 void
@@ -942,6 +943,12 @@ nsWindow::GetDisplayType()
     return mScreenId;
 }
 
+uint32_t
+nsWindow::GetScreenId()
+{
+    return mScreenId;
+}
+
 // nsScreenGonk.cpp
 
 nsScreenGonk::nsScreenGonk(const ScreenConfiguration& aConfig,
@@ -960,9 +967,9 @@ nsScreenGonk::nsScreenGonk(const ScreenConfiguration& aConfig,
     , mNaturalHeight(aConfig.rect().height)
     , mDpi(aConfig.dpi())
 {
-    SLOG("nsScreenGonk is created! mId=%d, mWidth=%d, mHeight=%d, mPixelDepth=%d,
-          mColorDepth=%d, mRotation=%d, mNativeWindow=%p, mPhysicalRotation=%d,
-          mNaturalWidth=%d, mNaturalHeight=%d, mDpi=%f",
+    SLOG("nsScreenGonk is created! mId=%d, mWidth=%d, mHeight=%d, mPixelDepth=%d,"
+         "mColorDepth=%d, mRotation=%d, mNativeWindow=%p, mPhysicalRotation=%d,"
+         "mNaturalWidth=%d, mNaturalHeight=%d, mDpi=%f",
           mId, mWidth, mHeight, mPixelDepth, mColorDepth, mRotation, mNativeWindow,
           mPhysicalRotation, mNaturalWidth, mNaturalHeight, mDpi);
 }
@@ -1087,7 +1094,9 @@ nsScreenGonk::SetRotation(uint32_t aRotation)
     nsAppShell::NotifyScreenRotation();
 
     for (unsigned int i = 0; i < sTopWindows.Length(); i++) {
-        sTopWindows[i]->Resize(mWidth, mHeight, true);
+        if (sTopWindows[i]->GetScreenId() == mId) {
+            sTopWindows[i]->Resize(mWidth, mHeight, true);
+        }
     }
 
     return NS_OK;

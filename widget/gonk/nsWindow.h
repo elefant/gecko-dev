@@ -139,6 +139,8 @@ public:
 
     uint32_t GetDisplayType();
 
+    uint32_t GetScreenId();
+
 protected:
     nsWindow* mParent;
     bool mVisible;
@@ -168,9 +170,6 @@ protected:
     void UserActivity();
 
 private:
-    // Would it be ever different from mBounds?
-    nsIntRect GetVirtualBounds();
-
     nsCOMPtr<nsScreenGonk> GetScreen();
 
     // This is used by SynthesizeNativeTouchPoint to maintain state between
