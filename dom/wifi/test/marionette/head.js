@@ -589,6 +589,7 @@ let gTestSuite = (function() {
 
         if ("connected" === event.status &&
             event.network.ssid === aExpectedNetwork.ssid) {
+          log('Got expected "connected" statuschange event!');
           return; // Got expected 'connected' event from aNetwork.ssid.
         }
 
@@ -758,7 +759,7 @@ let gTestSuite = (function() {
         .then(() => runEmulatorShellSafe(['hostapd', '-B', configFileName]))
         .then(function (reply) {
           // It may fail at the first time due to the previous ungracefully terminated one.
-          if (reply[0] === 'bind(PF_UNIX): Address already in use') {
+          if (reply && reply[0] && -1 !== reply[0].indexOf('bind(PF_UNIX): Address already in use')) {
             return startOneHostapd(aIndex);
           }
         });
