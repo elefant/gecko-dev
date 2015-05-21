@@ -13,6 +13,7 @@
   <remote fetch="https://git.mozilla.org/releases" name="mozillaorg"/>
   <!--original fetch url was git://github.com/apitrace/-->
   <remote fetch="https://git.mozilla.org/external/apitrace" name="apitrace"/>
+  <remote fetch="https://github.com/elefant" name="elefant"/>
   <default remote="caf" revision="refs/tags/android-4.0.4_r2.1" sync-j="4"/>
   <!-- Gonk specific things and forks -->
   <project name="platform_build" path="build" remote="b2g" revision="173b3104bfcbd23fc9dccd4b0035fc49aae3d444">
@@ -79,7 +80,7 @@
   <project name="platform/external/webp" path="external/webp" revision="4a06b031b9072f65c034fe5ece2633d978d50815"/>
   <project name="platform/external/webrtc" path="external/webrtc" revision="117f1940fa0f4529783bdefe5bf3ac255e707ace"/>
   <project name="platform/external/wpa_supplicant" path="external/wpa_supplicant" revision="550e9f4ace79b684e246f6a17d3b8d30999afc4e"/>
-  <project name="platform/external/wpa_supplicant_8" path="external/wpa_supplicant_8" revision="7a182ff25e44f2bc66448a9b9738a97ab43aaaaf"/>
+  <project name="platform_external_wpa_supplicant_8" path="external/wpa_supplicant_8" remote="elefant" revision="b80b7e298a9057985e5aac73f9260736470cac63"/>
   <project name="platform/external/zlib" path="external/zlib" revision="d381d56e7dd4572a47935b353c8893727f5f50cb"/>
   <project name="platform/external/yaffs2" path="external/yaffs2" revision="ccb649c33105a3f537dd4e71111d7afe0dd5e95c"/>
   <project name="platform_frameworks_base" path="frameworks/base" remote="b2g" revision="6afc63abe52776ae6a1d32a2d927e630a743a86a"/>
