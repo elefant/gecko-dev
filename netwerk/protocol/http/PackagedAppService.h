@@ -112,7 +112,8 @@ private:
     // used to remove this object from PackagedAppService::mDownloadingPackages
     // - aKey is a string which uniquely identifies this package within the
     //   packagedAppService
-    nsresult Init(nsILoadContextInfo* aInfo, const nsCString &aKey);
+    nsresult Init(nsILoadContextInfo* aInfo, const nsCString &aKey, 
+                                             const nsACString& aPackageOrigin);
     // Registers a callback which gets called when the given nsIURI is downloaded
     // aURI is the full URI of a subresource, composed of packageURI + !// + subresourcePath
     nsresult AddCallback(nsIURI *aURI, nsICacheEntryOpenCallback *aCallback);
@@ -124,6 +125,9 @@ private:
     // is coming from the cache, and no subresources are to be expected as only
     // package metadata is saved in the cache.
     void SetIsFromCache(bool aFromCache) { mIsFromCache = aFromCache; }
+
+    void SetSignature(const nsACString& aSignature);
+
   private:
     ~PackagedAppDownloader() { }
 
@@ -196,6 +200,8 @@ private:
     }
   private:
     ~PackagedAppChannelListener() { }
+
+    nsCString GetSignatureFromChannel(nsIChannel* aChannel);
 
     nsRefPtr<PackagedAppDownloader> mDownloader;
     nsCOMPtr<nsIStreamListener> mListener; // nsMultiMixedConv

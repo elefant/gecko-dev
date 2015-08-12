@@ -315,9 +315,20 @@ PackagedAppService::PackagedAppChannelListener::OnStartRequest(nsIRequest *aRequ
   mDownloader->SetIsFromCache(isFromCache);
   LOG(("[%p] Downloader isFromCache: %d\n", mDownloader.get(), isFromCache));
 
+  nsCOMPtr<nsIChannel> channel = do_QueryInterface(aRequest);
+  mDownloader->SetSignature(GetSignatureFromChannel(channel));
+
   // XXX: This is the place to suspend the channel, doom existing cache entries
   // for previous resources, and then resume the channel.
   return mListener->OnStartRequest(aRequest, aContext);
+}
+
+nsCString
+PackagedAppService::PackagedAppChannelListener::GetSignatureFromChannel(nsIChannel* aChannel)
+{
+  // FIXME: Get the signature from channel.
+  // We will get the signature from the either http channel or a cache channel.
+  return nsCString("This is a fake siganture");
 }
 
 NS_IMETHODIMP
@@ -345,7 +356,8 @@ NS_IMPL_ISUPPORTS(PackagedAppService::PackagedAppDownloader, nsIStreamListener)
 
 nsresult
 PackagedAppService::PackagedAppDownloader::Init(nsILoadContextInfo* aInfo,
-                                                const nsCString& aKey)
+                                                const nsCString& aKey,
+                                                const nsACString& aPackageOrigin)
 {
   nsresult rv;
   nsCOMPtr<nsICacheStorageService> cacheStorageService =
@@ -362,9 +374,15 @@ PackagedAppService::PackagedAppDownloader::Init(nsILoadContextInfo* aInfo,
 
   mPackageKey = aKey;
 
-  mVerifier = new PackagedAppVerifier(this);
+  mVerifier = new PackagedAppVerifier(this, aPackageOrigin);
 
   return NS_OK;
+}
+
+void 
+PackagedAppService::PackagedAppDownloader::SetSignature(const nsACString& aSignature)
+{
+  mVerifier->SetSignature(aSignature);
 }
 
 NS_IMETHODIMP
@@ -889,7 +907,9 @@ PackagedAppService::GetResource(nsIPrincipal *aPrincipal,
   }
 
   downloader = new PackagedAppDownloader();
-  rv = downloader->Init(aInfo, key);
+  nsCString packageOrigin;
+  aPrincipal->GetOriginNoSuffix(packageOrigin);
+  rv = downloader->Init(aInfo, key, packageOrigin);
   if (NS_WARN_IF(NS_FAILED(rv))) {
     return rv;
   }

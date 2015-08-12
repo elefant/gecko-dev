@@ -34,12 +34,18 @@ namespace net {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-PackagedAppVerifier::PackagedAppVerifier(PackagedAppVerifierListener* aListener)
+PackagedAppVerifier::PackagedAppVerifier(PackagedAppVerifierListener* aListener,
+                                         const nsACString& aPackageOrigin)
   : mListener(aListener)
   , mState(STATE_UNKNOWN)
+  , mPackageOrigin(aPackageOrigin)
 {
-  mSignature = "The whatever signature";
-  mPackageOrigin = "http://people.mozilla.org";
+}
+
+void
+PackagedAppVerifier::SetSignature(const nsACString& aSignature)
+{
+  mSignature = aSignature;
 }
 
 void

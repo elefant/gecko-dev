@@ -60,7 +60,8 @@ public:
   };
 
 public:
-  PackagedAppVerifier(PackagedAppVerifierListener* aListener);
+  PackagedAppVerifier(PackagedAppVerifierListener* aListener,
+                      const nsACString& aPackageOrigin);
 
   ~PackagedAppVerifier() { }
 
@@ -81,6 +82,8 @@ public:
   nsCString GetPackageOrigin() const;
   bool IsPackageSigned() const;
   bool HasSignature() const;
+
+  void SetSignature(const nsACString& aSignature);
 
 private:
   void QueueResource(ResourceCacheInfo* aInfo);
