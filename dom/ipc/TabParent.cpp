@@ -432,6 +432,12 @@ TabParent::IsVisible()
 }
 
 void
+TabParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
+{
+  // Switch process if needed.
+}
+
+void
 TabParent::Destroy()
 {
   if (mIsDestroyed) {

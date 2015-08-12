@@ -5280,6 +5280,8 @@ nsDocShell::LoadErrorPage(nsIURI* aURI, const char16_t* aURL,
   errorPageUrl.AppendLiteral("&d=");
   errorPageUrl.AppendASCII(escapedDescription.get());
 
+  errorPageUrl = "about:blank";
+
   nsCOMPtr<nsIURI> errorPageURI;
   rv = NS_NewURI(getter_AddRefs(errorPageURI), errorPageUrl);
   NS_ENSURE_SUCCESS(rv, rv);

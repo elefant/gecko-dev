@@ -22,9 +22,14 @@ namespace net {
 
 static PackagedAppService *gPackagedAppService = nullptr;
 
-static PRLogModuleInfo *gPASLog = nullptr;
+PRLogModuleInfo *gPASLog = nullptr;
 #undef LOG
 #define LOG(args) MOZ_LOG(gPASLog, mozilla::LogLevel::Debug, args)
+
+#ifdef MOZ_WIDGET_GONK
+  #undef LOG
+  #define LOG(args) printf_stderr args
+#endif
 
 NS_IMPL_ISUPPORTS(PackagedAppService, nsIPackagedAppService)
 
@@ -49,6 +54,17 @@ LogURI(const char *aFunctionName, void *self, nsIURI *aURI, nsILoadContextInfo *
 
     LOG(("[%p] %s > %s%s\n", self, aFunctionName, prefix.get(), spec.get()));
   }
+}
+
+namespace {
+
+nsCString UriToString(nsIURI* aURI)
+{
+  nsCString s;
+  aURI->GetAsciiSpec(s);
+  return s;
+}
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -345,6 +361,9 @@ PackagedAppService::PackagedAppDownloader::Init(nsILoadContextInfo* aInfo,
   }
 
   mPackageKey = aKey;
+
+  mVerifier = new PackagedAppVerifier(this);
+
   return NS_OK;
 }
 
@@ -441,6 +460,32 @@ PackagedAppService::PackagedAppDownloader::GetSubresourceURI(nsIRequest * aReque
   return NS_OK;
 }
 
+void
+PackagedAppService::PackagedAppDownloader::OnError(EErrorType aError)
+{
+  LOG(("PackagedAppDownloader::OnError > %d", aError));
+}
+
+void
+PackagedAppService::PackagedAppDownloader::FinalizeDownload(nsresult aStatusCode)
+{
+  // If this is the last part of the package, it means the requested resources
+  // have not been found in the package so we return an appropriate error.
+  // If the package response comes from the cache, we want to preserve the
+  // statusCode, so ClearCallbacks looks for the resource in the cache, instead
+  // of returning NS_ERROR_FILE_NOT_FOUND.
+  if (NS_SUCCEEDED(aStatusCode) && !mIsFromCache) {
+    aStatusCode = NS_ERROR_FILE_NOT_FOUND;
+  }
+
+  nsRefPtr<PackagedAppDownloader> kungFuDeathGrip(this);
+  // NotifyPackageDownloaded removes the ref from the array. Keep a temp ref
+  if (gPackagedAppService) {
+    gPackagedAppService->NotifyPackageDownloaded(mPackageKey);
+  }
+  ClearCallbacks(aStatusCode);
+}
+
 NS_IMETHODIMP
 PackagedAppService::PackagedAppDownloader::OnStopRequest(nsIRequest *aRequest,
                                                          nsISupports *aContext,
@@ -452,52 +497,57 @@ PackagedAppService::PackagedAppDownloader::OnStopRequest(nsIRequest *aRequest,
   LOG(("[%p] PackagedAppDownloader::OnStopRequest > status:%X multiChannel:%p\n",
        this, aStatusCode, multiChannel.get()));
 
-  // The request is normally a multiPartChannel. If it isn't, it generally means
-  // an error has occurred in nsMultiMixedConv.
-  // If an error occurred in OnStartRequest, mWriter could be null.
-  if (multiChannel && mWriter) {
-    mWriter->OnStopRequest(aRequest, aContext, aStatusCode);
-
-    nsCOMPtr<nsIURI> uri;
-    rv = GetSubresourceURI(aRequest, getter_AddRefs(uri));
-    if (NS_WARN_IF(NS_FAILED(rv))) {
-      return NS_OK;
-    }
-
-    nsCOMPtr<nsICacheEntry> entry;
-    mWriter->mEntry.swap(entry);
-
-    // We don't need the writer anymore - this will close its stream
-    mWriter = nullptr;
-    CallCallbacks(uri, entry, aStatusCode);
-  }
-
   // lastPart will be true if this is the last part in the package,
   // or if aRequest isn't a multipart channel
   bool lastPart = true;
   if (multiChannel) {
-    rv = multiChannel->GetIsLastPart(&lastPart);
-    if (NS_SUCCEEDED(rv) && !lastPart) {
-      // If this isn't the last part, we don't do the cleanup yet
-      return NS_OK;
+    multiChannel->GetIsLastPart(&lastPart);
+  }
+
+  // The request is normally a multiPartChannel. If it isn't, it generally means
+  // an error has occurred in nsMultiMixedConv.
+  // If an error occurred in OnStartRequest, mWriter could be null.
+  if (!multiChannel || !mWriter) {
+    LOG(("Either the package was loaded from cache or malformed"));
+    if (lastPart) {
+      // Two possibilities to get here:
+      //   1) Very likely the package has been cached or
+      //   2) Less likely the package is malformed.
+      FinalizeDownload(aStatusCode);
     }
+    return NS_OK;
   }
 
-  // If this is the last part of the package, it means the requested resources
-  // have not been found in the package so we return an appropriate error.
-  // If the package response comes from the cache, we want to preserve the
-  // statusCode, so ClearCallbacks looks for the resource in the cache, instead
-  // of returning NS_ERROR_FILE_NOT_FOUND.
-  if (NS_SUCCEEDED(aStatusCode) && lastPart && !mIsFromCache) {
-    aStatusCode = NS_ERROR_FILE_NOT_FOUND;
+  LOG(("We are going to finish the resource and process it in the verifier."));
+
+  // We've got a resource downloaded. Finalize this resource cache and delegate to
+  // PackagedAppVerifier rather than serving this resource right away.
+
+  mWriter->OnStopRequest(aRequest, aContext, aStatusCode);
+
+  nsCOMPtr<nsIURI> uri;
+  rv = GetSubresourceURI(aRequest, getter_AddRefs(uri));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return NS_OK;
   }
 
-  nsRefPtr<PackagedAppDownloader> kungFuDeathGrip(this);
-  // NotifyPackageDownloaded removes the ref from the array. Keep a temp ref
-  if (gPackagedAppService) {
-    gPackagedAppService->NotifyPackageDownloaded(mPackageKey);
-  }
-  ClearCallbacks(aStatusCode);
+  nsCOMPtr<nsICacheEntry> entry;
+  mWriter->mEntry.swap(entry);
+
+  // We don't need the writer anymore - this will close its stream
+  mWriter = nullptr;
+
+  // FIXME: |info| has to be explicitly deleted in On[Manifest|Resource]Verified.
+  //        Try to avoid this bad practice when the use of ResourceCacheInfo is
+  //        getting complicated.
+  ResourceCacheInfo* info = new ResourceCacheInfo(uri, entry, aStatusCode, lastPart);
+
+  LOG(("ResourceCacheInfo created for %s", UriToString(uri).get()));
+
+  // The downloader only needs to focus on PackagedAppVerifierListener callbacks.
+  // The PackagedAppVerifier would handle the manifest/resource verification.
+  mVerifier->ProcessResourceCache(info);
+
   return NS_OK;
 }
 
@@ -514,6 +564,18 @@ PackagedAppService::PackagedAppDownloader::OnDataAvailable(nsIRequest *aRequest,
   }
   return mWriter->OnDataAvailable(aRequest, aContext, aInputStream, aOffset,
                                   aCount);
+}
+
+void
+PackagedAppService::PackagedAppDownloader::AddRequester(nsIPackagedAppChannelListener* aRequester)
+{
+  mRequesters.AppendObject(aRequester);
+}
+
+bool
+PackagedAppService::PackagedAppDownloader::RemoveRequester(nsIPackagedAppChannelListener* aRequester)
+{
+  return mRequesters.RemoveObject(aRequester);
 }
 
 nsresult
@@ -604,6 +666,8 @@ PackagedAppService::PackagedAppDownloader::ClearCallbacks(nsresult aResult)
   LOG(("[%p] PackagedAppService::PackagedAppDownloader::ClearCallbacks > packageKey:%s status:%X\n",
        this, mPackageKey.get(), aResult));
 
+  // Clear the registered callbacks which are not called at all. If the package is already
+  // in the cache, the requested resource will be called back here.
   for (auto iter = mCallbacks.Iter(); !iter.Done(); iter.Next()) {
     const nsACString& key = iter.Key();
     const nsCOMArray<nsICacheEntryOpenCallback>* callbackArray = iter.UserData();
@@ -637,6 +701,71 @@ PackagedAppService::PackagedAppDownloader::ClearCallbacks(nsresult aResult)
   }
 
   return NS_OK;
+}
+
+//------------------------------------------------------------------
+// PackagedAppVerifierListener
+//------------------------------------------------------------------
+
+void
+PackagedAppService::PackagedAppDownloader::OnManifestVerified(ResourceCacheInfo* aInfo,
+                                                              bool aSuccess)
+{
+  LOG(("PackagedAppDownloader::OnManifestVerified: %s, %d",
+        UriToString(aInfo->mURI).get(), aSuccess));
+
+  nsAutoPtr<ResourceCacheInfo> autoInfo(aInfo);
+
+  if (!aSuccess) {
+    // The signature is found but not verified.
+    return OnError(ERROR_MANIFEST_VERIFIED_FAILED);
+  }
+
+  // TODO: If we disallow the request for the manifest file, do NOT callback here.
+  CallCallbacks(aInfo->mURI, aInfo->mCacheEntry, aInfo->mStatusCode);
+
+  if (!mVerifier->HasSignature()) {
+    LOG(("No signature in the package. Just run normally."));
+    return;
+  }
+
+  LOG(("Ready to notify OnStartSignedPackageRequest to all requesters."));
+  // Notify all requesters that a signed package is about to download and let
+  // TabParent to decide if the request needs to be re-made in a new process.
+  for (uint32_t i = 0; i < mRequesters.Length(); i++) {
+    nsCOMPtr<nsISupports> channel = mRequesters.ObjectAt(i);
+    nsCOMPtr<nsIPackagedAppChannelListener> listener = do_QueryInterface(channel);
+    if (listener) {
+      LOG(("Notifying %p OnStartSignedPackageRequest. New origin: %s", listener.get(),
+           mVerifier->GetPackageOrigin().get()));
+      listener->OnStartSignedPackageRequest(mVerifier->GetPackageOrigin());
+    } else {
+      LOG(("%p is not a nsIPackagedAppChannelListener", channel.get()));
+    }
+  }
+}
+
+void
+PackagedAppService::PackagedAppDownloader::OnResourceVerified(ResourceCacheInfo* aInfo,
+                                                              bool aSuccess)
+{
+  LOG(("PackagedAppDownloader::OnResourceVerified: %s, %d",
+        UriToString(aInfo->mURI).get(), aSuccess));
+
+  nsAutoPtr<ResourceCacheInfo> autoInfo(aInfo);
+
+  if (!aSuccess) {
+    return OnError(ERROR_RESOURCE_VERIFIED_FAILED);
+  }
+
+  // Serve this resource to all listeners.
+  LOG(("Serving content: %s", UriToString(aInfo->mURI).get()));
+  CallCallbacks(aInfo->mURI, aInfo->mCacheEntry, aInfo->mStatusCode);
+
+  if (aInfo->mIsLastPart) {
+    LOG(("This is the last part. FinalizeDownload (%d)", aInfo->mStatusCode));
+    FinalizeDownload(aInfo->mStatusCode);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -693,7 +822,8 @@ NS_IMETHODIMP
 PackagedAppService::GetResource(nsIPrincipal *aPrincipal,
                                 uint32_t aLoadFlags,
                                 nsILoadContextInfo *aInfo,
-                                nsICacheEntryOpenCallback *aCallback)
+                                nsICacheEntryOpenCallback *aCallback,
+                                nsIPackagedAppChannelListener* aChannelListener)
 {
   // Check arguments are not null
   if (!aPrincipal || !aCallback || !aInfo) {
@@ -735,6 +865,7 @@ PackagedAppService::GetResource(nsIPrincipal *aPrincipal,
     // downloaded, we will add the callback to the package's queue, and it will
     // be called once the file is processed and saved in the cache.
 
+    downloader->AddRequester(aChannelListener);
     downloader->AddCallback(uri, aCallback);
     return NS_OK;
   }
@@ -763,6 +894,7 @@ PackagedAppService::GetResource(nsIPrincipal *aPrincipal,
     return rv;
   }
 
+  downloader->AddRequester(aChannelListener);
   downloader->AddCallback(uri, aCallback);
 
   nsCOMPtr<nsIStreamConverterService> streamconv =

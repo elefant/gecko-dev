@@ -80,6 +80,7 @@ UNIFIED_SOURCES += [
     'NullHttpChannel.cpp',
     'NullHttpTransaction.cpp',
     'PackagedAppService.cpp',
+    'PackagedAppVerifier.cpp',
     'SpdyPush31.cpp',
     'SpdySession31.cpp',
     'SpdyStream31.cpp',

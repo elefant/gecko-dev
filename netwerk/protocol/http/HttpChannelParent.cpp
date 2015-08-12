@@ -35,6 +35,11 @@
 #include "nsIHttpHeaderVisitor.h"
 #include "nsQueryObject.h"
 
+#ifdef MOZ_WIDGET_GONK
+  #undef LOG
+  #define LOG(args) printf_stderr args
+#endif
+
 using namespace mozilla::dom;
 using namespace mozilla::ipc;
 
@@ -143,6 +148,7 @@ NS_IMPL_ISUPPORTS(HttpChannelParent,
                   nsIProgressEventSink,
                   nsIRequestObserver,
                   nsIStreamListener,
+                  nsIPackagedAppChannelListener,
                   nsIParentChannel,
                   nsIAuthPromptProvider,
                   nsIParentRedirectingChannel,
@@ -467,6 +473,7 @@ HttpChannelParent::DoAsyncOpen(  const URIParams&           aURI,
   schedulingContextID.Parse(aSchedulingContextID.BeginReading());
   mChannel->SetSchedulingContextID(schedulingContextID);
 
+  LOG(("HttpChannelParent::AsyncOpen with listener: %p", mParentListener.get()));
   rv = mChannel->AsyncOpen(mParentListener, nullptr);
   if (NS_FAILED(rv))
     return SendFailedAsyncOpen(rv);
@@ -766,6 +773,38 @@ HttpChannelParent::RecvDivertComplete()
 
   mParentListener = nullptr;
   return true;
+}
+
+bool
+HttpChannelParent::ShouldSwitchProcess(const nsACString& aNewOrigin)
+{
+  nsCOMPtr<nsILoadInfo> loadInfo;
+  mChannel->GetLoadInfo(getter_AddRefs(loadInfo));
+
+  nsCOMPtr<nsIPrincipal> loadingPrincipal;
+  loadInfo->GetLoadingPrincipal(getter_AddRefs(loadingPrincipal));
+
+  nsCString loadingOriginNoSuffix;
+  loadingPrincipal->GetOriginNoSuffix(loadingOriginNoSuffix);
+
+  LOG(("Loading origin: %s, package origin: %s", loadingOriginNoSuffix.get(),
+                                                 nsCString(aNewOrigin).get()));
+
+  return !aNewOrigin.Equals(loadingOriginNoSuffix);
+}
+
+//-----------------------------------------------------------------------------
+// HttpChannelParent::nsIPackagedAppChannelListener
+//-----------------------------------------------------------------------------
+NS_IMETHODIMP
+HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
+{ 
+  LOG(("HttpChannelParent::OnStartSignedPackageRequest"));
+  if (ShouldSwitchProcess(aNewOrigin)) {
+    mChannel->Cancel(NS_ERROR_UNKNOWN_HOST);
+    mTabParent->OnStartSignedPackageRequest(aNewOrigin);
+  }
+  return NS_OK;
 }
 
 //-----------------------------------------------------------------------------

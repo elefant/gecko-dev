@@ -34,6 +34,8 @@
 #include "nsPerformance.h"
 #include "mozIThirdPartyUtil.h"
 #include "nsContentSecurityManager.h"
+#include "nsIPackagedAppChannelListener.h"
+
 
 #ifdef OS_POSIX
 #include "chrome/common/file_descriptor_set_posix.h"
@@ -409,6 +411,16 @@ HttpChannelChild::RecvOnStartRequest(const nsresult& channelStatus,
                    isFromCache, cacheEntryAvailable, cacheExpirationTime,
                    cachedCharset, securityInfoSerialization, selfAddr,
                    peerAddr, cacheKey);
+  }
+  return true;
+}
+
+bool
+HttpChannelChild::RecvOnStartSignedPackageRequest(const nsCString& aNewOrigin)
+{
+  nsCOMPtr<nsIPackagedAppChannelListener> listener = do_QueryInterface(mListener);
+  if (listener) {
+    listener->OnStartSignedPackageRequest(aNewOrigin);
   }
   return true;
 }
@@ -2033,6 +2045,7 @@ HttpChannelChild::GetAssociatedContentSecurity(
   return true;
 }
 
+/* attribute unsigned long countSubRequestsBrokenSecurity; */
 NS_IMETHODIMP
 HttpChannelChild::GetCountSubRequestsBrokenSecurity(
                     int32_t *aSubRequestsBrokenSecurity)
@@ -2054,6 +2067,7 @@ HttpChannelChild::SetCountSubRequestsBrokenSecurity(
   return assoc->SetCountSubRequestsBrokenSecurity(aSubRequestsBrokenSecurity);
 }
 
+/* attribute unsigned long countSubRequestsNoSecurity; */
 NS_IMETHODIMP
 HttpChannelChild::GetCountSubRequestsNoSecurity(int32_t *aSubRequestsNoSecurity)
 {

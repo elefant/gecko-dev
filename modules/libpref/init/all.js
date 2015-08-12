@@ -1434,7 +1434,7 @@ pref("network.http.enforce-framing.soft", true);
 // resources from a package when directed to a URL
 // such as http://domain.com/package.pak!//resource.html
 // See http://www.w3.org/TR/web-packaging/#streamable-package-format
-pref("network.http.enable-packaged-apps", false);
+pref("network.http.enable-packaged-apps", true);
 
 // default values for FTP
 // in a DSCP environment this should be 40 (0x28, or AF11), per RFC-4594,

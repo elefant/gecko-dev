@@ -147,6 +147,9 @@ child:
   // Tell child to delete channel (all IPDL deletes must be done from child to
   // avoid races: see bug 591708).
   DeleteSelf();
+
+  // Child should hand over the current request to another process.
+  OnStartSignedPackageRequest(nsCString newOrigin);
 };
 
 

@@ -146,6 +146,8 @@ protected:
   bool RecvReportSecurityMessage(const nsString& messageTag,
                                  const nsString& messageCategory) override;
 
+  bool RecvOnStartSignedPackageRequest(const nsCString& aNewOrigin);
+
   bool GetAssociatedContentSecurity(nsIAssociatedContentSecurity** res = nullptr);
   virtual void DoNotifyListenerCleanup() override;
 

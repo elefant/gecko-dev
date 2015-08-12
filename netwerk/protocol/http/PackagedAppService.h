@@ -10,6 +10,8 @@
 #include "nsIPackagedAppService.h"
 #include "nsILoadContextInfo.h"
 #include "nsICacheStorage.h"
+#include "PackagedAppVerifier.h"
+#include "nsAutoPtr.h"
 
 namespace mozilla {
 namespace net {
@@ -93,7 +95,14 @@ private:
   // NotifyPackageDownloaded(packageURI), so the service releases the ref.
   class PackagedAppDownloader final
     : public nsIStreamListener
+    , public PackagedAppVerifierListener
   {
+  private:
+    enum EErrorType {
+      ERROR_MANIFEST_VERIFIED_FAILED,
+      ERROR_RESOURCE_VERIFIED_FAILED,
+    };
+
   public:
     NS_DECL_ISUPPORTS
     NS_DECL_NSISTREAMLISTENER
@@ -108,12 +117,25 @@ private:
     // aURI is the full URI of a subresource, composed of packageURI + !// + subresourcePath
     nsresult AddCallback(nsIURI *aURI, nsICacheEntryOpenCallback *aCallback);
 
+    void AddRequester(nsIPackagedAppChannelListener* aRequester);
+    bool RemoveRequester(nsIPackagedAppChannelListener* aRequester);
+
     // Called by PackagedAppChannelListener to note the fact that the package
     // is coming from the cache, and no subresources are to be expected as only
     // package metadata is saved in the cache.
     void SetIsFromCache(bool aFromCache) { mIsFromCache = aFromCache; }
   private:
     ~PackagedAppDownloader() { }
+
+    //---------------------------------------------------------------
+    // For PackagedAppVerifierListener.
+    //---------------------------------------------------------------
+    virtual void OnManifestVerified(ResourceCacheInfo* aInfo, bool aSuccess);
+    virtual void OnResourceVerified(ResourceCacheInfo* aInfo, bool aSuccess);
+
+    void OnError(EErrorType aError);
+
+    void FinalizeDownload(nsresult aStatusCode);
 
     // Calls all the callbacks registered for the given URI.
     // aURI is the full URI of a subresource, composed of packageURI + !// + subresourcePath
@@ -144,6 +166,10 @@ private:
 
     // Whether the package is from the cache
     bool mIsFromCache;
+
+    nsAutoPtr<PackagedAppVerifier> mVerifier;
+
+    nsCOMArray<nsIPackagedAppChannelListener> mRequesters;
   };
 
   // Intercepts OnStartRequest, OnDataAvailable*, OnStopRequest method calls
