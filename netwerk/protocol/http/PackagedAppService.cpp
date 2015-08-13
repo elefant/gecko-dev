@@ -498,11 +498,16 @@ PackagedAppService::PackagedAppDownloader::FinalizeDownload(nsresult aStatusCode
   ClearCallbacks(aStatusCode);
 }
 
-nsCString 
+nsCString
 PackagedAppService::PackagedAppDownloader::GetSignatureFromChannel(nsIMultiPartChannel* aMulitChannel)
 {
   if (mIsFromCache) {
     // TODO: How to get the signature from cache? Maybe from base channel.
+    return nsCString("");
+  }
+
+  if (!aMulitChannel) {
+    LOG(("The package is either not loaded from cache or malformed."));
     return nsCString("");
   }
 
@@ -515,7 +520,7 @@ PackagedAppService::PackagedAppDownloader::GetSignatureFromChannel(nsIMultiPartC
   if (!packageHeader.IsEmpty()) {
     // TODO: Parse signature from the package header.
   }
-  
+
 #if FORCE_TO_USE_TESTING_SIGNATURE
   signature = TESTING_SIGNATURE;
 #endif
@@ -745,7 +750,7 @@ PackagedAppService::PackagedAppDownloader::ClearCallbacks(nsresult aResult)
   return NS_OK;
 }
 
-void 
+void
 PackagedAppService::PackagedAppDownloader::NotifyOnStartSignedPackageRequest()
 {
   LOG(("Ready to notify OnStartSignedPackageRequest to all requesters."));
@@ -912,6 +917,8 @@ PackagedAppService::GetResource(nsIPrincipal *aPrincipal,
     key += ":";
     key += spec;
   }
+
+  LOG(("PackagedAppDownloader key: %s", key.get()));
 
   nsRefPtr<PackagedAppDownloader> downloader;
   if (mDownloadingPackages.Get(key, getter_AddRefs(downloader))) {

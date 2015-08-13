@@ -487,7 +487,7 @@ HttpChannelParent::ConnectChannel(const uint32_t& channelId, const bool& shouldI
   nsresult rv;
 
   LOG(("HttpChannelParent::ConnectChannel: Looking for a registered channel "
-       "[this=%p, id=%lu]\n", this, channelId));
+       "[this=%p, id=%d]\n", this, channelId));
   nsCOMPtr<nsIChannel> channel;
   rv = NS_LinkRedirectChannels(channelId, this, getter_AddRefs(channel));
   mChannel = static_cast<nsHttpChannel*>(channel.get());
@@ -798,7 +798,7 @@ HttpChannelParent::ShouldSwitchProcess(const nsACString& aNewOrigin)
 //-----------------------------------------------------------------------------
 NS_IMETHODIMP
 HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
-{ 
+{
   LOG(("HttpChannelParent::OnStartSignedPackageRequest"));
   if (ShouldSwitchProcess(aNewOrigin)) {
     mChannel->Cancel(NS_ERROR_UNKNOWN_HOST);
@@ -1060,7 +1060,7 @@ HttpChannelParent::StartRedirect(uint32_t newChannelId,
                                  uint32_t redirectFlags,
                                  nsIAsyncVerifyRedirectCallback* callback)
 {
-  LOG(("HttpChannelParent::StartRedirect [this=%p, newChannelId=%lu "
+  LOG(("HttpChannelParent::StartRedirect [this=%p, newChannelId=%d "
        "newChannel=%p callback=%p]\n", this, newChannelId, newChannel,
        callback));
 
