@@ -35,17 +35,14 @@ namespace net {
 ///////////////////////////////////////////////////////////////////////////////
 
 PackagedAppVerifier::PackagedAppVerifier(PackagedAppVerifierListener* aListener,
-                                         const nsACString& aPackageOrigin)
+                                         const nsACString& aPackageOrigin,
+                                         const nsACString& aSignature)
   : mListener(aListener)
   , mState(STATE_UNKNOWN)
   , mPackageOrigin(aPackageOrigin)
+  , mSignature(aSignature)
+  , mIsPackageSigned(false)
 {
-}
-
-void
-PackagedAppVerifier::SetSignature(const nsACString& aSignature)
-{
-  mSignature = aSignature;
 }
 
 void
@@ -119,6 +116,10 @@ PackagedAppVerifier::OnManifestVerified(bool aSuccess)
 {
   LOG(("PackagedAppVerifier::OnManifestVerified: %d", aSuccess));
 
+  // Only when the manifest verified and package has signature would we
+  // regard this package is signed.
+  mIsPackageSigned = (aSuccess && !mSignature.IsEmpty());
+  
   mState = aSuccess ? STATE_MANIFEST_VERIFIED_OK
                     : STATE_MANIFEST_VERIFIED_FAILED;
 
@@ -168,13 +169,7 @@ PackagedAppVerifier::GetPackageOrigin() const
 bool
 PackagedAppVerifier::IsPackageSigned() const
 {
-  return HasSignature() && STATE_MANIFEST_VERIFIED_OK;
-}
-
-bool
-PackagedAppVerifier::HasSignature() const
-{
-  return !mSignature.IsEmpty();
+  return mIsPackageSigned;
 }
 
 } // namespace net

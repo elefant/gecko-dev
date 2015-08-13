@@ -17,6 +17,10 @@
 #include "mozilla/DebugOnly.h"
 #include "nsIHttpHeaderVisitor.h"
 
+#define TESTING_SIGNATURE "Testing signature"
+
+#define FORCE_TO_USE_TESTING_SIGNATURE true
+
 namespace mozilla {
 namespace net {
 
@@ -316,19 +320,10 @@ PackagedAppService::PackagedAppChannelListener::OnStartRequest(nsIRequest *aRequ
   LOG(("[%p] Downloader isFromCache: %d\n", mDownloader.get(), isFromCache));
 
   nsCOMPtr<nsIChannel> channel = do_QueryInterface(aRequest);
-  mDownloader->SetSignature(GetSignatureFromChannel(channel));
 
   // XXX: This is the place to suspend the channel, doom existing cache entries
   // for previous resources, and then resume the channel.
   return mListener->OnStartRequest(aRequest, aContext);
-}
-
-nsCString
-PackagedAppService::PackagedAppChannelListener::GetSignatureFromChannel(nsIChannel* aChannel)
-{
-  // FIXME: Get the signature from channel.
-  // We will get the signature from the either http channel or a cache channel.
-  return nsCString("This is a fake siganture");
 }
 
 NS_IMETHODIMP
@@ -373,16 +368,9 @@ PackagedAppService::PackagedAppDownloader::Init(nsILoadContextInfo* aInfo,
   }
 
   mPackageKey = aKey;
-
-  mVerifier = new PackagedAppVerifier(this, aPackageOrigin);
+  mPackageOrigin = aPackageOrigin;
 
   return NS_OK;
-}
-
-void 
-PackagedAppService::PackagedAppDownloader::SetSignature(const nsACString& aSignature)
-{
-  mVerifier->SetSignature(aSignature);
 }
 
 NS_IMETHODIMP
@@ -487,6 +475,12 @@ PackagedAppService::PackagedAppDownloader::OnError(EErrorType aError)
 void
 PackagedAppService::PackagedAppDownloader::FinalizeDownload(nsresult aStatusCode)
 {
+  if (mIsFromCache && mVerifier->IsPackageSigned()) {
+    NotifyOnStartSignedPackageRequest();
+    // If process switch is required, hope it wouldn't be too late to be cancelled.
+    // We are about to serve data in |ClearCallbacks|.
+  }
+
   // If this is the last part of the package, it means the requested resources
   // have not been found in the package so we return an appropriate error.
   // If the package response comes from the cache, we want to preserve the
@@ -504,6 +498,31 @@ PackagedAppService::PackagedAppDownloader::FinalizeDownload(nsresult aStatusCode
   ClearCallbacks(aStatusCode);
 }
 
+nsCString 
+PackagedAppService::PackagedAppDownloader::GetSignatureFromChannel(nsIMultiPartChannel* aMulitChannel)
+{
+  if (mIsFromCache) {
+    // TODO: How to get the signature from cache? Maybe from base channel.
+    return nsCString("");
+  }
+
+  nsCString packageHeader;
+  aMulitChannel->GetPreamble(packageHeader);
+
+  nsCString signature;
+
+  // Parse signature from the header.
+  if (!packageHeader.IsEmpty()) {
+    // TODO: Parse signature from the package header.
+  }
+  
+#if FORCE_TO_USE_TESTING_SIGNATURE
+  signature = TESTING_SIGNATURE;
+#endif
+
+  return signature;
+}
+
 NS_IMETHODIMP
 PackagedAppService::PackagedAppDownloader::OnStopRequest(nsIRequest *aRequest,
                                                          nsISupports *aContext,
@@ -511,6 +530,11 @@ PackagedAppService::PackagedAppDownloader::OnStopRequest(nsIRequest *aRequest,
 {
   nsCOMPtr<nsIMultiPartChannel> multiChannel(do_QueryInterface(aRequest));
   nsresult rv;
+
+  if (!mVerifier) {
+    nsCString signature = GetSignatureFromChannel(multiChannel);
+    mVerifier = new PackagedAppVerifier(this, mPackageOrigin, signature);
+  }
 
   LOG(("[%p] PackagedAppDownloader::OnStopRequest > status:%X multiChannel:%p\n",
        this, aStatusCode, multiChannel.get()));
@@ -555,9 +579,9 @@ PackagedAppService::PackagedAppDownloader::OnStopRequest(nsIRequest *aRequest,
   // We don't need the writer anymore - this will close its stream
   mWriter = nullptr;
 
-  // FIXME: |info| has to be explicitly deleted in On[Manifest|Resource]Verified.
-  //        Try to avoid this bad practice when the use of ResourceCacheInfo is
-  //        getting complicated.
+  // TODO: |info| has to be explicitly deleted in On[Manifest|Resource]Verified.
+  // Try to avoid this bad practice when the use of ResourceCacheInfo is
+  // getting complicated.
   ResourceCacheInfo* info = new ResourceCacheInfo(uri, entry, aStatusCode, lastPart);
 
   LOG(("ResourceCacheInfo created for %s", UriToString(uri).get()));
@@ -721,6 +745,30 @@ PackagedAppService::PackagedAppDownloader::ClearCallbacks(nsresult aResult)
   return NS_OK;
 }
 
+void 
+PackagedAppService::PackagedAppDownloader::NotifyOnStartSignedPackageRequest()
+{
+  LOG(("Ready to notify OnStartSignedPackageRequest to all requesters."));
+  // Notify all requesters that a signed package is about to download and let
+  // TabParent to decide if the request needs to be re-made in a new process.
+  for (uint32_t i = 0; i < mRequesters.Length(); i++) {
+    nsCOMPtr<nsISupports> channel = mRequesters.ObjectAt(i);
+    nsCOMPtr<nsIPackagedAppChannelListener> listener = do_QueryInterface(channel);
+    if (listener) {
+      LOG(("Notifying %p OnStartSignedPackageRequest. New origin: %s", listener.get(),
+           mVerifier->GetPackageOrigin().get()));
+      listener->OnStartSignedPackageRequest(mVerifier->GetPackageOrigin());
+    } else {
+      LOG(("%p is not a nsIPackagedAppChannelListener", channel.get()));
+    }
+  }
+}
+
+void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp()
+{
+  // TODO: Implement me.
+}
+
 //------------------------------------------------------------------
 // PackagedAppVerifierListener
 //------------------------------------------------------------------
@@ -742,25 +790,14 @@ PackagedAppService::PackagedAppDownloader::OnManifestVerified(ResourceCacheInfo*
   // TODO: If we disallow the request for the manifest file, do NOT callback here.
   CallCallbacks(aInfo->mURI, aInfo->mCacheEntry, aInfo->mStatusCode);
 
-  if (!mVerifier->HasSignature()) {
+  if (!mVerifier->IsPackageSigned()) {
+    // A verified but unsigned manifest means this package has no signature.
     LOG(("No signature in the package. Just run normally."));
     return;
   }
 
-  LOG(("Ready to notify OnStartSignedPackageRequest to all requesters."));
-  // Notify all requesters that a signed package is about to download and let
-  // TabParent to decide if the request needs to be re-made in a new process.
-  for (uint32_t i = 0; i < mRequesters.Length(); i++) {
-    nsCOMPtr<nsISupports> channel = mRequesters.ObjectAt(i);
-    nsCOMPtr<nsIPackagedAppChannelListener> listener = do_QueryInterface(channel);
-    if (listener) {
-      LOG(("Notifying %p OnStartSignedPackageRequest. New origin: %s", listener.get(),
-           mVerifier->GetPackageOrigin().get()));
-      listener->OnStartSignedPackageRequest(mVerifier->GetPackageOrigin());
-    } else {
-      LOG(("%p is not a nsIPackagedAppChannelListener", channel.get()));
-    }
-  }
+  NotifyOnStartSignedPackageRequest();
+  InstallSignedPackagedApp();
 }
 
 void

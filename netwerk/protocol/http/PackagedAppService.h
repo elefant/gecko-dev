@@ -11,6 +11,7 @@
 #include "nsILoadContextInfo.h"
 #include "nsICacheStorage.h"
 #include "PackagedAppVerifier.h"
+#include "nsIMultiPartChannel.h"
 #include "nsAutoPtr.h"
 
 namespace mozilla {
@@ -126,8 +127,6 @@ private:
     // package metadata is saved in the cache.
     void SetIsFromCache(bool aFromCache) { mIsFromCache = aFromCache; }
 
-    void SetSignature(const nsACString& aSignature);
-
   private:
     ~PackagedAppDownloader() { }
 
@@ -138,8 +137,13 @@ private:
     virtual void OnResourceVerified(ResourceCacheInfo* aInfo, bool aSuccess);
 
     void OnError(EErrorType aError);
-
     void FinalizeDownload(nsresult aStatusCode);
+    nsCString GetSignatureFromChannel(nsIMultiPartChannel* aChannel);
+    void NotifyOnStartSignedPackageRequest();
+
+    // Handle all tasks about app installation like permission and system message
+    // registration.
+    void InstallSignedPackagedApp();
 
     // Calls all the callbacks registered for the given URI.
     // aURI is the full URI of a subresource, composed of packageURI + !// + subresourcePath
@@ -171,9 +175,16 @@ private:
     // Whether the package is from the cache
     bool mIsFromCache;
 
+    // Deal with verification and delegate callbacks to the downloader.
     nsAutoPtr<PackagedAppVerifier> mVerifier;
 
+    // The outer channels which have issued the request to the downloader.
     nsCOMArray<nsIPackagedAppChannelListener> mRequesters;
+
+    // The package origin without signed package origin identifier.
+    // If you need the origin with the signity taken into account, use
+    // PackagedAppVerifier::GetPackageOrigin().
+    nsCString mPackageOrigin;
   };
 
   // Intercepts OnStartRequest, OnDataAvailable*, OnStopRequest method calls
@@ -200,8 +211,6 @@ private:
     }
   private:
     ~PackagedAppChannelListener() { }
-
-    nsCString GetSignatureFromChannel(nsIChannel* aChannel);
 
     nsRefPtr<PackagedAppDownloader> mDownloader;
     nsCOMPtr<nsIStreamListener> mListener; // nsMultiMixedConv

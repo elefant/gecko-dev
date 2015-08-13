@@ -61,7 +61,8 @@ public:
 
 public:
   PackagedAppVerifier(PackagedAppVerifierListener* aListener,
-                      const nsACString& aPackageOrigin);
+                      const nsACString& aPackageOrigin,
+                      const nsACString& aSignature);
 
   ~PackagedAppVerifier() { }
 
@@ -81,9 +82,6 @@ public:
 
   nsCString GetPackageOrigin() const;
   bool IsPackageSigned() const;
-  bool HasSignature() const;
-
-  void SetSignature(const nsACString& aSignature);
 
 private:
   void QueueResource(ResourceCacheInfo* aInfo);
@@ -101,8 +99,9 @@ private:
   mozilla::LinkedList<ResourceCacheInfo> mPendingResourceCacheInfoList;
 
   EState mState;
-  nsCString mSignature;
   nsCString mPackageOrigin;
+  nsCString mSignature;
+  bool mIsPackageSigned;
 
 }; // class PackagedAppVerifier
 
