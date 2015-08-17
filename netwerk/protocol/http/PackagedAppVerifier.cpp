@@ -119,9 +119,11 @@ PackagedAppVerifier::OnManifestVerified(bool aSuccess)
   // Only when the manifest verified and package has signature would we
   // regard this package is signed.
   mIsPackageSigned = (aSuccess && !mSignature.IsEmpty());
-  
+
   mState = aSuccess ? STATE_MANIFEST_VERIFIED_OK
                     : STATE_MANIFEST_VERIFIED_FAILED;
+
+  // TODO: Update mPackageOrigin.
 
   ResourceCacheInfo* info = mPendingResourceCacheInfoList.popFirst();
   MOZ_ASSERT(info);
