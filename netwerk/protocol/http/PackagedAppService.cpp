@@ -702,6 +702,18 @@ PackagedAppService::PackagedAppDownloader::OnDataAvailable(nsIRequest *aRequest,
   return aInputStream->ReadSegments(ConsumeData, this, aCount, &n);
 }
 
+void
+PackagedAppService::PackagedAppDownloader::AddRequester(nsIChannel* aRequester)
+{
+  mRequesters.AppendObject(aRequester);
+}
+
+bool
+PackagedAppService::PackagedAppDownloader::RemoveRequester(nsIChannel* aRequester)
+{
+  return mRequesters.RemoveObject(aRequester);
+}
+
 nsresult
 PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
                                                        nsICacheEntryOpenCallback *aCallback)
@@ -722,11 +734,15 @@ PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
       // right now, directly.  See also the CallCallbacks method bellow.
       LOG(("[%p]    > already downloaded\n", this));
 
-      // This is the case where a package downloader is still running and we
-      // peek data from it.
+      // This is the case where a package downloader is still running and we peek data
+      // from it.
+      nsCOMPtr<nsIChannel> requester = do_QueryInterface(aCallback);
+      if (requester) {
+        // TODO: Notify OnStartSignedPackageRequest if necessary.
+        LOG(("Remove the requester since it's no longer needed."));
+        RemoveRequester(requester);
+      }
 
-      // TODO: Bug 1186290 to notify that the signed packaged content is ready
-      //       to load.
       mCacheStorage->AsyncOpenURI(aURI, EmptyCString(),
                                   nsICacheStorage::OPEN_READONLY, aCallback);
     } else {
@@ -791,6 +807,19 @@ PackagedAppService::PackagedAppDownloader::CallCallbacks(nsIURI *aURI,
 }
 
 nsresult
+PackagedAppService::PackagedAppDownloader::RemoveCallbacks(nsICacheEntryOpenCallback* aCallback)
+{
+  MOZ_RELEASE_ASSERT(NS_IsMainThread(), "mCallbacks hashtable is not thread safe");
+
+  for (auto iter = mCallbacks.Iter(); !iter.Done(); iter.Next()) {
+    nsCOMArray<nsICacheEntryOpenCallback>* callbackArray = iter.UserData();
+    callbackArray->RemoveObject(aCallback);
+  }
+
+  return NS_OK;
+}
+
+nsresult
 PackagedAppService::PackagedAppDownloader::ClearCallbacks(nsresult aResult)
 {
   MOZ_RELEASE_ASSERT(NS_IsMainThread(), "mCallbacks hashtable is not thread safe");
@@ -837,9 +866,22 @@ PackagedAppService::PackagedAppDownloader::ClearCallbacks(nsresult aResult)
 void
 PackagedAppService::PackagedAppDownloader::NotifyOnStartSignedPackageRequest(const nsACString& aPackageOrigin)
 {
-  // TODO: Bug 1186290 to notify whoever wants to know when the signed package is
-  //       about to load.
-  LOG(("Notifying the signed package is ready to load."));
+  LOG(("Ready to notify OnStartSignedPackageRequest to all requesters."));
+  // Notify all requesters that a signed package is about to download and let
+  // TabParent to decide if the request needs to be re-made in a new process.
+  for (uint32_t i = 0; i < mRequesters.Length(); i++) {
+    nsCOMPtr<nsIChannel> requester = mRequesters.ObjectAt(i);
+    nsCOMPtr<nsIPackagedAppChannelListener> listener = do_QueryInterface(requester);
+    if (listener) {
+      LOG(("Notifying %p OnStartSignedPackageRequest. New origin: %s", listener.get(),
+           nsCString(aPackageOrigin).get()));
+      listener->OnStartSignedPackageRequest(aPackageOrigin);
+    } else {
+      LOG(("%p is not a nsIPackagedAppChannelListener", listener.get()));
+    }
+  }
+
+  mRequesters.Clear();
 }
 
 void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp()
@@ -1034,7 +1076,7 @@ PackagedAppService::GetResource(nsIChannel *aChannel,
     // If we find that the package that the file belongs to is currently being
     // downloaded, we will add the callback to the package's queue, and it will
     // be called once the file is processed and saved in the cache.
-
+    downloader->AddRequester(aChannel);
     downloader->AddCallback(uri, aCallback);
     return NS_OK;
   }
@@ -1065,6 +1107,7 @@ PackagedAppService::GetResource(nsIChannel *aChannel,
     return rv;
   }
 
+  downloader->AddRequester(aChannel);
   downloader->AddCallback(uri, aCallback);
 
   nsCOMPtr<nsIStreamConverterService> streamconv =

@@ -40,6 +40,11 @@ using mozilla::OriginAttributes;
 using namespace mozilla::dom;
 using namespace mozilla::ipc;
 
+#ifdef MOZ_WIDGET_GONK
+  #undef LOG
+  #define LOG(args) printf_stderr args
+#endif
+
 namespace mozilla {
 namespace net {
 
@@ -146,6 +151,7 @@ NS_IMPL_ISUPPORTS(HttpChannelParent,
                   nsIProgressEventSink,
                   nsIRequestObserver,
                   nsIStreamListener,
+                  nsIPackagedAppChannelListener,
                   nsIParentChannel,
                   nsIAuthPromptProvider,
                   nsIParentRedirectingChannel,
@@ -494,7 +500,7 @@ HttpChannelParent::ConnectChannel(const uint32_t& channelId, const bool& shouldI
   nsresult rv;
 
   LOG(("HttpChannelParent::ConnectChannel: Looking for a registered channel "
-       "[this=%p, id=%lu]\n", this, channelId));
+       "[this=%p, id=%d]\n", this, channelId));
   nsCOMPtr<nsIChannel> channel;
   rv = NS_LinkRedirectChannels(channelId, this, getter_AddRefs(channel));
   mChannel = static_cast<nsHttpChannel*>(channel.get());
@@ -782,6 +788,63 @@ HttpChannelParent::RecvDivertComplete()
   return true;
 }
 
+bool
+HttpChannelParent::ShouldSwitchProcess(const nsACString& aNewOrigin)
+{
+  nsCOMPtr<nsILoadInfo> loadInfo;
+  mChannel->GetLoadInfo(getter_AddRefs(loadInfo));
+
+  nsCOMPtr<nsIPrincipal> loadingPrincipal;
+  loadInfo->GetLoadingPrincipal(getter_AddRefs(loadingPrincipal));
+
+  nsCString loadingOriginNoSuffix;
+  loadingPrincipal->GetOriginNoSuffix(loadingOriginNoSuffix);
+
+  LOG(("Loading origin: %s, package origin: %s", loadingOriginNoSuffix.get(),
+                                                 nsCString(aNewOrigin).get()));
+
+  if (loadingOriginNoSuffix.Equals(aNewOrigin)) {
+    LOG(("Same origin. No need to switch process"));
+    return false;
+  }
+
+  const char* kWhiteOriginList[] = {
+    "app://search.gaiamobile.org",
+    "app://verticalhome.gaiamobile.org",
+    "moz-safe-about:",
+  };
+
+  for (uint32_t i = 0; i < mozilla::ArrayLength(kWhiteOriginList); i++) {
+    if (StringBeginsWith(loadingOriginNoSuffix, nsCString(kWhiteOriginList[i]))) {
+      LOG(("Loading from white origin list: %s", kWhiteOriginList[i]));
+      return false;
+    }
+  }
+
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+// HttpChannelParent::nsIPackagedAppChannelListener
+//-----------------------------------------------------------------------------
+NS_IMETHODIMP
+HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
+{
+  // TODO: Move this check out of necko. (maybe to TabParent)
+  LOG(("HttpChannelParent::OnStartSignedPackageRequest"));
+  if (ShouldSwitchProcess(aNewOrigin)) {
+    LOG(("We decide to switch process. Call TabParent::SwitchProcessAndLoadURIs"));
+    nsCOMPtr<nsIURI> uri;
+    mChannel->GetURI(getter_AddRefs(uri));
+
+    // TODO: Use a proper error code.
+    mChannel->AsyncAbort(NS_ERROR_UNKNOWN_HOST);
+    
+    mTabParent->SwitchProcessAndLoadURI(uri);
+  }
+  return NS_OK;
+}
+
 //-----------------------------------------------------------------------------
 // HttpChannelParent::nsIRequestObserver
 //-----------------------------------------------------------------------------
@@ -1035,7 +1098,7 @@ HttpChannelParent::StartRedirect(uint32_t newChannelId,
                                  uint32_t redirectFlags,
                                  nsIAsyncVerifyRedirectCallback* callback)
 {
-  LOG(("HttpChannelParent::StartRedirect [this=%p, newChannelId=%lu "
+  LOG(("HttpChannelParent::StartRedirect [this=%p, newChannelId=%d "
        "newChannel=%p callback=%p]\n", this, newChannelId, newChannel,
        callback));
 

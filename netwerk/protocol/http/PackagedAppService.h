@@ -127,6 +127,9 @@ private:
     // Remove the callback from the resource callback list.
     nsresult RemoveCallbacks(nsICacheEntryOpenCallback* aCallback);
 
+    void AddRequester(nsIChannel* aRequester);
+    bool RemoveRequester(nsIChannel* aRequester);
+
     // Called by PackagedAppChannelListener to note the fact that the package
     // is coming from the cache, and no subresources are to be expected as only
     // package metadata is saved in the cache.
@@ -206,6 +209,9 @@ private:
 
     // Deal with verification and delegate callbacks to the downloader.
     nsRefPtr<PackagedAppVerifier> mVerifier;
+
+    // The outer channels which have issued the request to the downloader.
+    nsCOMArray<nsIChannel> mRequesters;
 
     // The package origin without signed package origin identifier.
     // If you need the origin with the signity taken into account, use

@@ -5080,3 +5080,6 @@ pref("media.useAudioChannelAPI", false);
 pref("dom.requestcontext.enabled", false);
 
 pref("dom.mozKillSwitch.enabled", false);
+
+// Retain at most 10 tabs
+pref("nsec.tabs.lru-size", 10);
