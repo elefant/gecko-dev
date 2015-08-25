@@ -749,6 +749,20 @@ child:
      */
     SwappedWithOtherRemoteLoader();
 
+    /**
+     * Tell the browser that it's been put in the BFCache.
+     */
+    GotoBFCache();
+
+    /**
+     * Tell the browser that it's been taken out of the BFCache.
+     */
+    ResumeFromBFCache();
+
+parent:
+
+    LocationChange(URIParams currentURI);
+
 /*
  * FIXME: write protocol!
 

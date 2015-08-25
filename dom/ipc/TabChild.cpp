@@ -24,6 +24,7 @@
 #include "mozilla/IMEStateManager.h"
 #include "mozilla/ipc/DocumentRendererChild.h"
 #include "mozilla/ipc/FileDescriptorUtils.h"
+#include "mozilla/ipc/URIUtils.h"
 #include "mozilla/layers/APZCCallbackHelper.h"
 #include "mozilla/layers/APZCTreeManager.h"
 #include "mozilla/layers/APZEventState.h"
@@ -465,6 +466,8 @@ TabChild::PreloadSlowThings()
         !tab->InitTabChildGlobal(DONT_LOAD_SCRIPTS)) {
         return;
     }
+    sPreallocatedTab = tab;
+    ClearOnShutdown(&sPreallocatedTab);
     // Just load and compile these scripts, but don't run them.
     tab->TryCacheLoadAndCompileScript(BROWSER_ELEMENT_CHILD_SCRIPT, true);
     // Load, compile, and run these scripts.
@@ -483,9 +486,6 @@ TabChild::PreloadSlowThings()
         // work.
         presShell->MakeZombie();
     }
-
-    sPreallocatedTab = tab;
-    ClearOnShutdown(&sPreallocatedTab);
 }
 
 /*static*/ already_AddRefed<TabChild>
@@ -572,6 +572,7 @@ TabChild::TabChild(nsIContentChild* aManager,
   , mDefaultScale(0)
   , mIPCOpen(true)
   , mParentIsActive(false)
+  , mIsInBFCache(false)
 {
   // In the general case having the TabParent tell us if APZ is enabled or not
   // doesn't really work because the TabParent itself may not have a reference
@@ -778,6 +779,11 @@ TabChild::Init()
   mAPZEventState = new APZEventState(mPuppetWidget,
       new TabChildContentReceivedInputBlockCallback(this));
 
+  nsCOMPtr<nsIWebProgress> webprogress = do_QueryInterface(docShell);
+  if (webprogress) {
+    webprogress->AddProgressListener(this, nsIWebProgress::NOTIFY_LOCATION);
+  }
+
   return NS_OK;
 }
 
@@ -809,6 +815,7 @@ NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION_INHERITED(TabChild)
   NS_INTERFACE_MAP_ENTRY(nsIObserver)
   NS_INTERFACE_MAP_ENTRY(nsISupportsWeakReference)
   NS_INTERFACE_MAP_ENTRY(nsITooltipListener)
+  NS_INTERFACE_MAP_ENTRY(nsIWebProgressListener)
 NS_INTERFACE_MAP_END_INHERITING(TabChildBase)
 
 NS_IMPL_ADDREF_INHERITED(TabChild, TabChildBase);
@@ -1351,6 +1358,8 @@ TabChild::RecvLoadURL(const nsCString& aURI,
     if (NS_FAILED(rv)) {
         NS_WARNING("WebNavigation()->LoadURI failed. Eating exception, what else can I do?");
     }
+
+    mIsInBFCache = false;
 
 #ifdef MOZ_CRASHREPORTER
     CrashReporter::AnnotateCrashReport(NS_LITERAL_CSTRING("URL"), aURI);
@@ -2408,6 +2417,25 @@ TabChild::RecvSwappedWithOtherRemoteLoader()
 }
 
 bool
+TabChild::RecvGotoBFCache()
+{
+  nsresult rv = WebNavigation()->LoadURI(MOZ_UTF16("about:blank"),
+                                         0, nullptr, nullptr, nullptr);
+  NS_ENSURE_SUCCESS(rv, false);
+  mIsInBFCache = true;
+  return true;
+}
+
+bool
+TabChild::RecvResumeFromBFCache()
+{
+  WebNavigation()->GoBack();
+  // TODO remove "about:blank" from history
+  mIsInBFCache = false;
+  return true;
+}
+
+bool
 TabChild::RecvDestroy()
 {
   MOZ_ASSERT(mDestroyed == false);
@@ -3148,4 +3176,68 @@ TabChild::DeallocPWebBrowserPersistDocumentChild(PWebBrowserPersistDocumentChild
 {
   delete aActor;
   return true;
+}
+
+NS_IMETHODIMP
+TabChild::OnStateChange(nsIWebProgress* aWebProgress,
+                        nsIRequest* aRequest,
+                        uint32_t aStateFlags,
+                        nsresult aStatus)
+{
+  NS_NOTREACHED("notification excluded in AddProgressListener(...)");
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+TabChild::OnProgressChange(nsIWebProgress* aProgress,
+                           nsIRequest* aRequest,
+                           int32_t aCurSelfProgress,
+                           int32_t aMaxSelfProgress,
+                           int32_t aCurTotalProgress,
+                           int32_t aMaxTotalProgress)
+{
+  NS_NOTREACHED("notification excluded in AddProgressListener(...)");
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+TabChild::OnLocationChange(nsIWebProgress* aProgress, nsIRequest* aRequest,
+                           nsIURI* aURI, uint32_t aFlags)
+{
+  if (sPreallocatedTab == this) {
+    // If we're the preallocated tab, bail out because doing IPC will crash.
+    return NS_OK;
+  }
+
+  if (mIsInBFCache) {
+    // Ignore location change because we are going to BFCache.
+    return NS_OK;
+  }
+
+  nsCOMPtr<nsIWebProgress> webprogress = do_GetInterface(WebNavigation());
+  if (aProgress != webprogress) {
+    // Ignore location change from subshells.
+    return NS_OK;
+  }
+  URIParams uri;
+  SerializeURI(aURI, uri);
+  SendLocationChange(uri);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+TabChild::OnStatusChange(nsIWebProgress* aWebProgress,
+                         nsIRequest* aRequest,
+                         nsresult aStatus, const char16_t* aMessage)
+{
+  NS_NOTREACHED("notification excluded in AddProgressListener(...)");
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+TabChild::OnSecurityChange(nsIWebProgress* aWebProgress,
+                           nsIRequest* aRequest, uint32_t aState)
+{
+  NS_NOTREACHED("notification excluded in AddProgressListener(...)");
+  return NS_OK;
 }

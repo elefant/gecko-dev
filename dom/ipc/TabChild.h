@@ -26,6 +26,7 @@
 #include "nsWeakReference.h"
 #include "nsITabChild.h"
 #include "nsITooltipListener.h"
+#include "nsIWebProgressListener.h"
 #include "mozilla/Attributes.h"
 #include "mozilla/dom/TabContext.h"
 #include "mozilla/DOMEventTargetHelper.h"
@@ -225,7 +226,8 @@ class TabChild final : public TabChildBase,
                        public nsITabChild,
                        public nsIObserver,
                        public TabContext,
-                       public nsITooltipListener
+                       public nsITooltipListener,
+                       public nsIWebProgressListener
 {
     typedef mozilla::dom::ClonedMessageData ClonedMessageData;
     typedef mozilla::OwningSerializedStructuredCloneBuffer OwningSerializedStructuredCloneBuffer;
@@ -271,6 +273,7 @@ public:
     NS_DECL_NSITABCHILD
     NS_DECL_NSIOBSERVER
     NS_DECL_NSITOOLTIPLISTENER
+    NS_DECL_NSIWEBPROGRESSLISTENER
 
     /**
      * MessageManagerCallback methods that we override.
@@ -373,6 +376,9 @@ public:
     virtual bool RecvAppOfflineStatus(const uint32_t& aId, const bool& aOffline) override;
 
     virtual bool RecvSwappedWithOtherRemoteLoader() override;
+
+    virtual bool RecvGotoBFCache() override;
+    virtual bool RecvResumeFromBFCache() override;
 
     virtual PDocAccessibleChild* AllocPDocAccessibleChild(PDocAccessibleChild*,
                                                           const uint64_t&)
@@ -645,6 +651,8 @@ private:
     bool mParentIsActive;
     bool mAsyncPanZoomEnabled;
     CSSSize mUnscaledInnerSize;
+
+    bool mIsInBFCache;
 
     nsAutoTArray<bool, NUMBER_OF_AUDIO_CHANNELS> mAudioChannelsActive;
 

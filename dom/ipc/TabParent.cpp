@@ -96,6 +96,7 @@
 #include "UnitTransforms.h"
 #include <algorithm>
 #include "mozilla/WebBrowserPersistDocumentParent.h"
+#include "TabParentLRU.h"
 
 using namespace mozilla::dom;
 using namespace mozilla::ipc;
@@ -104,6 +105,13 @@ using namespace mozilla::layout;
 using namespace mozilla::services;
 using namespace mozilla::widget;
 using namespace mozilla::jsipc;
+
+#define LOG(args) NS_WARNING args
+
+#ifdef MOZ_WIDGET_GONK
+  #undef LOG
+  #define LOG(args) printf_stderr args
+#endif
 
 // The flags passed by the webProgress notifications are 16 bits shifted
 // from the ones registered by webProgressListeners.
@@ -275,6 +283,7 @@ TabParent::TabParent(nsIContentParent* aManager,
   , mManager(aManager)
   , mMarkedDestroying(false)
   , mIsDestroyed(false)
+  , mIsDetached(true)
   , mAppPackageFileDescriptorSent(false)
   , mSendOfflineStatus(true)
   , mChromeFlags(aChromeFlags)
@@ -432,6 +441,21 @@ TabParent::IsVisible()
 }
 
 void
+TabParent::SwitchProcessAndLoadURI(nsIURI* aURI)
+{
+  // Switch process if needed.
+
+  nsRefPtr<nsFrameLoader> frameLoader = GetFrameLoader();
+  if (!frameLoader) {
+    LOG(("No frame loader in this tab. What up?!"));
+    return;
+  }
+
+  LOG(("Switch to new process and load URI"));
+  frameLoader->SwitchProcessAndLoadURI(aURI);
+}
+
+void
 TabParent::Destroy()
 {
   if (mIsDestroyed) {
@@ -464,6 +488,41 @@ TabParent::Destroy()
   }
 
   mMarkedDestroying = true;
+}
+
+void
+TabParent::Detach()
+{
+  if (mIsDetached) {
+    return;
+  }
+  RemoveWindowListeners();
+  if (RenderFrameParent* frame = GetRenderFrame()) {
+    RemoveTabParentFromTable(frame->GetLayersId());
+  }
+  if (XRE_IsParentProcess()) {
+    Manager()->AsContentParent()->CacheTabParent(this);
+  }
+  mIsDetached = true;
+}
+
+void
+TabParent::Attach(nsFrameLoader* aFrameLoader)
+{
+  MOZ_ASSERT(mIsDetached);
+  if (!mIsDetached) {
+    return;
+  }
+  Element* ownerElement = aFrameLoader->GetOwnerContent();
+  SetOwnerElement(ownerElement);
+  if (RenderFrameParent* frame = GetRenderFrame()) {
+    AddTabParentToTable(frame->GetLayersId(), this);
+    frame->OwnerContentChanged(ownerElement);
+  }
+  if (XRE_IsParentProcess()) {
+    Manager()->AsContentParent()->TakeTabParent(this);
+  }
+  mIsDetached = false;
 }
 
 bool
@@ -2404,7 +2463,7 @@ TabParent::RecvStartPluginIME(const WidgetKeyboardEvent& aKeyboardEvent,
     return true;
   }
   widget->StartPluginIME(aKeyboardEvent,
-                         (int32_t&)aPanelX, 
+                         (int32_t&)aPanelX,
                          (int32_t&)aPanelY,
                          *aCommitted);
   return true;
@@ -3312,7 +3371,7 @@ TabParent::RecvInvokeDragSession(nsTArray<IPCDataTransfer>&& aTransfers,
   }
   mDragAreaX = aDragAreaX;
   mDragAreaY = aDragAreaY;
-  
+
   esm->BeginTrackingRemoteDragGesture(mFrameElement);
 
   return true;
@@ -3389,6 +3448,42 @@ TabParent::StartPersistence(uint64_t aOuterWindowID,
   return SendPWebBrowserPersistDocumentConstructor(actor, aOuterWindowID)
     ? NS_OK : NS_ERROR_FAILURE;
   // (The actor will be destroyed on constructor failure.)
+}
+
+bool
+TabParent::RecvLocationChange(const URIParams& aCurrentURI)
+{
+  mCurrentLocation = DeserializeURI(aCurrentURI);
+  return true;
+}
+
+already_AddRefed<nsIURI>
+TabParent::GetCurrentLocation()
+{
+  nsCOMPtr<nsIURI> uri = mCurrentLocation;
+  return uri.forget();
+}
+
+bool
+TabParent::SendGotoBFCache()
+{
+  TabParentLRU* lru = TabParentLRU::GetSingleton();
+  if (PBrowserParent::SendGotoBFCache()) {
+    lru->Add(this);
+    return true;
+  }
+  return false;
+}
+
+bool
+TabParent::SendResumeFromBFCache()
+{
+  TabParentLRU* lru = TabParentLRU::GetSingleton();
+  if (PBrowserParent::SendResumeFromBFCache()) {
+    lru->Remove(this);
+    return true;
+  }
+  return false;
 }
 
 NS_IMETHODIMP

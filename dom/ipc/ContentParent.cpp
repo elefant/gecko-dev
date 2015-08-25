@@ -1685,6 +1685,13 @@ ContentParent::ShutDownProcess(ShutDownMethod aMethod)
     }
 #endif
 
+
+    nsTArray<nsRefPtr<TabParent>> cachedTabParents;
+    mCachedTabParents.SwapElements(cachedTabParents);
+    for (auto& tab : cachedTabParents) {
+        tab->Destroy();
+    }
+
     // Shutting down by sending a shutdown message works differently than the
     // other methods. We first call Shutdown() in the child. After the child is
     // ready, it calls FinishShutdown() on us. Then we close the channel.
@@ -2133,7 +2140,9 @@ ContentParent::NotifyTabDestroyed(PBrowserParent* aTab,
         --mNumDestroyingTabs;
     }
 
-    TabId id = static_cast<TabParent*>(aTab)->GetTabId();
+    nsRefPtr<TabParent> tab = TabParent::GetFrom(aTab);
+
+    TabId id = tab->GetTabId();
     nsTArray<PContentPermissionRequestParent*> parentArray =
         nsContentPermissionUtils::GetContentPermissionRequestParentById(id);
 
@@ -2144,6 +2153,8 @@ ContentParent::NotifyTabDestroyed(PBrowserParent* aTab,
                                                                   false,
                                                                   emptyChoices);
     }
+
+    mCachedTabParents.RemoveElement(tab);
 
     // There can be more than one PBrowser for a given app process
     // because of popup windows.  When the last one closes, shut
@@ -2929,6 +2940,46 @@ ContentParent::OnNewProcessCreated(uint32_t aPid,
     NS_ERROR("ContentParent::OnNewProcessCreated() not implemented!");
     return;
 #endif
+}
+
+void
+ContentParent::CacheTabParent(TabParent* aTab)
+{
+    nsRefPtr<TabParent> tab = aTab;
+    if (!mCachedTabParents.Contains(tab)) {
+        mCachedTabParents.AppendElement(tab);
+    }
+}
+
+void
+ContentParent::TakeTabParent(TabParent* aTab)
+{
+    nsRefPtr<TabParent> tab = aTab;
+    mCachedTabParents.RemoveElement(tab);
+}
+
+TabParent*
+ContentParent::FindCachedTabParent(nsIURI* aURI)
+{
+    nsAutoTArray<ContentParent*, 8> processes;
+    GetAll(processes);
+    for (auto process: processes) {
+        nsAutoTArray<PBrowserParent*, 8> parents;
+        parents.AppendElements(process->ManagedPBrowserParent());
+        for (auto parent: parents) {
+            TabParent* tp = TabParent::GetFrom(parent);
+            nsCOMPtr<nsIURI> uri = tp->GetCurrentLocation();
+            bool equal;
+            nsresult rv = uri->EqualsExceptRef(aURI, &equal);
+            if (NS_WARN_IF(NS_FAILED(rv))) {
+                continue;
+            }
+            if (equal) {
+                return tp;
+            }
+        }
+    }
+    return nullptr;
 }
 
 // We want ContentParent to show up in CC logs for debugging purposes, but we

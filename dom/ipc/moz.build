@@ -75,6 +75,7 @@ UNIFIED_SOURCES += [
     'TabContext.cpp',
     'TabMessageUtils.cpp',
     'TabParent.cpp',
+    'TabParentLRU.cpp',
 ]
 
 # Blob.cpp cannot be compiled in unified mode because it triggers a fatal gcc warning.

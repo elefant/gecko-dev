@@ -277,6 +277,46 @@ nsFrameLoader::LoadURI(nsIURI* aURI)
 }
 
 NS_IMETHODIMP
+nsFrameLoader::SwitchProcessAndLoadURI(nsIURI* aURI)
+{
+  nsCOMPtr<nsIURI> URIToLoad = aURI;
+  TabParent* tp = ContentParent::FindCachedTabParent(aURI);
+  if (tp) {
+    unused << mRemoteBrowser->SendGotoBFCache();
+    SwapRemoteBrowser(tp);
+    unused << tp->SendResumeFromBFCache();
+    return NS_OK;
+  }
+
+  MutableTabContext context;
+  nsCOMPtr<mozIApplication> ownApp = GetOwnApp();
+  nsCOMPtr<mozIApplication> containingApp = GetContainingApp();
+
+  bool rv = true;
+  if (ownApp) {
+    rv = context.SetTabContextForAppFrame(ownApp, containingApp);
+  } else if (OwnerIsBrowserFrame()) {
+    // The |else| above is unnecessary; OwnerIsBrowserFrame() implies !ownApp.
+    rv = context.SetTabContextForBrowserFrame(containingApp);
+  } else {
+    rv = context.SetTabContextForNormalFrame();
+  }
+  NS_ENSURE_STATE(rv);
+
+  nsCOMPtr<Element> ownerElement = mOwnerContent;
+  tp = ContentParent::CreateBrowserOrApp(context, ownerElement, nullptr);
+  if (!tp) {
+    return NS_ERROR_FAILURE;
+  }
+  mRemoteBrowserShown = false;
+
+  unused << mRemoteBrowser->SendGotoBFCache();
+  SwapRemoteBrowser(tp);
+  LoadURI(URIToLoad);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
 nsFrameLoader::SetIsPrerendered()
 {
   MOZ_ASSERT(!mDocShell, "Please call SetIsPrerendered before docShell is created");
@@ -2596,9 +2636,52 @@ nsFrameLoader::SetRemoteBrowser(nsITabParent* aTabParent)
   mRemoteFrame = true;
   mRemoteBrowser = TabParent::GetFrom(aTabParent);
   mChildID = mRemoteBrowser ? mRemoteBrowser->Manager()->ChildID() : 0;
+  ShowRemoteFrame(ScreenIntSize(0, 0));
+}
+
+void
+nsFrameLoader::SwapRemoteBrowser(nsITabParent* aTabParent)
+{
+  nsRefPtr<TabParent> newParent = TabParent::GetFrom(aTabParent);
+  if (!newParent || !mRemoteBrowser) {
+    return;
+  }
+  if (!IsRemoteFrame()) {
+    NS_WARNING("Switching from in-process to out-of-process is not supported yet.");
+    return;
+  }
+  if (newParent == mRemoteBrowser) {
+    return;
+  }
+  nsCOMPtr<nsIObserverService> os = services::GetObserverService();
+  if (os) {
+    os->NotifyObservers(NS_ISUPPORTS_CAST(nsIFrameLoader*, this),
+                        "frameloader-message-manager-will-change", nullptr);
+  }
+
+  mRemoteBrowser->CacheFrameLoader(nullptr);
+  mRemoteBrowser->SetOwnerElement(nullptr);
+  mRemoteBrowser->Detach();
+
+  if (mMessageManager) {
+    mMessageManager->Disconnect();
+    mMessageManager = nullptr;
+  }
+
+  mRemoteBrowser = newParent;
+  mRemoteBrowser->Attach(this);
+  mChildID = mRemoteBrowser->Manager()->ChildID();
+  // TODO verify tab context
   ReallyLoadFrameScripts();
   InitializeBrowserAPI();
-  ShowRemoteFrame(ScreenIntSize(0, 0));
+
+  if (os) {
+    os->NotifyObservers(NS_ISUPPORTS_CAST(nsIFrameLoader*, this),
+                        "frameloader-message-manager-changed", nullptr);
+  }
+  if (!mRemoteBrowserShown) {
+    ShowRemoteFrame(ScreenIntSize(0, 0));
+  }
 }
 
 void

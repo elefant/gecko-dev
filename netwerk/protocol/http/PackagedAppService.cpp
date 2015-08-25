@@ -687,6 +687,18 @@ PackagedAppService::PackagedAppDownloader::OnDataAvailable(nsIRequest *aRequest,
   return aInputStream->ReadSegments(ConsumeData, this, aCount, &n);
 }
 
+void
+PackagedAppService::PackagedAppDownloader::AddRequester(nsIPackagedAppChannelListener* aRequester)
+{
+  mRequesters.AppendObject(aRequester);
+}
+
+bool
+PackagedAppService::PackagedAppDownloader::RemoveRequester(nsIPackagedAppChannelListener* aRequester)
+{
+  return mRequesters.RemoveObject(aRequester);
+}
+
 nsresult
 PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
                                                        nsICacheEntryOpenCallback *aCallback)
@@ -709,9 +721,13 @@ PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
 
       // This is the case where a package downloader is still running and we peek data 
       // from it.
+      nsCOMPtr<nsIPackagedAppChannelListener> requester = do_QueryInterface(aCallback);
+      if (requester) {
+        // TODO: Notify OnStartSignedPackageRequest if necessary.
+        LOG(("Remove the requester since it's no longer needed."));
+        RemoveRequester(requester);
+      }
 
-      // TODO: Bug 1186290 to notify that the signed packaged content is ready
-      //       to load.
       mCacheStorage->AsyncOpenURI(aURI, EmptyCString(),
                                   nsICacheStorage::OPEN_READONLY, aCallback);
     } else {
@@ -835,9 +851,21 @@ PackagedAppService::PackagedAppDownloader::ClearCallbacks(nsresult aResult)
 void
 PackagedAppService::PackagedAppDownloader::NotifyOnStartSignedPackageRequest(const nsACString& aPackageOrigin)
 {
-  // TODO: Bug 1186290 to notify whoever wants to know the signed package is
-  //       ready to load.
-  LOG(("Notifying the signed package is ready to load."));
+  LOG(("Ready to notify OnStartSignedPackageRequest to all requesters."));
+  // Notify all requesters that a signed package is about to download and let
+  // TabParent to decide if the request needs to be re-made in a new process.
+  for (uint32_t i = 0; i < mRequesters.Length(); i++) {
+    nsCOMPtr<nsIPackagedAppChannelListener> listener = mRequesters.ObjectAt(i);
+    if (listener) {
+      LOG(("Notifying %p OnStartSignedPackageRequest. New origin: %s", listener.get(),
+           nsCString(aPackageOrigin).get()));
+      listener->OnStartSignedPackageRequest(aPackageOrigin);
+    } else {
+      LOG(("%p is not a nsIPackagedAppChannelListener", listener.get()));
+    }
+  }
+
+  mRequesters.Clear();
 }
 
 void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp()
@@ -955,7 +983,8 @@ NS_IMETHODIMP
 PackagedAppService::GetResource(nsIPrincipal *aPrincipal,
                                 uint32_t aLoadFlags,
                                 nsILoadContextInfo *aInfo,
-                                nsICacheEntryOpenCallback *aCallback)
+                                nsICacheEntryOpenCallback *aCallback,
+                                nsIPackagedAppChannelListener* aChannelListener)
 {
   // Check arguments are not null
   if (!aPrincipal || !aCallback || !aInfo) {
@@ -1016,6 +1045,7 @@ PackagedAppService::GetResource(nsIPrincipal *aPrincipal,
     // downloaded, we will add the callback to the package's queue, and it will
     // be called once the file is processed and saved in the cache.
     LOG(("Just add callback to the ongoing downloader"));
+    downloader->AddRequester(aChannelListener);
     downloader->AddCallback(uri, aCallback);
     return NS_OK;
   }
@@ -1046,6 +1076,7 @@ PackagedAppService::GetResource(nsIPrincipal *aPrincipal,
     return rv;
   }
 
+  downloader->AddRequester(aChannelListener);
   downloader->AddCallback(uri, aCallback);
 
   nsCOMPtr<nsIStreamConverterService> streamconv =

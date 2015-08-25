@@ -5091,3 +5091,6 @@ pref("media.useAudioChannelAPI", false);
 
 // Expose Request.context. Currently disabled since the spec is in flux.
 pref("dom.requestcontext.enabled", false);
+
+// Retain at most 10 tabs
+pref("nsec.tabs.lru-size", 10);
