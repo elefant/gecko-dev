@@ -106,6 +106,7 @@ private:
     enum EErrorType {
       ERROR_MANIFEST_VERIFIED_FAILED,
       ERROR_RESOURCE_VERIFIED_FAILED,
+      ERROR_INSTALL_PACKAGED_APP,
     };
 
   public:
@@ -172,7 +173,7 @@ private:
 
     // Handle all tasks about app installation like permission and system message
     // registration.
-    void InstallSignedPackagedApp();
+    void InstallSignedPackagedApp(const ResourceCacheInfo* aInfo);
 
     // Calls all the callbacks registered for the given URI.
     // aURI is the full URI of a subresource, composed of packageURI + !// + subresourcePath

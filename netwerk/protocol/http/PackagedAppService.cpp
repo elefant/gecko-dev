@@ -16,6 +16,7 @@
 #include "mozilla/Logging.h"
 #include "mozilla/DebugOnly.h"
 #include "nsIHttpHeaderVisitor.h"
+#include "nsIInstallPackagedWebapp.h"
 
 namespace mozilla {
 namespace net {
@@ -850,12 +851,27 @@ PackagedAppService::PackagedAppDownloader::NotifyOnStartSignedPackageRequest(con
   LOG(("Notifying the signed package is ready to load."));
 }
 
-void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp()
+void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp(const ResourceCacheInfo* aInfo)
 {
-  LOG(("Manifest content: %s", mManifestContent.get()));
-  // TODO: Bug 1178533 to register permissions, system messages etc on navigation to
-  //       signed packages.
-  LOG(("Install this packaged app."));
+  LOG(("InstallSignedPackagedApp."));
+  nsCOMPtr<nsIInstallPackagedWebapp> installer = do_GetService("@mozilla.org/installpackagedwebapp;1");
+
+  if (!installer) {
+    return OnError(ERROR_INSTALL_PACKAGED_APP);
+  }
+
+  nsCString manifestURL;
+  aInfo->mURI->GetAsciiSpec(manifestURL);
+
+  // Use the origin stored in the verifier since the signed packaged app would
+  // have a specifi package identifer defined in the manifest file.
+  nsCString packageOrigin;
+  mVerifier->GetPackageOrigin(packageOrigin);
+
+  installer->InstallPackagedWebapp(mManifestContent.get(),
+                                   packageOrigin.get(),
+                                   manifestURL.get());
+  LOG(("InstallSignedPackagedApp: done"));
 }
 
 //------------------------------------------------------------------
@@ -901,7 +917,7 @@ PackagedAppService::PackagedAppDownloader::OnManifestVerified(const ResourceCach
   nsCString packageOrigin;
   mVerifier->GetPackageOrigin(packageOrigin);
   NotifyOnStartSignedPackageRequest(packageOrigin);
-  InstallSignedPackagedApp();
+  InstallSignedPackagedApp(aInfo);
 }
 
 void
