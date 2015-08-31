@@ -429,6 +429,7 @@ PackagedAppService::PackagedAppDownloader::Init(nsILoadContextInfo* aInfo,
 
   mPackageKey = aKey;
   mPackageOrigin = aPackageOrigin;
+  mProcessingFirstRequest = true;
 
   return NS_OK;
 }
@@ -615,6 +616,8 @@ PackagedAppService::PackagedAppDownloader::OnStopRequest(nsIRequest *aRequest,
   LOG(("[%p] PackagedAppDownloader::OnStopRequest > status:%X multiChannel:%p\n",
        this, aStatusCode, multiChannel.get()));
 
+  mProcessingFirstRequest = false;
+
   // lastPart will be true if this is the last part in the package,
   // or if aRequest isn't a multipart channel
   bool lastPart = true;
@@ -686,6 +689,11 @@ PackagedAppService::PackagedAppDownloader::ConsumeData(nsIInputStream *aStream,
   }
 
   self->mWriter->ConsumeData(aFromRawSegment, aCount, aWriteCount);
+
+  if (self->mProcessingFirstRequest) {
+    // mProcessingFirstRequest will be set to false on the first OnStopRequest.
+    self->mManifestContent.Append(aFromRawSegment, aCount);
+  }
 
   nsCOMPtr<nsIInputStream> stream = CreateSharedStringStream(aFromRawSegment, aCount);
   return self->mVerifier->OnDataAvailable(nullptr, nullptr, stream, 0, aCount);
@@ -844,6 +852,7 @@ PackagedAppService::PackagedAppDownloader::NotifyOnStartSignedPackageRequest(con
 
 void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp()
 {
+  LOG(("Manifest content: %s", mManifestContent.get()));
   // TODO: Bug 1178533 to register permissions, system messages etc on navigation to
   //       signed packages.
   LOG(("Install this packaged app."));

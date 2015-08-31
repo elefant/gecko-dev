@@ -211,6 +211,12 @@ private:
     // If you need the origin with the signity taken into account, use
     // PackagedAppVerifier::GetPackageOrigin().
     nsCString mPackageOrigin;
+
+    // A flag to indicate if we are processing the first request.
+    bool mProcessingFirstRequest;
+
+    // A in-memory copy of the manifest content.
+    nsCString mManifestContent;
   };
 
   // Intercepts OnStartRequest, OnDataAvailable*, OnStopRequest method calls
