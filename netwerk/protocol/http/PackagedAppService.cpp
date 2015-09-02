@@ -854,10 +854,13 @@ PackagedAppService::PackagedAppDownloader::NotifyOnStartSignedPackageRequest(con
 void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp(const ResourceCacheInfo* aInfo)
 {
   LOG(("InstallSignedPackagedApp."));
-  nsCOMPtr<nsIInstallPackagedWebapp> installer = do_GetService("@mozilla.org/installpackagedwebapp;1");
+  bool value = false;
+  bool *isSuccess = &value;
+  
+  nsCOMPtr<nsIInstallPackagedWebapp> installer = do_GetService("@mozilla.org/newapps/installpackagedwebapp;1");
 
   if (!installer) {
-    return OnError(ERROR_INSTALL_PACKAGED_APP);
+    return OnError(ERROR_GET_INSTALLER_FAILED);
   }
 
   nsCString manifestURL;
@@ -870,8 +873,13 @@ void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp(const R
 
   installer->InstallPackagedWebapp(mManifestContent.get(),
                                    packageOrigin.get(),
-                                   manifestURL.get());
-  LOG(("InstallSignedPackagedApp: done"));
+                                   manifestURL.get(), 
+                                   isSuccess);
+  if (!(*isSuccess)) {
+    return OnError(ERROR_INSTALL_RESOURCE_FAILED);
+  }
+
+  LOG(("InstallSignedPackagedApp: success."));
 }
 
 //------------------------------------------------------------------
