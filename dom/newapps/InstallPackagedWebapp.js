@@ -10,6 +10,10 @@ Cu.import("resource://gre/modules/AppsUtils.jsm");
 XPCOMUtils.defineLazyModuleGetter(this, "PermissionsInstaller",
     "resource://gre/modules/PermissionsInstaller.jsm");
 
+function debug(aMsg) {
+  dump("-*-*- InstallPackagedWebapps.js : " + aMsg + "\n");
+}
+
 function InstallPackagedWebapp() {
 }
 
@@ -19,20 +23,39 @@ InstallPackagedWebapp.prototype = {
   contractID:       "@mozilla.org/newapps/installpackagedwebapp;1",
 
   QueryInterface: XPCOMUtils.generateQI([Components.interfaces.nsIInstallPackagedWebapp]),
+  
+  /**
+   * Install permissions for signed packaged web content
+   * @param string manifestContent
+   *        The manifest content of the cached package.
+   * @param string aOrigin
+   *        The package origin.
+   * @param string aManifestURL
+   *        The manifest URL of the package.
+   * @returns boolean
+   **/
 
   installPackagedWebapp: function(manifestContent, aOrigin, aManifestURL) {
 
     var aManifest = JSON.parse(manifestContent);
-   
+ 
+    //TODO: get package identifier from the manifest to build
+    //the signed packaged origin.
+
     PermissionsInstaller.installPermissions({
       manifest: aManifest,
       manifestURL: aManifestURL,
       origin: aOrigin,
-      kind: ""
-    }, false);
+      isPreinstalled: false,
+      kind: "" //empty if not trusted hosted app
+    }, false, function() {
+      debug("Error installing permissions for " + aOrigin);
+      return false;
+    });
 
     //TODO: register app handlers (system msg)
-    return; 
+   
+    return true; 
   },
 };
 

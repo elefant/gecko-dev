@@ -42,6 +42,7 @@ this.PermissionsInstaller = {
    *        A function called if an error occurs
    * @returns void
    **/
+  
   installPermissions: function installPermissions(aApp, aIsReinstall,
                                                   aOnError) {
     try {
@@ -50,7 +51,7 @@ this.PermissionsInstaller = {
       if (!newManifest.permissions && !aIsReinstall) {
         return;
       }
-
+      
       if (aIsReinstall) {
         // Compare the original permissions against the new permissions
         // Remove any deprecated Permissions
@@ -115,13 +116,21 @@ this.PermissionsInstaller = {
         break;
       }
 
-      this._setPermission("indexedDB", "allow", aApp);
+      this._setPermission("indexedDB", "allow", aApp.origin, aApp.manifestURL, aApp.kind);
 
       // Add the appcache related permissions. We allow it for all kinds of
       // apps.
       if (newManifest.appcache_path) {
-        this._setPermission("offline-app", "allow", aApp);
-        this._setPermission("pin-app", "allow", aApp);
+        this._setPermission("offline-app", 
+                            "allow", 
+                            aApp.origin, 
+                            aApp.manifestURL,
+                            aApp.kind);
+        this._setPermission("pin-app", 
+                            "allow", 
+                            aApp.origin, 
+                            aApp.manifestURL,
+                            aApp.kind);
       }
 
       for (let permName in newManifest.permissions) {
@@ -170,7 +179,11 @@ this.PermissionsInstaller = {
             }
           }
 
-          this._setPermission(expandedPermNames[idx], permValue, aApp);
+          this._setPermission(expandedPermNames[idx], 
+                              permValue, 
+                              aApp.origin, 
+                              aApp.manifestURL,
+                              aApp.kind);
         }
       }
     }
@@ -190,18 +203,29 @@ this.PermissionsInstaller = {
    *        The permission name.
    * @param string aPermValue
    *        The permission value.
-   * @param object aApp
-   *        The just-installed app configuration.
-   *        The properties used are manifestURL and origin.
+   * @param string aOrigin
+   *        The origin of the app being installed.
+   * @param string aManifestURL
+   *        The manifest URL of the app.
+   * @param string aKind
+   *        Set if is a trusted hosted app.
    * @returns void
    **/
-  _setPermission: function setPermission(aPermName, aPermValue, aApp) {
+  _setPermission: function setPermission(aPermName, 
+                                         aPermValue, 
+                                         aOrigin, 
+                                         aManifestURL,
+                                         aKind) {
     PermissionSettingsModule.addPermission({
       type: aPermName,
-      origin: aApp.origin,
-      manifestURL: aApp.manifestURL,
+      origin: aOrigin,
+      manifestURL: aManifestURL,
       value: aPermValue,
-      browserFlag: false
+      browserFlag: false,
+      kind: aKind,
+      //TODO: hack for poc. How to generate correct localId?
+      localId: "13371337",
+      isCachedPackagedWebapp: true,
     });
   }
 };

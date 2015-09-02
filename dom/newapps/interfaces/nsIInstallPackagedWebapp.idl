@@ -7,7 +7,7 @@
 [scriptable, uuid(5cc6554a-5421-4a5e-b8c2-c62e8b7f4f3f)]
 interface nsIInstallPackagedWebapp : nsISupports
 {
-  void installPackagedWebapp(in string manifestContent,
-                             in string aOrigin,
-                             in string aManifestURL);
+  boolean installPackagedWebapp(in string manifestContent,
+                                in string aOrigin,
+                                in string aManifestURL);
 };

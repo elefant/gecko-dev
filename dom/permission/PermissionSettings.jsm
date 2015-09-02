@@ -69,7 +69,15 @@ this.PermissionSettingsModule = {
   _internalAddPermission: function _internalAddPermission(aData, aAllowAllChanges, aCallbacks) {
     // TODO: Bug 1196644 - Add signPKg parameter into PermissionSettings.jsm
     let uri = Services.io.newURI(aData.origin, null, null);
-    let app = appsService.getAppByManifestURL(aData.manifestURL);
+
+    let app;
+    // Test if app is cached (signed streamable package) or installed via DOMApplicationRegistry
+    if (aData.isCachedPackagedWebapp) {
+      app = {localId: aData.localId, kind: aData.kind};
+    } else {
+      app = appsService.getAppByManifestURL(aData.manifestURL);
+    }
+
     let principal =
       Services.scriptSecurityManager.createCodebasePrincipal(uri,
                                                              {appId: app.localId,
