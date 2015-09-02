@@ -62,6 +62,10 @@ OriginAttributes::CreateSuffix(nsACString& aStr) const
     params->Set(NS_LITERAL_STRING("userContextId"), value);
   }
 
+  if (!mPackageId.IsEmpty()) {
+    params->Set(NS_LITERAL_STRING("packageId"), mPackageId);
+  }
+
   aStr.Truncate();
 
   params->Serialize(value);
@@ -129,6 +133,12 @@ public:
         return false;
       }
 
+      return true;
+    }
+
+    if (aName.EqualsLiteral("packageId")) {
+      MOZ_RELEASE_ASSERT(mOriginAttributes->mPackageId.IsEmpty());
+      mOriginAttributes->mPackageId.Assign(aValue);
       return true;
     }
 
@@ -385,6 +395,10 @@ BasePrincipal::CreateCodebasePrincipal(nsIURI* aURI, OriginAttributes& aAttrs)
     nsRefPtr<BasePrincipal> concrete = Cast(principal);
     return concrete.forget();
   }
+
+  nsAutoCString packageId;
+  aURI->GetPackageId(packageId);
+  aAttrs.mPackageId.Assign(NS_ConvertUTF8toUTF16(packageId));
 
   // Mint a codebase principal.
   nsRefPtr<nsPrincipal> codebase = new nsPrincipal();

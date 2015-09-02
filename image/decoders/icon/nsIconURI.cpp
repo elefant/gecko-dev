@@ -379,6 +379,18 @@ nsMozIconURI::SetRef(const nsACString& aRef)
 }
 
 NS_IMETHODIMP
+nsMozIconURI::GetPackageId(nsACString &_packageId)
+{
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+nsMozIconURI::SetPackageId(const nsACString &aPackageId)
+{
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
 nsMozIconURI::Equals(nsIURI* other, bool* result)
 {
   NS_ENSURE_ARG_POINTER(other);

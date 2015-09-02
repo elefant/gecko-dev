@@ -2657,6 +2657,20 @@ nsStandardURL::SetFileExtension(const nsACString &input)
     return SetFileName(newFileName);
 }
 
+NS_IMETHODIMP
+nsStandardURL::GetPackageId(nsACString &aPackageId)
+{
+    aPackageId = mPackageId;
+    return NS_OK;
+}
+
+NS_IMETHODIMP
+nsStandardURL::SetPackageId(const nsACString &aPackageId)
+{
+    mPackageId = aPackageId;
+    return NS_OK;
+}
+
 //----------------------------------------------------------------------------
 // nsStandardURL::nsIFileURL
 //----------------------------------------------------------------------------

@@ -839,8 +839,14 @@ HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
 
     // TODO: Use a proper error code.
     mChannel->AsyncAbort(NS_ERROR_UNKNOWN_HOST);
-    
+
     mTabParent->SwitchProcessAndLoadURI(uri);
+  } else {
+    nsCOMPtr<nsIURI> uri;
+    mChannel->GetURI(getter_AddRefs(uri));
+    if (uri) {
+      uri->SetPackageId(aNewOrigin);
+    }
   }
   return NS_OK;
 }
@@ -926,6 +932,13 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
     }
   }
 
+  nsAutoCString packageIdentifier;
+  nsCOMPtr<nsIURI> uri;
+  mChannel->GetURI(getter_AddRefs(uri));
+  if (uri) {
+    uri->GetPackageId(packageIdentifier);
+  }
+
   if (mIPCClosed ||
       !SendOnStartRequest(channelStatus,
                           responseHead ? *responseHead : nsHttpResponseHead(),
@@ -936,7 +949,8 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
                           expirationTime, cachedCharset, secInfoSerialization,
                           mChannel->GetSelfAddr(), mChannel->GetPeerAddr(),
                           redirectCount,
-                          cacheKeyValue))
+                          cacheKeyValue,
+                          packageIdentifier))
   {
     return NS_ERROR_UNEXPECTED;
   }

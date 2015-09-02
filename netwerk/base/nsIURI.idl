@@ -254,4 +254,10 @@ interface nsIURI : nsISupports
      * Returns if there is a reference portion (the part after the "#") of the URI.
      */
    readonly attribute boolean hasRef;
+
+   /**
+    * return the unique identifier for a signed package, empty if uri is an unsigned
+    * package or normal web page
+    */
+   attribute AUTF8String packageId;
 };

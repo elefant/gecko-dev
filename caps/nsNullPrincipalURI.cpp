@@ -255,6 +255,18 @@ nsNullPrincipalURI::SetUserPass(const nsACString &aUserPass)
 }
 
 NS_IMETHODIMP
+nsNullPrincipalURI::GetPackageId(nsACString &_packageId)
+{
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+nsNullPrincipalURI::SetPackageId(const nsACString &aPackageId)
+{
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
 nsNullPrincipalURI::Clone(nsIURI **_newURI)
 {
   nsCOMPtr<nsIURI> uri = new nsNullPrincipalURI(*this);

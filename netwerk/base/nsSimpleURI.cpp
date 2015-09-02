@@ -409,6 +409,18 @@ nsSimpleURI::SetRef(const nsACString &aRef)
 }
 
 NS_IMETHODIMP
+nsSimpleURI::GetPackageId(nsACString &aPackageId)
+{
+    return NS_ERROR_FAILURE;
+}
+
+NS_IMETHODIMP
+nsSimpleURI::SetPackageId(const nsACString &aPackageId)
+{
+    return NS_ERROR_FAILURE;
+}
+
+NS_IMETHODIMP
 nsSimpleURI::Equals(nsIURI* other, bool *result)
 {
     return EqualsInternal(other, eHonorRef, result);

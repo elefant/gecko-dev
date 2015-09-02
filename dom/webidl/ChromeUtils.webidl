@@ -49,10 +49,12 @@ dictionary OriginAttributesDictionary {
   unsigned long userContextId = 0;
   boolean inBrowser = false;
   DOMString addonId = "";
+  DOMString packageId = "";
 };
 dictionary OriginAttributesPatternDictionary {
   unsigned long appId;
   unsigned long userContextId;
   boolean inBrowser;
   DOMString addonId;
+  DOMString packageId;
 };
