@@ -122,13 +122,12 @@ private:
                                              const nsACString& aPackageOrigin);
     // Registers a callback which gets called when the given nsIURI is downloaded
     // aURI is the full URI of a subresource, composed of packageURI + !// + subresourcePath
-    nsresult AddCallback(nsIURI *aURI, nsICacheEntryOpenCallback *aCallback);
+    nsresult AddCallback(nsIURI *aURI,
+                         nsICacheEntryOpenCallback *aCallback,
+                         nsIChannel* aRequester);
 
     // Remove the callback from the resource callback list.
     nsresult RemoveCallbacks(nsICacheEntryOpenCallback* aCallback);
-
-    void AddRequester(nsIChannel* aRequester);
-    bool RemoveRequester(nsIChannel* aRequester);
 
     // Called by PackagedAppChannelListener to note the fact that the package
     // is coming from the cache, and no subresources are to be expected as only
@@ -141,6 +140,9 @@ private:
 
   private:
     ~PackagedAppDownloader() { }
+
+    void AddRequester(nsIChannel* aRequester);
+    bool RemoveRequester(nsIChannel* aRequester);
 
     // Static method used to write data into the cache entry or discard
     // if there's no writer. Used as a writer function of

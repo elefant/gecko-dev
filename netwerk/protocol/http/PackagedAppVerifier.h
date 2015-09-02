@@ -77,6 +77,16 @@ public:
                       const nsACString& aSignature,
                       nsICacheEntry* aPackageCacheEntry);
 
+  bool GetIsPackageSigned() const
+  {
+    return mIsPackageSigned;
+  }
+
+  nsCString GetPackageOrigin() const
+  {
+    return mPackageOrigin;
+  }
+
   static const char* kSignedPakOriginMetadataKey;
 
 private:

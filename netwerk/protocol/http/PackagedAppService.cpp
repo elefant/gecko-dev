@@ -716,7 +716,8 @@ PackagedAppService::PackagedAppDownloader::RemoveRequester(nsIChannel* aRequeste
 
 nsresult
 PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
-                                                       nsICacheEntryOpenCallback *aCallback)
+                                                       nsICacheEntryOpenCallback *aCallback,
+                                                       nsIChannel* aRequester)
 {
   MOZ_RELEASE_ASSERT(NS_IsMainThread(), "mCallbacks hashtable is not thread safe");
   nsAutoCString spec;
@@ -724,6 +725,8 @@ PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
 
   LogURI("PackagedAppDownloader::AddCallback", this, aURI);
   LOG(("[%p]    > callback: %p\n", this, aCallback));
+
+  nsCOMPtr<nsIPackagedAppChannelListener> listener = do_QueryInterface(aRequester);
 
   // Check if we already have a resource waiting for this resource
   nsCOMArray<nsICacheEntryOpenCallback>* array = mCallbacks.Get(spec);
@@ -734,13 +737,14 @@ PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
       // right now, directly.  See also the CallCallbacks method bellow.
       LOG(("[%p]    > already downloaded\n", this));
 
-      // This is the case where a package downloader is still running and we peek data
-      // from it.
-      nsCOMPtr<nsIChannel> requester = do_QueryInterface(aCallback);
-      if (requester) {
-        // TODO: Notify OnStartSignedPackageRequest if necessary.
-        LOG(("Remove the requester since it's no longer needed."));
-        RemoveRequester(requester);
+      // This is the case where a package downloader is still running and we
+      // peek data from it.
+
+      if (listener && mVerifier && mVerifier->GetIsPackageSigned()) {
+        listener->OnStartSignedPackageRequest(mVerifier->GetPackageOrigin());
+        // Clear the requester so that it will not be added to mRequesters
+        // and will not be called back subsequently.
+        aRequester = nullptr;
       }
 
       mCacheStorage->AsyncOpenURI(aURI, EmptyCString(),
@@ -759,6 +763,11 @@ PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
     newArray->AppendObject(aCallback);
     mCallbacks.Put(spec, newArray);
   }
+
+  if (aRequester) {
+    AddRequester(aRequester);
+  }
+
   return NS_OK;
 }
 
@@ -945,6 +954,12 @@ PackagedAppService::PackagedAppDownloader::OnResourceVerified(const ResourceCach
     return OnError(ERROR_RESOURCE_VERIFIED_FAILED);
   }
 
+  // Always notify OnStartSignedPackageRequest to switch process as soon as
+  // possible whenever needed.
+  if (mVerifier->GetIsPackageSigned()) {
+    NotifyOnStartSignedPackageRequest(mVerifier->GetPackageOrigin());
+  }
+
   // Serve this resource to all listeners.
   CallCallbacks(aInfo->mURI, aInfo->mCacheEntry, aInfo->mStatusCode);
 
@@ -1076,8 +1091,7 @@ PackagedAppService::GetResource(nsIChannel *aChannel,
     // If we find that the package that the file belongs to is currently being
     // downloaded, we will add the callback to the package's queue, and it will
     // be called once the file is processed and saved in the cache.
-    downloader->AddRequester(aChannel);
-    downloader->AddCallback(uri, aCallback);
+    downloader->AddCallback(uri, aCallback, aChannel);
     return NS_OK;
   }
 
@@ -1107,8 +1121,7 @@ PackagedAppService::GetResource(nsIChannel *aChannel,
     return rv;
   }
 
-  downloader->AddRequester(aChannel);
-  downloader->AddCallback(uri, aCallback);
+  downloader->AddCallback(uri, aCallback, aChannel);
 
   nsCOMPtr<nsIStreamConverterService> streamconv =
     do_GetService("@mozilla.org/streamConverters;1", &rv);
