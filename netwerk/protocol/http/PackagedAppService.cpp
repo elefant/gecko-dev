@@ -431,6 +431,7 @@ PackagedAppService::PackagedAppDownloader::Init(nsILoadContextInfo* aInfo,
   mPackageKey = aKey;
   mPackageOrigin = aPackageOrigin;
   mProcessingFirstRequest = true;
+  aInfo->GetAppId(&mAppId);
 
   return NS_OK;
 }
@@ -856,7 +857,7 @@ void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp(const R
   LOG(("InstallSignedPackagedApp."));
   bool value = false;
   bool *isSuccess = &value;
-  
+
   nsCOMPtr<nsIInstallPackagedWebapp> installer = do_GetService("@mozilla.org/newapps/installpackagedwebapp;1");
 
   if (!installer) {
@@ -873,7 +874,8 @@ void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp(const R
 
   installer->InstallPackagedWebapp(mManifestContent.get(),
                                    packageOrigin.get(),
-                                   manifestURL.get(), 
+                                   manifestURL.get(),
+                                   mAppId,
                                    isSuccess);
   if (!(*isSuccess)) {
     return OnError(ERROR_INSTALL_RESOURCE_FAILED);

@@ -214,6 +214,9 @@ private:
     // PackagedAppVerifier::GetPackageOrigin().
     nsCString mPackageOrigin;
 
+    //The app id of the package loaded from the LoadContextInfo
+    uint32_t mAppId;
+
     // A flag to indicate if we are processing the first request.
     bool mProcessingFirstRequest;
 
