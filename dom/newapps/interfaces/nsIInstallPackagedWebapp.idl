@@ -9,5 +9,6 @@ interface nsIInstallPackagedWebapp : nsISupports
 {
   boolean installPackagedWebapp(in string manifestContent,
                                 in string aOrigin,
-                                in string aManifestURL);
+                                in string aManifestURL,
+                                in uint32_t aAppId);
 };

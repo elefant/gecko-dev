@@ -13,9 +13,23 @@ const mod = Cc['@mozilla.org/newapps/installpackagedwebapp;1']
                   .getService(Ci.nsIInstallPackagedWebapp);
 
 function run_test() {
-  let manifestString = '{"test": "test"}';
-  let aOrigin = "http://test.com";
-  let aManifestURL = "http://test.com/manifest.json";
-  let res = mod.installPackagedWebapp(manifestString, aOrigin, aManifestURL); 
-  //equal(res, true);
+
+  let manifest = {
+    start_url: "start.html",
+    launch_path: "other.html"
+  };
+
+  //trigger error at install
+  let aOrigin = "";
+  let aManifestURL = "";
+  let manifestString = "boum"
+  let appId = 123456789;
+  let res = mod.installPackagedWebapp(manifestString, aOrigin, aManifestURL, appId);
+  equal(res, false);
+
+  aOrigin = "http://test.com";
+  aManifestURL = "http://test.com/manifest.json";
+  manifestString = JSON.stringify(manifest);
+  res = mod.installPackagedWebapp(manifestString, aOrigin, aManifestURL, appId);
+  equal(res, true);
 }

@@ -72,8 +72,8 @@ this.PermissionSettingsModule = {
 
     let app;
     // Test if app is cached (signed streamable package) or installed via DOMApplicationRegistry
-    if (aData.isCachedPackagedWebapp) {
-      app = {localId: aData.localId, kind: aData.kind};
+    if (aData.isCachedPackage) {
+      app = {localId: aData.localId};
     } else {
       app = appsService.getAppByManifestURL(aData.manifestURL);
     }
@@ -104,7 +104,7 @@ this.PermissionSettingsModule = {
     }
 
     if (aAllowAllChanges ||
-        this._isChangeAllowed(principal, aData.type, aData.value, app.kind)) {
+        this._isChangeAllowed(principal, aData.type, aData.value)) {
       debug("add: " + aData.origin + " " + app.localId + " " + action);
       Services.perms.addFromPrincipal(principal, aData.type, action);
       return true;
