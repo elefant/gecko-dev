@@ -1841,7 +1841,7 @@ ReadResponse(mozIStorageConnection* aConn, EntryId aEntryId,
     }
 
     aSavedResponseOut->mValue.principalInfo() =
-      mozilla::ipc::ContentPrincipalInfo(attrs.mAppId, attrs.mInBrowser, originNoSuffix);
+      mozilla::ipc::ContentPrincipalInfo(attrs.mAppId, attrs.mInBrowser, originNoSuffix, EmptyCString());
   }
 
   int32_t redirected;

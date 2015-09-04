@@ -77,6 +77,11 @@ PrincipalInfoToPrincipal(const PrincipalInfo& aPrincipalInfo,
         return nullptr;
       }
 
+      rv = uri->SetPackageId(info.packageId());
+      if (NS_WARN_IF(NS_FAILED(rv))) {
+        return nullptr;
+      }
+
       if (info.appId() == nsIScriptSecurityManager::UNKNOWN_APP_ID) {
         rv = secMan->GetSimpleCodebasePrincipal(uri, getter_AddRefs(principal));
       } else {
@@ -202,6 +207,13 @@ PrincipalToPrincipalInfo(nsIPrincipal* aPrincipal,
     return rv;
   }
 
+  NS_WARNING("");
+  nsCString packageId;
+  rv = uri->GetPackageId(packageId);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+  }
+
   bool isUnknownAppId;
   rv = aPrincipal->GetUnknownAppId(&isUnknownAppId);
   if (NS_WARN_IF(NS_FAILED(rv))) {
@@ -224,7 +236,7 @@ PrincipalToPrincipalInfo(nsIPrincipal* aPrincipal,
     return rv;
   }
 
-  *aPrincipalInfo = ContentPrincipalInfo(appId, isInBrowserElement, spec);
+  *aPrincipalInfo = ContentPrincipalInfo(appId, isInBrowserElement, spec, packageId);
   return NS_OK;
 }
 

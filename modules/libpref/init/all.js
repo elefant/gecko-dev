@@ -1391,11 +1391,11 @@ pref("network.http.bypass-cachelock-threshold", 250);
 #endif
 
 // Try and use SPDY when using SSL
-pref("network.http.spdy.enabled", true);
-pref("network.http.spdy.enabled.v3-1", true);
-pref("network.http.spdy.enabled.http2", true);
-pref("network.http.spdy.enabled.deps", true);
-pref("network.http.spdy.enforce-tls-profile", true);
+pref("network.http.spdy.enabled", false);
+pref("network.http.spdy.enabled.v3-1", false);
+pref("network.http.spdy.enabled.http2", false);
+pref("network.http.spdy.enabled.deps", false);
+pref("network.http.spdy.enforce-tls-profile", false);
 pref("network.http.spdy.chunk-size", 16000);
 pref("network.http.spdy.timeout", 180);
 pref("network.http.spdy.coalesce-hostnames", true);
@@ -1436,12 +1436,12 @@ pref("network.http.enforce-framing.soft", true);
 // resources from a package when directed to a URL
 // such as http://domain.com/package.pak!//resource.html
 // See http://www.w3.org/TR/web-packaging/#streamable-package-format
-pref("network.http.enable-packaged-apps", false);
+pref("network.http.enable-packaged-apps", true);
 
 // Enable this pref to skip verification process. The packaged app
-// will be considered signed no matter the package has a valid/invalid 
+// will be considered signed no matter the package has a valid/invalid
 // signature or no signature.
-pref("network.http.packaged-apps-developer-mode", false);
+pref("network.http.packaged-apps-developer-mode", true);
 
 // default values for FTP
 // in a DSCP environment this should be 40 (0x28, or AF11), per RFC-4594,

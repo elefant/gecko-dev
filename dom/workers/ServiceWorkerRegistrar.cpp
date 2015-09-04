@@ -332,7 +332,7 @@ ServiceWorkerRegistrar::ReadData()
 
     GET_LINE(line);
     entry->principal() =
-      mozilla::ipc::ContentPrincipalInfo(attrs.mAppId, attrs.mInBrowser, line);
+      mozilla::ipc::ContentPrincipalInfo(attrs.mAppId, attrs.mInBrowser, line, EmptyCString());
 
     GET_LINE(entry->scope());
     GET_LINE(entry->scriptSpec());

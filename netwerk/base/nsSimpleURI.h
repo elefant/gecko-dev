@@ -80,12 +80,13 @@ protected:
     // Helper to share code between Clone methods.
     virtual nsresult CloneInternal(RefHandlingEnum refHandlingMode,
                                    nsIURI** clone);
-    
+
     nsCString mScheme;
     nsCString mPath; // NOTE: mPath does not include ref, as an optimization
     nsCString mRef;  // so that URIs with different refs can share string data.
     bool mMutable;
     bool mIsRefValid; // To distinguish between empty-ref and no-ref.
+    nsCString mPackageId;
 };
 
 #endif // nsSimpleURI_h__

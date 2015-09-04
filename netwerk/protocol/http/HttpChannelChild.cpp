@@ -1508,6 +1508,12 @@ HttpChannelChild::AsyncOpen(nsIStreamListener *listener, nsISupports *aContext)
   if (mCanceled)
     return mStatus;
 
+  nsCString loadingOrigin;
+  nsCOMPtr<nsIPrincipal> loadingPrincipal;
+  mLoadInfo->GetLoadingPrincipal(getter_AddRefs(loadingPrincipal));
+  loadingPrincipal->GetOrigin(loadingOrigin);
+  LOG(("HttpChannelChild::AsyncOpen Loading origin is: %s", loadingOrigin.get()));
+
   NS_ENSURE_TRUE(gNeckoChild != nullptr, NS_ERROR_FAILURE);
   NS_ENSURE_ARG_POINTER(listener);
   NS_ENSURE_TRUE(!mIsPending, NS_ERROR_IN_PROGRESS);

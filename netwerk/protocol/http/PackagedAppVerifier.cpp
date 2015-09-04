@@ -224,7 +224,7 @@ PackagedAppVerifier::OnManifestVerified(const ResourceCacheInfo* aInfo, bool aSu
                     : STATE_MANIFEST_VERIFIED_FAILED;
 
   // TODO: Update mPackageOrigin.
-  mPackageOrigin = nsCString("1bd8af93-09f1-446c-96bf-7798fd0bff9a");
+  //mPackageOrigin = nsCString("1bd8af93-09f1-446c-96bf-7798fd0bff9a");
 
   // If the package is signed, add related info to the package cache.
   if (mIsPackageSigned && mPackageCacheEntry) {

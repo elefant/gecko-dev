@@ -797,11 +797,62 @@ HttpChannelParent::ShouldSwitchProcess(const nsACString& aNewOrigin)
   nsCOMPtr<nsIPrincipal> loadingPrincipal;
   loadInfo->GetLoadingPrincipal(getter_AddRefs(loadingPrincipal));
 
+  nsCOMPtr<nsIPrincipal> triggeringPrincipal;
+  loadInfo->GetTriggeringPrincipal(getter_AddRefs(triggeringPrincipal));
+
+  nsCString loadingOrigin;
   nsCString loadingOriginNoSuffix;
+
+  nsCString loadingURIString;
+  nsCOMPtr<nsIURI> loadingURI;
+  loadingPrincipal->GetURI(getter_AddRefs(loadingURI));
+  loadingURI->GetAsciiSpec(loadingURIString);
+
+  nsCString triggeringURIString;
+  nsCOMPtr<nsIURI> triggeringURI;
+  triggeringPrincipal->GetURI(getter_AddRefs(triggeringURI));
+  triggeringURI->GetAsciiSpec(triggeringURIString);
+
+  loadingPrincipal->GetOrigin(loadingOrigin);
   loadingPrincipal->GetOriginNoSuffix(loadingOriginNoSuffix);
 
-  LOG(("Loading origin: %s, package origin: %s", loadingOriginNoSuffix.get(),
-                                                 nsCString(aNewOrigin).get()));
+  nsCString triggeringOriginNoSuffix;
+  nsCString triggeringOrigin;
+  triggeringPrincipal->GetOriginNoSuffix(triggeringOriginNoSuffix);
+  triggeringPrincipal->GetOrigin(triggeringOrigin);
+
+  nsCOMPtr<nsIURI> uri;
+  mChannel->GetURI(getter_AddRefs(uri));
+  nsCString uriString;
+  uri->GetAsciiSpec(uriString);
+
+  nsLoadFlags loadFlags;
+  mChannel->GetLoadFlags(&loadFlags);
+  nsCOMPtr<nsILoadGroup> loadGroup;
+  mChannel->GetLoadGroup(getter_AddRefs(loadGroup));
+
+  LOG(("Loading origin: %s, triggering origin %s, package origin: %s (%s), (%d), (%x, %x) (%d) (%s)",
+        loadingOriginNoSuffix.get(),
+        triggeringOriginNoSuffix.get(),
+        nsCString(aNewOrigin).get(),
+        uriString.get(),
+        loadFlags,
+        loadingPrincipal.get(),
+        triggeringPrincipal.get(),
+        loadingPrincipal->Equals(triggeringPrincipal),
+        triggeringOrigin.get()));
+
+
+  //LOG(("Loading uri: %s, triggering uri %s (%s)",
+  //      loadingURIString.get(), triggeringURIString.get(), uriString.get()));
+
+  /*
+  bool isNullPrincipal;
+  triggeringPrincipal->GetIsNullPrincipal(&isNullPrincipal);
+  if (!isNullPrincipal) {
+    LOG(("Triggered by with princiapl. No need to switch."));
+    return false;
+  }*/
 
   if (loadingOriginNoSuffix.Equals(aNewOrigin)) {
     LOG(("Same origin. No need to switch process"));
@@ -833,17 +884,28 @@ HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
   // TODO: Move this check out of necko. (maybe to TabParent)
   LOG(("HttpChannelParent::OnStartSignedPackageRequest"));
   if (ShouldSwitchProcess(aNewOrigin)) {
-    LOG(("We decide to switch process. Call TabParent::SwitchProcessAndLoadURIs"));
     nsCOMPtr<nsIURI> uri;
     mChannel->GetURI(getter_AddRefs(uri));
 
+    nsCString uriString;
+    uri->GetAsciiSpec(uriString);
+
     // TODO: Use a proper error code.
-    mChannel->AsyncAbort(NS_ERROR_UNKNOWN_HOST);
+    mChannel->Cancel(NS_ERROR_UNKNOWN_HOST);
+
+    LOG(("We decide to switch process. Call TabParent::SwitchProcessAndLoadURIs: %s",
+         uriString.get()));
 
     mTabParent->SwitchProcessAndLoadURI(uri);
   } else {
+
     nsCOMPtr<nsIURI> uri;
     mChannel->GetURI(getter_AddRefs(uri));
+
+    nsCString uriString;
+    uri->GetAsciiSpec(uriString);
+    LOG(("No need to switch process. Store the package id in the URI: %s", uriString.get()));
+
     if (uri) {
       uri->SetPackageId(aNewOrigin);
     }
@@ -938,6 +1000,8 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
   if (uri) {
     uri->GetPackageId(packageIdentifier);
   }
+
+  LOG(("HttpChannelParent::OnStartRequest: packageId: %s", packageIdentifier.get()));
 
   if (mIPCClosed ||
       !SendOnStartRequest(channelStatus,
