@@ -42,7 +42,7 @@ public:
   // by child process.
   LoadContext(const IPC::SerializedLoadContext& aToCopy,
               dom::Element* aTopFrameElement,
-              uint32_t aAppId, bool aInBrowser)
+              uint32_t aAppId, bool aInBrowser, const nsACString& aPackageId)
     : mTopFrameElement(do_GetWeakReference(aTopFrameElement))
     , mNestedFrameId(0)
     , mAppId(aAppId)
@@ -53,6 +53,7 @@ public:
 #ifdef DEBUG
     , mIsNotNull(aToCopy.mIsNotNull)
 #endif
+    , mPackageId(aPackageId)
   {
   }
 
@@ -60,7 +61,7 @@ public:
   // by child process.
   LoadContext(const IPC::SerializedLoadContext& aToCopy,
               uint64_t aNestedFrameId,
-              uint32_t aAppId, bool aInBrowser)
+              uint32_t aAppId, bool aInBrowser, const nsACString& aPackageId)
     : mTopFrameElement(nullptr)
     , mNestedFrameId(aNestedFrameId)
     , mAppId(aAppId)
@@ -71,6 +72,7 @@ public:
 #ifdef DEBUG
     , mIsNotNull(aToCopy.mIsNotNull)
 #endif
+    , mPackageId(aPackageId)
   {
   }
 
@@ -126,6 +128,7 @@ private:
 #ifdef DEBUG
   bool mIsNotNull;
 #endif
+  nsCString mPackageId;
 };
 
 } // namespace mozilla

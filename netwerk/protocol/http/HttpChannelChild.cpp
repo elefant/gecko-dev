@@ -485,7 +485,14 @@ HttpChannelChild::OnStartRequest(const nsresult& channelStatus,
 
   mTracingEnabled = false;
 
-  mOriginalURI->SetPackageId(packageIdentifier);
+  // Store packageIdentifier to loadconext.
+  nsCOMPtr<nsILoadContext> loadContext;
+  NS_QueryNotificationCallbacks(this, loadContext);
+  if (loadContext) {
+    loadContext->SetPackageId(packageIdentifier);
+  }
+
+  //mOriginalURI->SetPackageId(packageIdentifier);
 
   DoOnStartRequest(this, mListenerContext);
 

@@ -14,7 +14,7 @@ interface nsIDOMElement;
  * can be queried for various information about where the load is
  * happening.
  */
-[scriptable, uuid(6ec837fa-af93-4350-bbb8-0985d54c74ca)]
+[scriptable, uuid(3570ca20-53ad-11e5-b970-0800200c9a66)]
 interface nsILoadContext : nsISupports
 {
   /**
@@ -120,4 +120,11 @@ interface nsILoadContext : nsISupports
    */
   readonly attribute unsigned long appId;
 
+  /**
+   * return the unique identifier for a signed package, empty if uri is an unsigned
+   * package or normal web page
+   */
+  readonly attribute AUTF8String packageId;
+
+  [noscript] void SetPackageId(in AUTF8String aPackageId);
 };

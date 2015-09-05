@@ -396,9 +396,11 @@ BasePrincipal::CreateCodebasePrincipal(nsIURI* aURI, OriginAttributes& aAttrs)
     return concrete.forget();
   }
 
+  /*
   nsAutoCString packageId;
   aURI->GetPackageId(packageId);
   aAttrs.mPackageId.Assign(NS_ConvertUTF8toUTF16(packageId));
+  */
 
   // Mint a codebase principal.
   nsRefPtr<nsPrincipal> codebase = new nsPrincipal();

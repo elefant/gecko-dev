@@ -894,6 +894,7 @@ HttpChannelParent::ShouldSwitchProcess(const nsACString& aNewOrigin)
 NS_IMETHODIMP
 HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
 {
+  /*
   nsCOMPtr<nsIURI> uri;
   mChannel->GetURI(getter_AddRefs(uri));
   if (uri) {
@@ -902,6 +903,13 @@ HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
   mChannel->GetOriginalURI(getter_AddRefs(uri));
   if (uri) {
     uri->SetPackageId(aNewOrigin);
+  }
+  */
+
+  if (mLoadContext) {
+    // mChannel has been updated the origin as a signed package content.
+    // It will be updated to the child through SendOnStartRequest.
+    mLoadContext->SetPackageId(aNewOrigin);
   }
 
   // TODO: Move this check out of necko. (maybe to TabParent)
@@ -1006,14 +1014,14 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
     }
   }
 
-  nsAutoCString packageIdentifier;
-  nsCOMPtr<nsIURI> uri;
-  mChannel->GetURI(getter_AddRefs(uri));
-  if (uri) {
-    uri->GetPackageId(packageIdentifier);
+  nsCString packageId;
+  if (mLoadContext) {
+    // mChannel has been updated the origin as a signed package content.
+    // It will be updated to the child through SendOnStartRequest.
+    mLoadContext->SetPackageId(packageId);
   }
 
-  LOG(("HttpChannelParent::OnStartRequest: packageId: %s", packageIdentifier.get()));
+  LOG(("HttpChannelParent::OnStartRequest: packageId: %s", packageId.get()));
 
   if (mIPCClosed ||
       !SendOnStartRequest(channelStatus,
@@ -1026,7 +1034,7 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
                           mChannel->GetSelfAddr(), mChannel->GetPeerAddr(),
                           redirectCount,
                           cacheKeyValue,
-                          packageIdentifier))
+                          packageId))
   {
     return NS_ERROR_UNEXPECTED;
   }

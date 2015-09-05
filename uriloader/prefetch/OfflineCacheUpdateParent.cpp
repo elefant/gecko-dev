@@ -117,7 +117,7 @@ OfflineCacheUpdateParent::Schedule(const URIParams& aManifestURI,
     if (!update) {
         update = new nsOfflineCacheUpdate();
 
-        // Leave aDocument argument null. Only glues and children keep 
+        // Leave aDocument argument null. Only glues and children keep
         // document instances.
         rv = update->Init(manifestURI, documentURI, nullptr, nullptr,
                           mAppId, mIsInBrowserElement);
@@ -263,6 +263,20 @@ OfflineCacheUpdateParent::GetAppId(uint32_t *aAppId)
 {
     *aAppId = mAppId;
     return NS_OK;
+}
+
+NS_IMETHODIMP
+OfflineCacheUpdateParent::GetPackageId(nsACString& aPackageId)
+{
+  aPackageId = mPackageId;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+OfflineCacheUpdateParent::SetPackageId(const nsACString& aPackageId)
+{
+  mPackageId = aPackageId;
+  return NS_OK;
 }
 
 } // namespace docshell

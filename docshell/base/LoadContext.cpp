@@ -166,6 +166,20 @@ LoadContext::GetAppId(uint32_t* aAppId)
   return NS_OK;
 }
 
+NS_IMETHODIMP
+LoadContext::GetPackageId(nsACString& aPackageId)
+{
+  aPackageId = mPackageId;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+LoadContext::SetPackageId(const nsACString& aPackageId)
+{
+  mPackageId = aPackageId;
+  return NS_OK;
+}
+
 //-----------------------------------------------------------------------------
 // LoadContext::nsIInterfaceRequestor
 //-----------------------------------------------------------------------------

@@ -50,6 +50,7 @@ public:
   bool mUseRemoteTabs;
   bool mIsInBrowserElement;
   uint32_t mAppId;
+  nsCString mPackageId;
 };
 
 // Function to serialize over IPDL
@@ -67,6 +68,7 @@ struct ParamTraits<SerializedLoadContext>
     WriteParam(aMsg, aParam.mUseRemoteTabs);
     WriteParam(aMsg, aParam.mAppId);
     WriteParam(aMsg, aParam.mIsInBrowserElement);
+    WriteParam(aMsg, aParam.mPackageId);
   }
 
   static bool Read(const Message* aMsg, void** aIter, paramType* aResult)
@@ -77,7 +79,8 @@ struct ParamTraits<SerializedLoadContext>
         !ReadParam(aMsg, aIter, &aResult->mUsePrivateBrowsing) ||
         !ReadParam(aMsg, aIter, &aResult->mUseRemoteTabs) ||
         !ReadParam(aMsg, aIter, &aResult->mAppId) ||
-        !ReadParam(aMsg, aIter, &aResult->mIsInBrowserElement)) {
+        !ReadParam(aMsg, aIter, &aResult->mIsInBrowserElement) ||
+        !ReadParam(aMsg, aIter, &aResult->mPackageId)) {
       return false;
     }
 

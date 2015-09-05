@@ -12965,6 +12965,20 @@ nsDocShell::GetIsContent(bool* aIsContent)
   return NS_OK;
 }
 
+NS_IMETHODIMP
+nsDocShell::GetPackageId(nsACString& aPackageId)
+{
+  aPackageId = mPackageId;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDocShell::SetPackageId(const nsACString& aPackageId)
+{
+  mPackageId = aPackageId;
+  return NS_OK;
+}
+
 bool
 nsDocShell::IsOKToLoadURI(nsIURI* aURI)
 {

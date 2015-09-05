@@ -564,7 +564,7 @@ static nsresult
 DenyAccessIfURIHasFlags(nsIURI* aURI, uint32_t aURIFlags)
 {
     NS_PRECONDITION(aURI, "Must have URI!");
-    
+
     bool uriHasFlags;
     nsresult rv =
         NS_URIChainHasFlags(aURI, aURIFlags, &uriHasFlags);
@@ -662,7 +662,7 @@ nsScriptSecurityManager::CheckLoadURIWithPrincipal(nsIPrincipal* aPrincipal,
                  "must have a URI!");
         return NS_ERROR_UNEXPECTED;
     }
-    
+
     // Automatic loads are not allowed from certain protocols.
     if (aFlags & nsIScriptSecurityManager::LOAD_IS_AUTOMATIC_DOCUMENT_REPLACEMENT) {
         nsresult rv =
@@ -880,7 +880,7 @@ nsScriptSecurityManager::CheckLoadURIWithPrincipal(nsIPrincipal* aPrincipal,
             console->LogStringMessage(message.get());
         }
     }
-    
+
     return NS_OK;
 }
 
@@ -1097,6 +1097,11 @@ nsScriptSecurityManager::
   OriginAttributes attrs;
   aLoadContext->GetAppId(&attrs.mAppId);
   aLoadContext->GetIsInBrowserElement(&attrs.mInBrowser);
+
+  nsCString packageId;
+  aLoadContext->GetPackageId(packageId);
+  attrs.mPackageId.Assign(NS_ConvertUTF8toUTF16(packageId));
+
   nsresult rv = MaybeSetAddonIdFromURI(attrs, aURI);
   NS_ENSURE_SUCCESS(rv, rv);
   nsCOMPtr<nsIPrincipal> prin = BasePrincipal::CreateCodebasePrincipal(aURI, attrs);
@@ -1217,7 +1222,7 @@ nsScriptSecurityManager::CanGetService(JSContext *cx,
 // Method implementing nsIChannelEventSink //
 /////////////////////////////////////////////
 NS_IMETHODIMP
-nsScriptSecurityManager::AsyncOnChannelRedirect(nsIChannel* oldChannel, 
+nsScriptSecurityManager::AsyncOnChannelRedirect(nsIChannel* oldChannel,
                                                 nsIChannel* newChannel,
                                                 uint32_t redirFlags,
                                                 nsIAsyncVerifyRedirectCallback *cb)

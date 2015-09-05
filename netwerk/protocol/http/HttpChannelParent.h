@@ -217,6 +217,8 @@ private:
 
   // Handle to the channel wrapper if this channel has been intercepted.
   nsCOMPtr<nsIInterceptedChannel> mInterceptedChannel;
+
+  nsCString mPackageId;
 };
 
 } // namespace net
