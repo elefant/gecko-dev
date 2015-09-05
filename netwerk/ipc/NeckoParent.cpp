@@ -194,13 +194,13 @@ NeckoParent::CreateChannelLoadContext(const PBrowserOrId& aBrowser,
           topFrameElement = tabParent->GetOwnerElement();
         }
         aResult = new LoadContext(aSerialized, topFrameElement,
-                                  appId, inBrowser, aSerialized.mPackageId);
+                                  appId, inBrowser);
         break;
       }
       case PBrowserOrId::TTabId:
       {
         aResult = new LoadContext(aSerialized, aBrowser.get_TabId(),
-                                  appId, inBrowser, aSerialized.mPackageId);
+                                  appId, inBrowser);
         break;
       }
       default:
@@ -301,7 +301,7 @@ NeckoParent::AllocPCookieServiceParent()
   return new CookieServiceParent();
 }
 
-bool
+bool 
 NeckoParent::DeallocPCookieServiceParent(PCookieServiceParent* cs)
 {
   delete cs;
@@ -441,7 +441,7 @@ NeckoParent::AllocPTCPSocketParent(const nsString& /* host */,
 {
   // We actually don't need host/port to construct a TCPSocketParent since
   // TCPSocketParent will maintain an internal nsIDOMTCPSocket instance which
-  // can be delegated to get the host/port.
+  // can be delegated to get the host/port. 
   TCPSocketParent* p = new TCPSocketParent();
   p->AddIPDLReference();
   return p;
@@ -882,7 +882,7 @@ NeckoParent::RecvPredPredict(const ipc::OptionalURIParams& aTargetURI,
   uint64_t nestedFrameId = 0;
   nsCOMPtr<nsILoadContext> loadContext;
   if (aLoadContext.IsNotNull()) {
-    loadContext = new LoadContext(aLoadContext, nestedFrameId, NECKO_UNKNOWN_APP_ID, false, EmptyCString());
+    loadContext = new LoadContext(aLoadContext, nestedFrameId, NECKO_UNKNOWN_APP_ID, false);
   }
 
   // Get the current predictor
@@ -913,7 +913,7 @@ NeckoParent::RecvPredLearn(const ipc::URIParams& aTargetURI,
   uint64_t nestedFrameId = 0;
   nsCOMPtr<nsILoadContext> loadContext;
   if (aLoadContext.IsNotNull()) {
-    loadContext = new LoadContext(aLoadContext, nestedFrameId, NECKO_UNKNOWN_APP_ID, false, EmptyCString());
+    loadContext = new LoadContext(aLoadContext, nestedFrameId, NECKO_UNKNOWN_APP_ID, false);
   }
 
   // Get the current predictor

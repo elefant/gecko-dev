@@ -117,7 +117,7 @@ OfflineCacheUpdateParent::Schedule(const URIParams& aManifestURI,
     if (!update) {
         update = new nsOfflineCacheUpdate();
 
-        // Leave aDocument argument null. Only glues and children keep
+        // Leave aDocument argument null. Only glues and children keep 
         // document instances.
         rv = update->Init(manifestURI, documentURI, nullptr, nullptr,
                           mAppId, mIsInBrowserElement);

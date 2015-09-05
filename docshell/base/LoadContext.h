@@ -42,7 +42,7 @@ public:
   // by child process.
   LoadContext(const IPC::SerializedLoadContext& aToCopy,
               dom::Element* aTopFrameElement,
-              uint32_t aAppId, bool aInBrowser, const nsACString& aPackageId)
+              uint32_t aAppId, bool aInBrowser)
     : mTopFrameElement(do_GetWeakReference(aTopFrameElement))
     , mNestedFrameId(0)
     , mAppId(aAppId)
@@ -53,7 +53,7 @@ public:
 #ifdef DEBUG
     , mIsNotNull(aToCopy.mIsNotNull)
 #endif
-    , mPackageId(aPackageId)
+    , mPackageId(aToCopy.mPackageId)
   {
   }
 
@@ -61,7 +61,7 @@ public:
   // by child process.
   LoadContext(const IPC::SerializedLoadContext& aToCopy,
               uint64_t aNestedFrameId,
-              uint32_t aAppId, bool aInBrowser, const nsACString& aPackageId)
+              uint32_t aAppId, bool aInBrowser)
     : mTopFrameElement(nullptr)
     , mNestedFrameId(aNestedFrameId)
     , mAppId(aAppId)
@@ -72,7 +72,7 @@ public:
 #ifdef DEBUG
     , mIsNotNull(aToCopy.mIsNotNull)
 #endif
-    , mPackageId(aPackageId)
+    , mPackageId(aToCopy.mPackageId)
   {
   }
 

@@ -122,9 +122,12 @@ interface nsILoadContext : nsISupports
 
   /**
    * return the unique identifier for a signed package, empty if uri is an unsigned
-   * package or normal web page
+   * package or normal web page.
    */
   readonly attribute AUTF8String packageId;
 
+  /**
+   * Set the packaged content id, meant to be used internally.
+   */
   [noscript] void SetPackageId(in AUTF8String aPackageId);
 };

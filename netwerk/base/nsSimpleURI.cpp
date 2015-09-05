@@ -192,7 +192,7 @@ NS_IMETHODIMP
 nsSimpleURI::SetSpec(const nsACString &aSpec)
 {
     NS_ENSURE_STATE(mMutable);
-
+    
     const nsAFlatCString& flat = PromiseFlatCString(aSpec);
     const char* specPtr = flat.get();
 
@@ -274,7 +274,7 @@ NS_IMETHODIMP
 nsSimpleURI::SetUsername(const nsACString &userName)
 {
     NS_ENSURE_STATE(mMutable);
-
+    
     return NS_ERROR_FAILURE;
 }
 
@@ -288,7 +288,7 @@ NS_IMETHODIMP
 nsSimpleURI::SetPassword(const nsACString &password)
 {
     NS_ENSURE_STATE(mMutable);
-
+    
     return NS_ERROR_FAILURE;
 }
 
@@ -305,7 +305,7 @@ NS_IMETHODIMP
 nsSimpleURI::SetHostPort(const nsACString &result)
 {
     NS_ENSURE_STATE(mMutable);
-
+    
     return NS_ERROR_FAILURE;
 }
 
@@ -321,7 +321,7 @@ NS_IMETHODIMP
 nsSimpleURI::SetHost(const nsACString &host)
 {
     NS_ENSURE_STATE(mMutable);
-
+    
     return NS_ERROR_FAILURE;
 }
 
@@ -337,7 +337,7 @@ NS_IMETHODIMP
 nsSimpleURI::SetPort(int32_t port)
 {
     NS_ENSURE_STATE(mMutable);
-
+    
     return NS_ERROR_FAILURE;
 }
 
@@ -356,7 +356,7 @@ NS_IMETHODIMP
 nsSimpleURI::SetPath(const nsACString &path)
 {
     NS_ENSURE_STATE(mMutable);
-
+    
     int32_t hashPos = path.FindChar('#');
     if (hashPos < 0) {
         mIsRefValid = false;
@@ -405,20 +405,6 @@ nsSimpleURI::SetRef(const nsACString &aRef)
         mRef = aRef;
     }
 
-    return NS_OK;
-}
-
-NS_IMETHODIMP
-nsSimpleURI::GetPackageId(nsACString &aPackageId)
-{
-    aPackageId = mPackageId;
-    return NS_OK;
-}
-
-NS_IMETHODIMP
-nsSimpleURI::SetPackageId(const nsACString &aPackageId)
-{
-    mPackageId = aPackageId;
     return NS_OK;
 }
 
@@ -516,7 +502,6 @@ nsSimpleURI::CloneInternal(nsSimpleURI::RefHandlingEnum refHandlingMode,
     // don't call any setter methods.
     url->mScheme = mScheme;
     url->mPath = mPath;
-    url->mPackageId = mPackageId;
     if (refHandlingMode == eHonorRef) {
         url->mRef = mRef;
         url->mIsRefValid = mIsRefValid;
@@ -527,7 +512,7 @@ nsSimpleURI::CloneInternal(nsSimpleURI::RefHandlingEnum refHandlingMode,
 }
 
 NS_IMETHODIMP
-nsSimpleURI::Resolve(const nsACString &relativePath, nsACString &result)
+nsSimpleURI::Resolve(const nsACString &relativePath, nsACString &result) 
 {
     result = relativePath;
     return NS_OK;
@@ -568,7 +553,7 @@ nsSimpleURI::GetOriginCharset(nsACString &result)
 // nsSimpleURI::nsIClassInfo
 //----------------------------------------------------------------------------
 
-NS_IMETHODIMP
+NS_IMETHODIMP 
 nsSimpleURI::GetInterfaces(uint32_t *count, nsIID * **array)
 {
     *count = 0;
@@ -576,14 +561,14 @@ nsSimpleURI::GetInterfaces(uint32_t *count, nsIID * **array)
     return NS_OK;
 }
 
-NS_IMETHODIMP
+NS_IMETHODIMP 
 nsSimpleURI::GetScriptableHelper(nsIXPCScriptable **_retval)
 {
     *_retval = nullptr;
     return NS_OK;
 }
 
-NS_IMETHODIMP
+NS_IMETHODIMP 
 nsSimpleURI::GetContractID(char * *aContractID)
 {
     // Make sure to modify any subclasses as needed if this ever
@@ -592,14 +577,14 @@ nsSimpleURI::GetContractID(char * *aContractID)
     return NS_OK;
 }
 
-NS_IMETHODIMP
+NS_IMETHODIMP 
 nsSimpleURI::GetClassDescription(char * *aClassDescription)
 {
     *aClassDescription = nullptr;
     return NS_OK;
 }
 
-NS_IMETHODIMP
+NS_IMETHODIMP 
 nsSimpleURI::GetClassID(nsCID * *aClassID)
 {
     // Make sure to modify any subclasses as needed if this ever
@@ -610,14 +595,14 @@ nsSimpleURI::GetClassID(nsCID * *aClassID)
     return GetClassIDNoAlloc(*aClassID);
 }
 
-NS_IMETHODIMP
+NS_IMETHODIMP 
 nsSimpleURI::GetFlags(uint32_t *aFlags)
 {
     *aFlags = nsIClassInfo::MAIN_THREAD_ONLY;
     return NS_OK;
 }
 
-NS_IMETHODIMP
+NS_IMETHODIMP 
 nsSimpleURI::GetClassIDNoAlloc(nsCID *aClassIDNoAlloc)
 {
     *aClassIDNoAlloc = kSimpleURICID;
@@ -647,7 +632,7 @@ nsSimpleURI::SetMutable(bool value)
 // nsSimpleURI::nsISizeOf
 //----------------------------------------------------------------------------
 
-size_t
+size_t 
 nsSimpleURI::SizeOfExcludingThis(mozilla::MallocSizeOf aMallocSizeOf) const
 {
   return mScheme.SizeOfExcludingThisIfUnshared(aMallocSizeOf) +

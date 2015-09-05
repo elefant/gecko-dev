@@ -492,8 +492,6 @@ HttpChannelChild::OnStartRequest(const nsresult& channelStatus,
     loadContext->SetPackageId(packageIdentifier);
   }
 
-  //mOriginalURI->SetPackageId(packageIdentifier);
-
   DoOnStartRequest(this, mListenerContext);
 
   mSelfAddr = selfAddr;

@@ -834,8 +834,8 @@ HttpChannelParent::ShouldSwitchProcess(const nsACString& aNewOrigin)
   nsContentPolicyType loadingCPT = loadInfo->GetContentPolicyType();
 
   LOG(("Loading origin: %s, triggering origin %s, package origin: %s (%s), (%d) (%d) (%s), (%d)",
-        loadingOriginNoSuffix.get(),
-        triggeringOriginNoSuffix.get(),
+        loadingOrigin.get(),
+        triggeringOrigin.get(),
         nsCString(aNewOrigin).get(),
         uriString.get(),
         loadFlags,

@@ -20,7 +20,7 @@ interface nsIContentSecurityPolicy;
 [ptr] native JSPrincipals(JSPrincipals);
 [ptr] native PrincipalArray(nsTArray<nsCOMPtr<nsIPrincipal> >);
 
-[scriptable, builtinclass, uuid(a083acd0-1ebf-4585-85ab-08cfdd9c96bd)]
+[scriptable, builtinclass, uuid(68ddab60-53d7-11e5-a837-0800200c9a66)]
 interface nsIPrincipal : nsISerializable
 {
     /**
@@ -258,6 +258,8 @@ interface nsIPrincipal : nsISerializable
      * appStatus as well.
      */
     [infallible] readonly attribute unsigned long appId;
+
+    readonly attribute ACString packageId;
 
     /**
      * Gets the id of the user context this principal is inside.  If this

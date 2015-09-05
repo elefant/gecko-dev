@@ -77,16 +77,12 @@ PrincipalInfoToPrincipal(const PrincipalInfo& aPrincipalInfo,
         return nullptr;
       }
 
-      rv = uri->SetPackageId(info.packageId());
-      if (NS_WARN_IF(NS_FAILED(rv))) {
-        return nullptr;
-      }
-
       if (info.appId() == nsIScriptSecurityManager::UNKNOWN_APP_ID) {
         rv = secMan->GetSimpleCodebasePrincipal(uri, getter_AddRefs(principal));
       } else {
         // TODO: Bug 1167100 - User nsIPrincipal.originAttribute in ContentPrincipalInfo
         OriginAttributes attrs(info.appId(), info.isInBrowserElement());
+        attrs.mPackageId = NS_ConvertUTF8toUTF16(info.packageId());
         principal = BasePrincipal::CreateCodebasePrincipal(uri, attrs);
         rv = principal ? NS_OK : NS_ERROR_FAILURE;
       }
@@ -207,9 +203,8 @@ PrincipalToPrincipalInfo(nsIPrincipal* aPrincipal,
     return rv;
   }
 
-  NS_WARNING("");
   nsCString packageId;
-  rv = uri->GetPackageId(packageId);
+  rv = aPrincipal->GetPackageId(packageId);
   if (NS_WARN_IF(NS_FAILED(rv))) {
     return rv;
   }

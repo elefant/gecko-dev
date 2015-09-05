@@ -371,6 +371,13 @@ BasePrincipal::GetUnknownAppId(bool* aUnknownAppId)
   return NS_OK;
 }
 
+NS_IMETHODIMP
+BasePrincipal::GetPackageId(nsACString& aPackageId)
+{
+  aPackageId = PackageId();
+  return NS_OK;
+}
+
 already_AddRefed<BasePrincipal>
 BasePrincipal::CreateCodebasePrincipal(nsIURI* aURI, OriginAttributes& aAttrs)
 {
@@ -395,12 +402,6 @@ BasePrincipal::CreateCodebasePrincipal(nsIURI* aURI, OriginAttributes& aAttrs)
     nsRefPtr<BasePrincipal> concrete = Cast(principal);
     return concrete.forget();
   }
-
-  /*
-  nsAutoCString packageId;
-  aURI->GetPackageId(packageId);
-  aAttrs.mPackageId.Assign(NS_ConvertUTF8toUTF16(packageId));
-  */
 
   // Mint a codebase principal.
   nsRefPtr<nsPrincipal> codebase = new nsPrincipal();

@@ -442,18 +442,6 @@ nsJARURI::GetAsciiHost(nsACString &aHost)
 }
 
 NS_IMETHODIMP
-nsJARURI::GetPackageId(nsACString &aPackageId)
-{
-    return NS_ERROR_FAILURE;
-}
-
-NS_IMETHODIMP
-nsJARURI::SetPackageId(const nsACString &aPackageId)
-{
-    return NS_ERROR_FAILURE;
-}
-
-NS_IMETHODIMP
 nsJARURI::GetOriginCharset(nsACString &aOriginCharset)
 {
     aOriginCharset = mCharsetHint;

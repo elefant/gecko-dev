@@ -258,7 +258,7 @@ private:
 
     nsCString              mOriginCharset;
     nsCOMPtr<nsIURLParser> mParser;
-    nsCString  mPackageId;
+
     // mFile is protected so subclasses can access it directly
 protected:
     nsCOMPtr<nsIFile>      mFile;  // cached result for nsIFileURL::GetFile

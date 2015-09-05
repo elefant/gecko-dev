@@ -12,6 +12,7 @@
 #include "nsJSPrincipals.h"
 
 #include "mozilla/dom/ChromeUtilsBinding.h"
+#include "nsString.h"
 
 class nsIContentSecurityPolicy;
 class nsIObjectOutputStream;
@@ -130,6 +131,7 @@ public:
   NS_IMETHOD GetIsInBrowserElement(bool* aIsInBrowserElement) final;
   NS_IMETHOD GetUnknownAppId(bool* aUnknownAppId) final;
   NS_IMETHOD GetUserContextId(uint32_t* aUserContextId) final;
+  NS_IMETHOD GetPackageId(nsACString& aPackageId) final;
 
   virtual bool IsOnCSSUnprefixingWhitelist() override { return false; }
 
@@ -142,6 +144,7 @@ public:
   uint32_t AppId() const { return mOriginAttributes.mAppId; }
   uint32_t UserContextId() const { return mOriginAttributes.mUserContextId; }
   bool IsInBrowserElement() const { return mOriginAttributes.mInBrowser; }
+  nsCString PackageId() const { return NS_ConvertUTF16toUTF8(mOriginAttributes.mPackageId); }
 
 protected:
   virtual ~BasePrincipal();
