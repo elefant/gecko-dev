@@ -516,6 +516,7 @@ nsSimpleURI::CloneInternal(nsSimpleURI::RefHandlingEnum refHandlingMode,
     // don't call any setter methods.
     url->mScheme = mScheme;
     url->mPath = mPath;
+    url->mPackageId = mPackageId;
     if (refHandlingMode == eHonorRef) {
         url->mRef = mRef;
         url->mIsRefValid = mIsRefValid;

@@ -831,16 +831,17 @@ HttpChannelParent::ShouldSwitchProcess(const nsACString& aNewOrigin)
   nsCOMPtr<nsILoadGroup> loadGroup;
   mChannel->GetLoadGroup(getter_AddRefs(loadGroup));
 
-  LOG(("Loading origin: %s, triggering origin %s, package origin: %s (%s), (%d), (%x, %x) (%d) (%s)",
+  nsContentPolicyType loadingCPT = loadInfo->GetContentPolicyType();
+
+  LOG(("Loading origin: %s, triggering origin %s, package origin: %s (%s), (%d) (%d) (%s), (%d)",
         loadingOriginNoSuffix.get(),
         triggeringOriginNoSuffix.get(),
         nsCString(aNewOrigin).get(),
         uriString.get(),
         loadFlags,
-        loadingPrincipal.get(),
-        triggeringPrincipal.get(),
         loadingPrincipal->Equals(triggeringPrincipal),
-        triggeringOrigin.get()));
+        triggeringOrigin.get(),
+        loadingCPT));
 
 
   //LOG(("Loading uri: %s, triggering uri %s (%s)",
@@ -854,14 +855,26 @@ HttpChannelParent::ShouldSwitchProcess(const nsACString& aNewOrigin)
     return false;
   }*/
 
-  if (loadingOriginNoSuffix.Equals(aNewOrigin)) {
-    LOG(("Same origin. No need to switch process"));
+  nsCOMPtr<nsIPrincipal> resultPrincipal;
+  nsContentUtils::GetSecurityManager()->
+    GetChannelResultPrincipal(mChannel, getter_AddRefs(resultPrincipal));
+
+  nsCString resultPrincipalOrigin;
+  resultPrincipal->GetOrigin(resultPrincipalOrigin);
+  LOG(("Result principal origin: %s", resultPrincipalOrigin.get()));
+
+  if (nsIContentPolicy::TYPE_DOCUMENT != loadInfo->GetContentPolicyType()) {
+    // No need to switch process for subresource.
+    LOG(("Subresource of a document. No need to switch process."));
+    return false;
+  }
+
+  if (loadingOrigin == resultPrincipalOrigin) {
+    LOG(("Loading from the same signed package. No need to switch process."));
     return false;
   }
 
   const char* kWhiteOriginList[] = {
-    "app://search.gaiamobile.org",
-    "app://verticalhome.gaiamobile.org",
     "moz-safe-about:",
   };
 
@@ -881,6 +894,16 @@ HttpChannelParent::ShouldSwitchProcess(const nsACString& aNewOrigin)
 NS_IMETHODIMP
 HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
 {
+  nsCOMPtr<nsIURI> uri;
+  mChannel->GetURI(getter_AddRefs(uri));
+  if (uri) {
+    uri->SetPackageId(aNewOrigin);
+  }
+  mChannel->GetOriginalURI(getter_AddRefs(uri));
+  if (uri) {
+    uri->SetPackageId(aNewOrigin);
+  }
+
   // TODO: Move this check out of necko. (maybe to TabParent)
   LOG(("HttpChannelParent::OnStartSignedPackageRequest"));
   if (ShouldSwitchProcess(aNewOrigin)) {
@@ -897,19 +920,8 @@ HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
          uriString.get()));
 
     mTabParent->SwitchProcessAndLoadURI(uri);
-  } else {
-
-    nsCOMPtr<nsIURI> uri;
-    mChannel->GetURI(getter_AddRefs(uri));
-
-    nsCString uriString;
-    uri->GetAsciiSpec(uriString);
-    LOG(("No need to switch process. Store the package id in the URI: %s", uriString.get()));
-
-    if (uri) {
-      uri->SetPackageId(aNewOrigin);
-    }
   }
+
   return NS_OK;
 }
 
