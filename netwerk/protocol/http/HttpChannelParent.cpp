@@ -1018,7 +1018,7 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
   if (mLoadContext) {
     // mChannel has been updated the origin as a signed package content.
     // It will be updated to the child through SendOnStartRequest.
-    mLoadContext->SetPackageId(packageId);
+    mLoadContext->GetPackageId(packageId);
   }
 
   LOG(("HttpChannelParent::OnStartRequest: packageId: %s", packageId.get()));
