@@ -67,7 +67,7 @@ class ClonedMessageData;
 class nsIContentParent;
 class Element;
 class DataTransfer;
-struct StructuredCloneData;
+class StructuredCloneIPCHelper;
 
 class TabParent final : public PBrowserParent
                       , public nsIDOMEventListener
@@ -231,6 +231,8 @@ public:
     virtual bool RecvUpdateZoomConstraints(const uint32_t& aPresShellId,
                                            const ViewID& aViewId,
                                            const MaybeZoomConstraints& aConstraints) override;
+    virtual bool RecvRespondStartSwipeEvent(const uint64_t& aInputBlockId,
+                                            const bool& aStartSwipe) override;
     virtual bool RecvContentReceivedInputBlock(const ScrollableLayerGuid& aGuid,
                                                const uint64_t& aInputBlockId,
                                                const bool& aPreventDefault) override;
@@ -439,18 +441,12 @@ public:
 
     virtual PWebBrowserPersistDocumentParent* AllocPWebBrowserPersistDocumentParent(const uint64_t& aOuterWindowID) override;
     virtual bool DeallocPWebBrowserPersistDocumentParent(PWebBrowserPersistDocumentParent* aActor) override;
-
-    already_AddRefed<nsIURI> GetCurrentLocation();
-
-    bool SendGotoBFCache();
-    bool SendResumeFromBFCache();
-
     void SwitchProcessAndLoadURI(nsIURI* aURI);
 
 protected:
     bool ReceiveMessage(const nsString& aMessage,
                         bool aSync,
-                        const StructuredCloneData* aCloneData,
+                        StructuredCloneIPCHelper* aHelper,
                         mozilla::jsipc::CpowHolder* aCpows,
                         nsIPrincipal* aPrincipal,
                         nsTArray<OwningSerializedStructuredCloneBuffer>* aJSONRetVal = nullptr);
@@ -482,8 +478,6 @@ protected:
     virtual bool RecvAudioChannelActivityNotification(const uint32_t& aAudioChannel,
                                                       const bool& aActive) override;
 
-    virtual bool RecvLocationChange(const URIParams& aCurrentURI) override;
-
     bool InitBrowserConfiguration(const nsCString& aURI,
                                   BrowserConfiguration& aConfiguration);
 
@@ -498,9 +492,9 @@ protected:
     CSSToLayoutDeviceScale mDefaultScale;
     bool mUpdatedDimensions;
     LayoutDeviceIntPoint mChromeOffset;
-    nsCOMPtr<nsIURI> mCurrentLocation;
 
 private:
+    void DestroyInternal();
     already_AddRefed<nsFrameLoader> GetFrameLoader(bool aUseCachedFrameLoaderAfterDestroy = false) const;
     nsRefPtr<nsIContentParent> mManager;
     void TryCacheDPIAndScale();
@@ -510,6 +504,9 @@ private:
     CSSPoint AdjustTapToChildWidget(const CSSPoint& aPoint);
 
     bool AsyncPanZoomEnabled() const;
+
+    // Cached value indicating the docshell active state of the remote browser.
+    bool mDocShellIsActive;
 
     // Update state prior to routing an APZ-aware event to the child process.
     // |aOutTargetGuid| will contain the identifier

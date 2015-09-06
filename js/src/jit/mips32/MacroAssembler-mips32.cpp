@@ -151,13 +151,18 @@ void
 MacroAssemblerMIPS::convertFloat32ToInt32(FloatRegister src, Register dest,
                                           Label* fail, bool negativeZeroCheck)
 {
-    // convert the floating point value to an integer, if it did not fit, then
-    // when we convert it *back* to  a float, it will have a different value,
-    // which we can test.
+    // Converting the floating point value to an integer and then converting it
+    // back to a float32 would not work, as float to int32 conversions are
+    // clamping (e.g. float(INT32_MAX + 1) would get converted into INT32_MAX
+    // and then back to float(INT32_MAX + 1)).  If this ever happens, we just
+    // bail out.
     as_cvtws(ScratchFloat32Reg, src);
     as_mfc1(dest, ScratchFloat32Reg);
     as_cvtsw(ScratchFloat32Reg, ScratchFloat32Reg);
     ma_bc1s(src, ScratchFloat32Reg, fail, Assembler::DoubleNotEqualOrUnordered);
+
+    // Bail out in the clamped cases.
+    ma_b(dest, Imm32(INT32_MAX), fail, Assembler::Equal);
 
     if (negativeZeroCheck) {
         Label notZero;
@@ -1498,25 +1503,6 @@ MacroAssemblerMIPS::ma_bc1d(FloatRegister lhs, FloatRegister rhs, Label* label,
     branchWithCode(getBranchCode(testKind, fcc), label, jumpKind);
 }
 
-void
-MacroAssemblerMIPSCompat::buildFakeExitFrame(Register scratch, uint32_t* offset)
-{
-    mozilla::DebugOnly<uint32_t> initialDepth = asMasm().framePushed();
-
-    CodeLabel cl;
-    ma_li(scratch, cl.dest());
-
-    uint32_t descriptor = MakeFrameDescriptor(asMasm().framePushed(), JitFrame_IonJS);
-    asMasm().Push(Imm32(descriptor));
-    asMasm().Push(scratch);
-
-    bind(cl.src());
-    *offset = currentOffset();
-
-    MOZ_ASSERT(asMasm().framePushed() == initialDepth + ExitFrameLayout::Size());
-    addCodeLabel(cl);
-}
-
 bool
 MacroAssemblerMIPSCompat::buildOOLFakeExitFrame(void* fakeReturnAddr)
 {
@@ -1526,45 +1512,6 @@ MacroAssemblerMIPSCompat::buildOOLFakeExitFrame(void* fakeReturnAddr)
     asMasm().Push(ImmPtr(fakeReturnAddr));
 
     return true;
-}
-
-void
-MacroAssemblerMIPSCompat::callWithExitFrame(Label* target)
-{
-    uint32_t descriptor = MakeFrameDescriptor(asMasm().framePushed(), JitFrame_IonJS);
-    asMasm().Push(Imm32(descriptor)); // descriptor
-
-    ma_callJitHalfPush(target);
-}
-
-void
-MacroAssemblerMIPSCompat::callWithExitFrame(JitCode* target)
-{
-    uint32_t descriptor = MakeFrameDescriptor(asMasm().framePushed(), JitFrame_IonJS);
-    asMasm().Push(Imm32(descriptor)); // descriptor
-
-    addPendingJump(m_buffer.nextOffset(), ImmPtr(target->raw()), Relocation::JITCODE);
-    ma_liPatchable(ScratchRegister, ImmPtr(target->raw()));
-    ma_callJitHalfPush(ScratchRegister);
-}
-
-void
-MacroAssemblerMIPSCompat::callWithExitFrame(JitCode* target, Register dynStack)
-{
-    ma_addu(dynStack, dynStack, Imm32(asMasm().framePushed()));
-    makeFrameDescriptor(dynStack, JitFrame_IonJS);
-    asMasm().Push(dynStack); // descriptor
-
-    addPendingJump(m_buffer.nextOffset(), ImmPtr(target->raw()), Relocation::JITCODE);
-    ma_liPatchable(ScratchRegister, ImmPtr(target->raw()));
-    ma_callJitHalfPush(ScratchRegister);
-}
-
-void
-MacroAssemblerMIPSCompat::callJit(Register callee)
-{
-    MOZ_ASSERT((asMasm().framePushed() & 7) == 4);
-    ma_callJitHalfPush(callee);
 }
 
 void
@@ -2829,7 +2776,7 @@ MacroAssemblerMIPSCompat::moveValue(const Value& val, const ValueOperand& dest)
  * being executed. Look also at jit::PatchBackedge().
  */
 CodeOffsetJump
-MacroAssemblerMIPSCompat::backedgeJump(RepatchLabel* label)
+MacroAssemblerMIPSCompat::backedgeJump(RepatchLabel* label, Label* documentation)
 {
     // Only one branch per label.
     MOZ_ASSERT(!label->used());
@@ -3061,28 +3008,6 @@ MacroAssemblerMIPSCompat::storeTypeTag(ImmTag tag, const BaseIndex& dest)
     computeScaledAddress(dest, SecondScratchReg);
     ma_li(ScratchRegister, tag);
     as_sw(ScratchRegister, SecondScratchReg, TAG_OFFSET);
-}
-
-// This macrosintruction calls the ion code and pushes the return address to
-// the stack in the case when stack is not alligned.
-void
-MacroAssemblerMIPS::ma_callJitHalfPush(const Register r)
-{
-    // This is a MIPS hack to push return address during jalr delay slot.
-    as_addiu(StackPointer, StackPointer, -sizeof(intptr_t));
-    as_jalr(r);
-    as_sw(ra, StackPointer, 0);
-}
-
-// This macrosintruction calls the ion code and pushes the return address to
-// the stack in the case when stack is not alligned.
-void
-MacroAssemblerMIPS::ma_callJitHalfPush(Label* label)
-{
-    // This is a MIPS hack to push return address during jalr delay slot.
-    as_addiu(StackPointer, StackPointer, -sizeof(intptr_t));
-    ma_bal(label, DontFillDelaySlot);
-    as_sw(ra, StackPointer, 0);
 }
 
 void
@@ -3518,7 +3443,25 @@ MacroAssembler::call(JitCode* c)
     BufferOffset bo = m_buffer.nextOffset();
     addPendingJump(bo, ImmPtr(c->raw()), Relocation::JITCODE);
     ma_liPatchable(ScratchRegister, Imm32((uint32_t)c->raw()));
-    ma_callJitHalfPush(ScratchRegister);
+    callJitNoProfiler(ScratchRegister);
+}
+
+void
+MacroAssembler::callAndPushReturnAddress(Register callee)
+{
+    // Push return address during jalr delay slot.
+    as_addiu(StackPointer, StackPointer, -sizeof(intptr_t));
+    as_jalr(callee);
+    as_sw(ra, StackPointer, 0);
+}
+
+void
+MacroAssembler::callAndPushReturnAddress(Label* label)
+{
+    // Push return address during jalr delay slot.
+    as_addiu(StackPointer, StackPointer, -sizeof(intptr_t));
+    as_jalr(label);
+    as_sw(ra, StackPointer, 0);
 }
 
 // ===============================================================
@@ -3620,6 +3563,23 @@ MacroAssembler::callWithABINoProfiler(const Address& fun, MoveOp::Type result)
     callWithABIPre(&stackAdjust);
     call(t9);
     callWithABIPost(stackAdjust, result);
+}
+
+// ===============================================================
+// Jit Frames.
+
+uint32_t
+MacroAssembler::pushFakeReturnAddress(Register scratch)
+{
+    CodeLabel cl;
+
+    ma_li(scratch, cl.dest());
+    Push(scratch);
+    bind(cl.src());
+    uint32_t retAddr = currentOffset();
+
+    addCodeLabel(cl);
+    return retAddr;
 }
 
 //}}} check_macroassembler_style

@@ -23,8 +23,10 @@
 #include "mozilla/plugins/PluginWidgetChild.h"
 #include "mozilla/IMEStateManager.h"
 #include "mozilla/ipc/DocumentRendererChild.h"
+#ifdef MOZ_NUWA_PROCESS
+#include "ipc/Nuwa.h"
+#endif
 #include "mozilla/ipc/FileDescriptorUtils.h"
-#include "mozilla/ipc/URIUtils.h"
 #include "mozilla/layers/APZCCallbackHelper.h"
 #include "mozilla/layers/APZCTreeManager.h"
 #include "mozilla/layers/APZEventState.h"
@@ -81,7 +83,7 @@
 #include "nsWindowWatcher.h"
 #include "PermissionMessageUtils.h"
 #include "PuppetWidget.h"
-#include "StructuredCloneUtils.h"
+#include "StructuredCloneIPCHelper.h"
 #include "nsViewportInfo.h"
 #include "nsILoadContext.h"
 #include "ipc/nsGUIEventIPC.h"
@@ -235,15 +237,16 @@ TabChildBase::DispatchMessageManagerMessage(const nsAString& aMessageName,
 {
     AutoSafeJSContext cx;
     JS::Rooted<JS::Value> json(cx, JS::NullValue());
-    StructuredCloneData cloneData;
-    JSAutoStructuredCloneBuffer buffer;
+    StructuredCloneIPCHelper helper;
     if (JS_ParseJSON(cx,
                       static_cast<const char16_t*>(aJSONData.BeginReading()),
                       aJSONData.Length(),
                       &json)) {
-        WriteStructuredClone(cx, json, buffer, cloneData.mClosure);
-        cloneData.mData = buffer.data();
-        cloneData.mDataLength = buffer.nbytes();
+        ErrorResult rv;
+        helper.Write(cx, json, rv);
+        if (NS_WARN_IF(rv.Failed())) {
+            return;
+        }
     }
 
     nsCOMPtr<nsIXPConnectJSObjectHolder> kungFuDeathGrip(GetGlobal());
@@ -252,7 +255,7 @@ TabChildBase::DispatchMessageManagerMessage(const nsAString& aMessageName,
     nsRefPtr<nsFrameMessageManager> mm =
       static_cast<nsFrameMessageManager*>(mTabChildGlobal->mMessageManager.get());
     mm->ReceiveMessage(static_cast<EventTarget*>(mTabChildGlobal), nullptr,
-                       aMessageName, false, &cloneData, nullptr, nullptr, nullptr);
+                       aMessageName, false, &helper, nullptr, nullptr, nullptr);
 }
 
 bool
@@ -451,10 +454,67 @@ TabChild::FindTabChild(const TabId& aTabId)
   return tabChild.forget();
 }
 
+static void
+PreloadSlowThingsPostFork(void* aUnused)
+{
+    nsCOMPtr<nsIObserverService> observerService =
+      mozilla::services::GetObserverService();
+    observerService->NotifyObservers(nullptr, "preload-postfork", nullptr);
+}
+
+#ifdef MOZ_NUWA_PROCESS
+class MessageChannelAutoBlock MOZ_STACK_CLASS
+{
+public:
+    MessageChannelAutoBlock()
+    {
+        SetMessageChannelBlocked(true);
+    }
+
+    ~MessageChannelAutoBlock()
+    {
+        SetMessageChannelBlocked(false);
+    }
+
+private:
+    void SetMessageChannelBlocked(bool aBlock)
+    {
+        if (!IsNuwaProcess()) {
+            return;
+        }
+
+        mozilla::dom::ContentChild* content =
+            mozilla::dom::ContentChild::GetSingleton();
+        if (aBlock) {
+            content->GetIPCChannel()->Block();
+        } else {
+            content->GetIPCChannel()->Unblock();
+        }
+
+        nsTArray<IToplevelProtocol*> actors;
+        content->GetOpenedActors(actors);
+        for (size_t j = 0; j < actors.Length(); j++) {
+            IToplevelProtocol* actor = actors[j];
+            if (aBlock) {
+                actor->GetIPCChannel()->Block();
+            } else {
+                actor->GetIPCChannel()->Unblock();
+            }
+        }
+    }
+};
+#endif
+
+static bool sPreloaded = false;
+
 /*static*/ void
 TabChild::PreloadSlowThings()
 {
-    MOZ_ASSERT(!sPreallocatedTab);
+    if (sPreloaded) {
+        // If we are alredy initialized in Nuwa, don't redo preloading.
+        return;
+    }
+    sPreloaded = true;
 
     // Pass nullptr to aManager since at this point the TabChild is
     // not connected to any manager. Any attempt to use the TabChild
@@ -466,14 +526,29 @@ TabChild::PreloadSlowThings()
         !tab->InitTabChildGlobal(DONT_LOAD_SCRIPTS)) {
         return;
     }
-    sPreallocatedTab = tab;
-    ClearOnShutdown(&sPreallocatedTab);
+
+#ifdef MOZ_NUWA_PROCESS
+    // Temporarily block the IPC channels to the chrome process when we are
+    // preloading.
+    MessageChannelAutoBlock autoblock;
+#endif
+
     // Just load and compile these scripts, but don't run them.
     tab->TryCacheLoadAndCompileScript(BROWSER_ELEMENT_CHILD_SCRIPT, true);
     // Load, compile, and run these scripts.
     tab->RecvLoadRemoteScript(
         NS_LITERAL_STRING("chrome://global/content/preload.js"),
         true);
+
+#ifdef MOZ_NUWA_PROCESS
+    if (IsNuwaProcess()) {
+        NuwaAddFinalConstructor(PreloadSlowThingsPostFork, nullptr);
+    } else {
+      PreloadSlowThingsPostFork(nullptr);
+    }
+#else
+    PreloadSlowThingsPostFork(nullptr);
+#endif
 
     nsCOMPtr<nsIDocShell> docShell = do_GetInterface(tab->WebNavigation());
     if (nsIPresShell* presShell = docShell->GetPresShell()) {
@@ -486,6 +561,9 @@ TabChild::PreloadSlowThings()
         // work.
         presShell->MakeZombie();
     }
+
+    sPreallocatedTab = tab;
+    ClearOnShutdown(&sPreallocatedTab);
 }
 
 /*static*/ already_AddRefed<TabChild>
@@ -573,7 +651,6 @@ TabChild::TabChild(nsIContentChild* aManager,
   , mDefaultScale(0)
   , mIPCOpen(true)
   , mParentIsActive(false)
-  , mIsInBFCache(false)
 {
   // In the general case having the TabParent tell us if APZ is enabled or not
   // doesn't really work because the TabParent itself may not have a reference
@@ -780,11 +857,6 @@ TabChild::Init()
   mAPZEventState = new APZEventState(mPuppetWidget,
       new TabChildContentReceivedInputBlockCallback(this));
 
-  nsCOMPtr<nsIWebProgress> webprogress = do_QueryInterface(docShell);
-  if (webprogress) {
-    webprogress->AddProgressListener(this, nsIWebProgress::NOTIFY_LOCATION);
-  }
-
   return NS_OK;
 }
 
@@ -816,7 +888,6 @@ NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION_INHERITED(TabChild)
   NS_INTERFACE_MAP_ENTRY(nsIObserver)
   NS_INTERFACE_MAP_ENTRY(nsISupportsWeakReference)
   NS_INTERFACE_MAP_ENTRY(nsITooltipListener)
-  NS_INTERFACE_MAP_ENTRY(nsIWebProgressListener)
 NS_INTERFACE_MAP_END_INHERITING(TabChildBase)
 
 NS_IMPL_ADDREF_INHERITED(TabChild, TabChildBase);
@@ -1360,8 +1431,6 @@ TabChild::RecvLoadURL(const nsCString& aURI,
         NS_WARNING("WebNavigation()->LoadURI failed. Eating exception, what else can I do?");
     }
 
-    mIsInBFCache = false;
-
 #ifdef MOZ_CRASHREPORTER
     CrashReporter::AnnotateCrashReport(NS_LITERAL_CSTRING("URL"), aURI);
 #endif
@@ -1656,6 +1725,7 @@ TabChild::RecvShow(const ScreenIntSize& aSize,
 
 bool
 TabChild::RecvUpdateDimensions(const CSSRect& rect, const CSSSize& size,
+                               const nsSizeMode& sizeMode,
                                const ScreenOrientationInternal& orientation,
                                const LayoutDeviceIntPoint& chromeDisp)
 {
@@ -1682,6 +1752,7 @@ TabChild::RecvUpdateDimensions(const CSSRect& rect, const CSSSize& size,
     baseWin->SetPositionAndSize(0, 0, screenSize.width, screenSize.height,
                                 true);
 
+    mPuppetWidget->SetSizeMode(sizeMode);
     mPuppetWidget->Resize(screenRect.x + chromeDisp.x,
                           screenRect.y + chromeDisp.y,
                           screenSize.width, screenSize.height, true);
@@ -1858,6 +1929,12 @@ TabChild::RecvRealMouseMoveEvent(const WidgetMouseEvent& event)
 }
 
 bool
+TabChild::RecvSynthMouseMoveEvent(const WidgetMouseEvent& event)
+{
+  return RecvRealMouseButtonEvent(event);
+}
+
+bool
 TabChild::RecvRealMouseButtonEvent(const WidgetMouseEvent& event)
 {
   WidgetMouseEvent localEvent(event);
@@ -1882,6 +1959,9 @@ TabChild::RecvMouseWheelEvent(const WidgetWheelEvent& aEvent,
   APZCCallbackHelper::DispatchWidgetEvent(event);
 
   if (aEvent.mFlags.mHandledByAPZ) {
+    if (event.mCanTriggerSwipe) {
+      SendRespondStartSwipeEvent(aInputBlockId, event.TriggersSwipe());
+    }
     mAPZEventState->ProcessWheelEvent(event, aGuid, aInputBlockId);
   }
   return true;
@@ -1981,11 +2061,11 @@ TabChild::UpdateTapState(const WidgetTouchEvent& aEvent, nsEventStatus aStatus)
   case NS_TOUCH_END:
     if (!TouchManager::gPreventMouseEvents) {
       APZCCallbackHelper::DispatchSynthesizedMouseEvent(
-        NS_MOUSE_MOVE, time, currentPoint, 0, mPuppetWidget);
+        eMouseMove, time, currentPoint, 0, mPuppetWidget);
       APZCCallbackHelper::DispatchSynthesizedMouseEvent(
-        NS_MOUSE_BUTTON_DOWN, time, currentPoint, 0, mPuppetWidget);
+        eMouseDown, time, currentPoint, 0, mPuppetWidget);
       APZCCallbackHelper::DispatchSynthesizedMouseEvent(
-        NS_MOUSE_BUTTON_UP, time, currentPoint, 0, mPuppetWidget);
+        eMouseUp, time, currentPoint, 0, mPuppetWidget);
     }
     // fall through
   case NS_TOUCH_CANCEL:
@@ -2104,19 +2184,19 @@ TabChild::RecvRealDragEvent(const WidgetDragEvent& aEvent,
     }
   }
 
-  if (aEvent.mMessage == NS_DRAGDROP_DROP) {
+  if (aEvent.mMessage == eDrop) {
     bool canDrop = true;
     if (!dragSession || NS_FAILED(dragSession->GetCanDrop(&canDrop)) ||
         !canDrop) {
-      localEvent.mMessage = NS_DRAGDROP_EXIT;
+      localEvent.mMessage = eDragExit;
     }
-  } else if (aEvent.mMessage == NS_DRAGDROP_OVER) {
+  } else if (aEvent.mMessage == eDragOver) {
     nsCOMPtr<nsIDragService> dragService =
       do_GetService("@mozilla.org/widget/dragservice;1");
     if (dragService) {
       // This will dispatch 'drag' event at the source if the
       // drag transaction started in this process.
-      dragService->FireDragEventAtSource(NS_DRAGDROP_DRAG);
+      dragService->FireDragEventAtSource(eDrag);
     }
   }
 
@@ -2157,7 +2237,7 @@ TabChild::RecvRealKeyEvent(const WidgetKeyboardEvent& event,
 {
   AutoCacheNativeKeyCommands autoCache(mPuppetWidget);
 
-  if (event.mMessage == NS_KEY_PRESS) {
+  if (event.mMessage == eKeyPress) {
     // If content code called preventDefault() on a keydown event, then we don't
     // want to process any following keypress events.
     if (mIgnoreKeyPressEvent) {
@@ -2177,7 +2257,7 @@ TabChild::RecvRealKeyEvent(const WidgetKeyboardEvent& event,
   localEvent.widget = mPuppetWidget;
   nsEventStatus status = APZCCallbackHelper::DispatchWidgetEvent(localEvent);
 
-  if (event.mMessage == NS_KEY_DOWN) {
+  if (event.mMessage == eKeyDown) {
     mIgnoreKeyPressEvent = status == nsEventStatus_eConsumeNoDefault;
   }
 
@@ -2373,12 +2453,13 @@ TabChild::RecvAsyncMessage(const nsString& aMessage,
 {
   if (mTabChildGlobal) {
     nsCOMPtr<nsIXPConnectJSObjectHolder> kungFuDeathGrip(GetGlobal());
-    StructuredCloneData cloneData = UnpackClonedMessageDataForChild(aData);
+    StructuredCloneIPCHelper helper;
+    UnpackClonedMessageDataForChild(aData, helper);
     nsRefPtr<nsFrameMessageManager> mm =
       static_cast<nsFrameMessageManager*>(mTabChildGlobal->mMessageManager.get());
     CrossProcessCpowHolder cpows(Manager(), aCpows);
     mm->ReceiveMessage(static_cast<EventTarget*>(mTabChildGlobal), nullptr,
-                       aMessage, false, &cloneData, &cpows, aPrincipal, nullptr);
+                       aMessage, false, &helper, &cpows, aPrincipal, nullptr);
   }
   return true;
 }
@@ -2420,25 +2501,6 @@ TabChild::RecvSwappedWithOtherRemoteLoader()
 
   docShell->SetInFrameSwap(false);
 
-  return true;
-}
-
-bool
-TabChild::RecvGotoBFCache()
-{
-  nsresult rv = WebNavigation()->LoadURI(MOZ_UTF16("about:blank"),
-                                         0, nullptr, nullptr, nullptr);
-  NS_ENSURE_SUCCESS(rv, false);
-  mIsInBFCache = true;
-  return true;
-}
-
-bool
-TabChild::RecvResumeFromBFCache()
-{
-  WebNavigation()->GoBack();
-  // TODO remove "about:blank" from history
-  mIsInBFCache = false;
   return true;
 }
 
@@ -2510,7 +2572,7 @@ TabChild::RecvSetUpdateHitRegion(const bool& aEnabled)
 }
 
 bool
-TabChild::RecvSetIsDocShellActive(const bool& aIsActive)
+TabChild::RecvSetDocShellIsActive(const bool& aIsActive)
 {
     nsCOMPtr<nsIDocShell> docShell = do_GetInterface(WebNavigation());
     if (docShell) {
@@ -2827,14 +2889,14 @@ TabChild::SetTabId(const TabId& aTabId)
 bool
 TabChild::DoSendBlockingMessage(JSContext* aCx,
                                 const nsAString& aMessage,
-                                const StructuredCloneData& aData,
+                                StructuredCloneIPCHelper& aHelper,
                                 JS::Handle<JSObject *> aCpows,
                                 nsIPrincipal* aPrincipal,
                                 nsTArray<OwningSerializedStructuredCloneBuffer>* aRetVal,
                                 bool aIsSync)
 {
   ClonedMessageData data;
-  if (!BuildClonedMessageDataForChild(Manager(), aData, data)) {
+  if (!BuildClonedMessageDataForChild(Manager(), aHelper, data)) {
     return false;
   }
   InfallibleTArray<CpowEntry> cpows;
@@ -2853,12 +2915,12 @@ TabChild::DoSendBlockingMessage(JSContext* aCx,
 bool
 TabChild::DoSendAsyncMessage(JSContext* aCx,
                              const nsAString& aMessage,
-                             const StructuredCloneData& aData,
+                             StructuredCloneIPCHelper& aHelper,
                              JS::Handle<JSObject *> aCpows,
                              nsIPrincipal* aPrincipal)
 {
   ClonedMessageData data;
-  if (!BuildClonedMessageDataForChild(Manager(), aData, data)) {
+  if (!BuildClonedMessageDataForChild(Manager(), aHelper, data)) {
     return false;
   }
   InfallibleTArray<CpowEntry> cpows;
@@ -3191,68 +3253,4 @@ TabChild::DeallocPWebBrowserPersistDocumentChild(PWebBrowserPersistDocumentChild
 {
   delete aActor;
   return true;
-}
-
-NS_IMETHODIMP
-TabChild::OnStateChange(nsIWebProgress* aWebProgress,
-                        nsIRequest* aRequest,
-                        uint32_t aStateFlags,
-                        nsresult aStatus)
-{
-  NS_NOTREACHED("notification excluded in AddProgressListener(...)");
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-TabChild::OnProgressChange(nsIWebProgress* aProgress,
-                           nsIRequest* aRequest,
-                           int32_t aCurSelfProgress,
-                           int32_t aMaxSelfProgress,
-                           int32_t aCurTotalProgress,
-                           int32_t aMaxTotalProgress)
-{
-  NS_NOTREACHED("notification excluded in AddProgressListener(...)");
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-TabChild::OnLocationChange(nsIWebProgress* aProgress, nsIRequest* aRequest,
-                           nsIURI* aURI, uint32_t aFlags)
-{
-  if (sPreallocatedTab == this) {
-    // If we're the preallocated tab, bail out because doing IPC will crash.
-    return NS_OK;
-  }
-
-  if (mIsInBFCache) {
-    // Ignore location change because we are going to BFCache.
-    return NS_OK;
-  }
-
-  nsCOMPtr<nsIWebProgress> webprogress = do_GetInterface(WebNavigation());
-  if (aProgress != webprogress) {
-    // Ignore location change from subshells.
-    return NS_OK;
-  }
-  URIParams uri;
-  SerializeURI(aURI, uri);
-  SendLocationChange(uri);
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-TabChild::OnStatusChange(nsIWebProgress* aWebProgress,
-                         nsIRequest* aRequest,
-                         nsresult aStatus, const char16_t* aMessage)
-{
-  NS_NOTREACHED("notification excluded in AddProgressListener(...)");
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-TabChild::OnSecurityChange(nsIWebProgress* aWebProgress,
-                           nsIRequest* aRequest, uint32_t aState)
-{
-  NS_NOTREACHED("notification excluded in AddProgressListener(...)");
-  return NS_OK;
 }

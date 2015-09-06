@@ -4234,6 +4234,11 @@
     "extended_statistics_ok": true,
     "description": "Session restore: Time spent blocking the main thread while restoring a window state (ms)"
   },
+  "FX_TABLET_MODE_USED_DURING_SESSION": {
+    "expires_in_version": "46",
+    "kind": "count",
+    "description": "Windows 10+ only: The number of times tablet-mode is used during a session"
+  },
   "FX_URLBAR_SELECTED_RESULT_INDEX": {
     "expires_in_version": "45",
     "kind": "enumerated",
@@ -7264,7 +7269,43 @@
   "BROWSER_IS_USER_DEFAULT": {
     "expires_in_version": "never",
     "kind": "boolean",
+    "releaseChannelCollection": "opt-out",
     "description": "The result of the startup default desktop browser check."
+  },
+  "BROWSER_IS_USER_DEFAULT_ERROR": {
+    "expires_in_version": "never",
+    "kind": "boolean",
+    "releaseChannelCollection": "opt-out",
+    "description": "True if the browser was unable to determine if the browser was set as default."
+  },
+  "BROWSER_SET_DEFAULT_DIALOG_PROMPT_RAWCOUNT": {
+    "expires_in_version": "never",
+    "kind": "exponential",
+    "high": "250",
+    "n_buckets": "15",
+    "releaseChannelCollection": "opt-out",
+    "description": "The number of times that a profile has seen the 'Set Default Browser' dialog."
+  },
+  "BROWSER_SET_DEFAULT_RESULT": {
+    "expires_in_version": "never",
+    "kind": "enumerated",
+    "n_values": "4",
+    "releaseChannelCollection": "opt-out",
+    "description": "Result of the Set Default Browser dialog (0=Use Firefox + 'Always perform check' unchecked, 1=Use Firefox + 'Always perform check' checked, 2=Not Now + 'Always perform check' unchecked, 3=Not Now + 'Always perform check' checked)"
+  },
+  "BROWSER_SET_DEFAULT_ERROR": {
+    "expires_in_version": "never",
+    "kind": "boolean",
+    "releaseChannelCollection": "opt-out",
+    "description": "True if the browser was unable to set Firefox as the default browser"
+  },
+  "BROWSER_SET_DEFAULT_TIME_TO_COMPLETION_SECONDS": {
+    "expires_in_version": "never",
+    "kind": "exponential",
+    "high": "500",
+    "n_buckets": "15",
+    "releaseChannelCollection": "opt-out",
+    "description": "Time to successfully set Firefox as the default browser after clicking 'Set Firefox as Default'. Should be near-instant in some environments, others require user interaction. Measured in seconds."
   },
   "BROWSER_IS_ASSIST_DEFAULT": {
     "expires_in_version": "never",
@@ -8423,7 +8464,7 @@
     "expires_in_version": "55",
     "kind": "enumerated",
     "n_values": 8,
-    "description": "The safety of a page where we see a password field. (0=unsafe, 1=safe)"
+    "description": "The safety of a page where we see a password field. (0: safe page & safe submit; 1: safe page & unsafe submit; 2: safe page & unknown submit; 3: unsafe page & safe submit; 4: unsafe page & unsafe submit; 5: unsafe page & unknown submit)"
   },
   "PWMGR_MANAGE_COPIED_PASSWORD": {
     "expires_in_version": "never",
@@ -8728,12 +8769,6 @@
     "expires_in_version": "never",
     "kind": "flag",
     "description": "An Attr node that's not namespace-aware and was created from an HTML document is set on a non-HTML element and has a name containing uppercase ASCII chars"
-  },
-  "FENNEC_TITLE_IN_TITLEBAR_ENABLED": {
-    "alert_emails": ["michael.l.comella@gmail.com"],
-    "expires_in_version": "43",
-    "kind": "boolean",
-    "description": "Is the title shown in the url bar (as determined by the titlebar title or url preference)?"
   },
   "DEVTOOLS_HUD_JANK": {
     "expires_in_version": "never",
@@ -9061,10 +9096,34 @@
   },
   "PERF_MONITORING_TEST_CPU_RESCHEDULING_PROPORTION_MOVED": {
     "alert_emails": ["dteller@mozilla.com"],
-    "expires_in_version": "44",
+    "expires_in_version": "45",
     "kind": "linear",
     "high": "100",
     "n_buckets": "20",
     "description": "Proportion (%) of reschedulings of the main process to another CPU during the execution of code inside a JS compartment. Updated while we are measuring jank."
+  },
+  "VIDEO_EME_ADOBE_INSTALL_FAILED_REASON": {
+    "alert_emails": ["edwin@mozilla.com"],
+    "expires_in_version": "50",
+    "kind": "enumerated",
+    "n_values": 10,
+    "releaseChannelCollection": "opt-out",
+    "description": "Reason for Adobe CDM failing to update. (1 = GMP_INVALID; 2 = GMP_HIDDEN; 3 = GMP_DISABLED; 4 = GMP_UPDATE_DISABLED)"
+  },
+  "VIDEO_EME_ADOBE_HIDDEN_REASON": {
+    "alert_emails": ["edwin@mozilla.com"],
+    "expires_in_version": "50",
+    "kind": "enumerated",
+    "n_values": 10,
+    "releaseChannelCollection": "opt-out",
+    "description": "Reason for Adobe CDM being hidden. (1 = UNSUPPORTED; 2 = EME_DISABLED)"
+  },
+  "VIDEO_EME_ADOBE_UNSUPPORTED_REASON": {
+    "alert_emails": ["edwin@mozilla.com"],
+    "expires_in_version": "50",
+    "kind": "enumerated",
+    "n_values": 10,
+    "releaseChannelCollection": "opt-out",
+    "description": "Reason for reporting the Adobe CDM to be unsupported. (1 = NOT_WINDOWS; 2 = WINDOWS_VERSION)"
   }
 }

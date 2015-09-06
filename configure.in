@@ -94,7 +94,6 @@ dnl ==============================================================
 _topsrcdir=`cd \`dirname $0\`; pwd`
 _objdir=`pwd`
 
-
 dnl TODO Don't exempt L10N builds once bug 842760 is resolved.
 if test "$_topsrcdir" = "$_objdir" -a "${with_l10n_base+set}" != set; then
   echo "  ***"
@@ -1534,8 +1533,11 @@ if test "$GNU_CC"; then
 
     # Turn off the following warnings that -Wall turns on:
     # -Wno-unused - lots of violations in third-party code
+    # -Wno-unused-local-typedef - catches unused typedefs, which are commonly used in assertion macros
     #
     _WARNINGS_CFLAGS="${_WARNINGS_CFLAGS} -Wno-unused"
+
+    MOZ_CXX_SUPPORTS_WARNING(-Wno-, unused-local-typedef, ac_cxx_has_wno_unused_local_typedef)
 
     if test -z "$INTEL_CC" -a -z "$CLANG_CC"; then
        # Don't use -Wcast-align with ICC or clang
@@ -1630,12 +1632,14 @@ if test "$GNU_CXX"; then
     # Turn off the following warnings that -Wall turns on:
     # -Wno-invalid-offsetof - we use offsetof on non-POD types frequently
     # -Wno-inline-new-delete - we inline 'new' and 'delete' in mozalloc
+    # -Wno-unused-local-typedef - catches unused typedefs, which are commonly used in assertion macros
     #   for performance reasons, and because GCC and clang accept it (though
     #   clang warns about it).
     #
     _WARNINGS_CXXFLAGS="${_WARNINGS_CXXFLAGS} -Wno-invalid-offsetof"
 
     MOZ_CXX_SUPPORTS_WARNING(-Wno-, inline-new-delete, ac_cxx_has_wno_inline_new_delete)
+    MOZ_CXX_SUPPORTS_WARNING(-Wno-, unused-local-typedef, ac_cxx_has_wno_unused_local_typedef)
 
     if test -z "$INTEL_CXX" -a -z "$CLANG_CXX"; then
        # Don't use -Wcast-align with ICC or clang
@@ -3781,6 +3785,7 @@ MOZ_ANDROID_DOWNLOADS_INTEGRATION=
 MOZ_ANDROID_MLS_STUMBLER=
 MOZ_ANDROID_SHARE_OVERLAY=
 MOZ_INSTALL_TRACKING=
+MOZ_SWITCHBOARD=
 ACCESSIBILITY=1
 MOZ_TIME_MANAGER=
 MOZ_SIMPLEPUSH=
@@ -4038,12 +4043,17 @@ b2g/dev)
   ;;
 esac
 
+if test -n "$MOZ_B2GDROID"; then
+    AC_DEFINE(MOZ_B2GDROID)
+fi
+
 AC_SUBST(MOZ_BUILD_APP)
 AC_SUBST(MOZ_PHOENIX)
 AC_SUBST(MOZ_XULRUNNER)
 AC_SUBST(MOZ_B2G)
 AC_SUBST(MOZ_MULET)
 AC_SUBST(MOZ_B2G_VERSION)
+AC_SUBST(MOZ_B2GDROID)
 
 AC_DEFINE_UNQUOTED(MOZ_BUILD_APP,$MOZ_BUILD_APP)
 
@@ -4063,14 +4073,15 @@ dnl ========================================================
 if test -z "$gonkdir" ; then
     # Minimum Android SDK API Level we require.
     case "$MOZ_BUILD_APP" in
-    mobile/android)
+    mobile/android | mobile/android/b2gdroid)
         android_min_api_level=20
         case "$target" in
         *-android*|*-linuxandroid*)
             :
             ;;
         *)
-            AC_MSG_ERROR([You must specify --target=arm-linux-androideabi (or some other valid android target) when building with --enable-application=mobile/android. See https://wiki.mozilla.org/Mobile/Fennec/Android#Setup_Fennec_mozconfig for more information about the necessary options])
+            AC_MSG_ERROR([You must specify --target=arm-linux-androideabi (or some other valid android target) when building with --enable-application=mobile/android or --enable-application=mobile/android/b2gdroid.
+             See https://wiki.mozilla.org/Mobile/Fennec/Android#Setup_Fennec_mozconfig for more information about the necessary options])
             ;;
         esac
         ;;
@@ -4872,6 +4883,13 @@ if test -n "$MOZ_INSTALL_TRACKING"; then
 fi
 
 dnl ========================================================
+dnl = Include Switchboard A/B framework on Android
+dnl ========================================================
+if test -n "$MOZ_SWITCHBOARD"; then
+    AC_DEFINE(MOZ_SWITCHBOARD)
+fi
+
+dnl ========================================================
 dnl = Enable IPDL's "expensive" unit tests
 dnl ========================================================
 MOZ_IPDL_TESTS=
@@ -5425,6 +5443,23 @@ if test -n "$MOZ_VPX" -a -z "$MOZ_NATIVE_LIBVPX"; then
         VPX_AS_CONVERSION='$(PERL) $(topsrcdir)/media/libvpx/build/make/ads2gas.pl'
         VPX_ASM_SUFFIX="$ASM_SUFFIX"
         VPX_ARM_ASM=1
+        dnl Building with -mfpu=neon requires either the "softfp" or the
+        dnl "hardfp" ABI. Depending on the compiler's default target, and the
+        dnl CFLAGS, the default ABI might be neither, in which case it is the
+        dnl "softfloat" ABI.
+        dnl The "softfloat" ABI is binary-compatible with the "softfp" ABI, so
+        dnl we can safely mix code built with both ABIs. So, if we detect
+        dnl that compiling uses the "softfloat" ABI, force the use of the
+        dnl "softfp" ABI instead.
+        dnl Confusingly, the __SOFTFP__ preprocessor variable indicates the
+        dnl "softfloat" ABI, not the "softfp" ABI.
+        dnl Note: VPX_ASFLAGS is also used in CFLAGS.
+        AC_TRY_COMPILE([],
+          [#ifndef __SOFTFP__
+           #error "compiler target supports -mfpu=neon, so we don't have to add extra flags"
+           #endif],
+           VPX_ASFLAGS="$VPX_ASFLAGS -mfloat-abi=softfp"
+           )
       fi
     ;;
     *:x86)
@@ -7193,7 +7228,7 @@ dnl ========================================================
 dnl = Jemalloc build setup
 dnl ========================================================
 if test -z "$MOZ_MEMORY"; then
-  if test -n "$MOZ_JEMALLOC3" -a -z "$MOZ_REPLACE_MALLOC"; then
+  if test -n "$MOZ_JEMALLOC4" -a -z "$MOZ_REPLACE_MALLOC"; then
     MOZ_NATIVE_JEMALLOC=1
     AC_CHECK_FUNCS(mallctl nallocx,,
       [MOZ_NATIVE_JEMALLOC=
@@ -7201,7 +7236,7 @@ if test -z "$MOZ_MEMORY"; then
     if test -n "$MOZ_NATIVE_JEMALLOC"; then
       MOZ_MEMORY=1
       AC_DEFINE(MOZ_MEMORY)
-      AC_DEFINE(MOZ_JEMALLOC3)
+      AC_DEFINE(MOZ_JEMALLOC4)
       AC_DEFINE(MOZ_NATIVE_JEMALLOC)
     fi
   fi
@@ -7214,8 +7249,11 @@ if test -z "$MOZ_MEMORY"; then
   esac
 else
   AC_DEFINE(MOZ_MEMORY)
-  if test -n "$MOZ_JEMALLOC3"; then
-    AC_DEFINE(MOZ_JEMALLOC3)
+  if test -n "$NIGHTLY_BUILD"; then
+    MOZ_JEMALLOC4=1
+  fi
+  if test -n "$MOZ_JEMALLOC4"; then
+    AC_DEFINE(MOZ_JEMALLOC4)
   fi
   if test "x$MOZ_DEBUG" = "x1"; then
     AC_DEFINE(MOZ_MEMORY_DEBUG)
@@ -7264,7 +7302,7 @@ else
   esac
 fi # MOZ_MEMORY
 AC_SUBST(MOZ_MEMORY)
-AC_SUBST(MOZ_JEMALLOC3)
+AC_SUBST(MOZ_JEMALLOC4)
 AC_SUBST(MOZ_NATIVE_JEMALLOC)
 AC_SUBST(MOZ_CRT)
 export MOZ_CRT
@@ -7492,7 +7530,7 @@ fi
 AC_SUBST(MOZ_DISABLE_STARTUPCACHE)
 
 dnl ========================================================
-dnl = Enable packaging Gaia with B2G desktop
+dnl = Enable packaging Gaia with B2G desktop and b2gdroid
 dnl ========================================================
 if test x"$MOZ_WIDGET_TOOLKIT" != x"gonk"; then
     if test -n "$GAIADIR" -a ! -d "$GAIADIR" ; then
@@ -7506,6 +7544,10 @@ if test x"$MOZ_WIDGET_TOOLKIT" != x"gonk"; then
 
     if test -n "$FXOS_SIMULATOR" -a -z "$GAIADIR" ; then
         AC_MSG_ERROR([FXOS_SIMULATOR=1 requires GAIADIR to be defined])
+    fi
+
+    if test "$MOZ_BUILD_APP" = "mobile/android/b2gdroid" -a -z "$GAIADIR"; then
+        AC_MSG_ERROR([GAIADIR needs to be set in b2gdroid builds])
     fi
 
     if test -n "$FXOS_SIMULATOR" ; then
@@ -8572,6 +8614,7 @@ AC_SUBST(MOZ_ANDROID_APPLICATION_CLASS)
 AC_SUBST(MOZ_ANDROID_BROWSER_INTENT_CLASS)
 AC_SUBST(MOZ_ANDROID_SEARCH_INTENT_CLASS)
 AC_SUBST(MOZ_INSTALL_TRACKING)
+AC_SUBST(MOZ_SWITCHBOARD)
 AC_SUBST(ENABLE_STRIP)
 AC_SUBST(PKG_SKIP_STRIP)
 AC_SUBST(STRIP_FLAGS)
@@ -9096,7 +9139,7 @@ fi
 
 # Run jemalloc configure script
 
-if test -z "$MOZ_NATIVE_JEMALLOC" -a "$MOZ_MEMORY" && test -n "$MOZ_JEMALLOC3" -o -n "$MOZ_REPLACE_MALLOC"; then
+if test -z "$MOZ_NATIVE_JEMALLOC" -a "$MOZ_MEMORY" && test -n "$MOZ_JEMALLOC4" -o -n "$MOZ_REPLACE_MALLOC"; then
   ac_configure_args="--build=$build --host=$target --enable-stats --with-jemalloc-prefix=je_ --disable-valgrind"
   # We're using memalign for _aligned_malloc in memory/build/mozmemory_wrap.c
   # on Windows, so just export memalign on all platforms.
@@ -9110,7 +9153,7 @@ if test -z "$MOZ_NATIVE_JEMALLOC" -a "$MOZ_MEMORY" && test -n "$MOZ_JEMALLOC3" -
       ac_configure_args="$ac_configure_args --enable-ivsalloc"
     fi
   fi
-  if test -n "$MOZ_JEMALLOC3"; then
+  if test -n "$MOZ_JEMALLOC4"; then
     case "${OS_ARCH}" in
       WINNT|Darwin)
         # We want jemalloc functions to be kept hidden on both Mac and Windows
@@ -9136,7 +9179,7 @@ if test -z "$MOZ_NATIVE_JEMALLOC" -a "$MOZ_MEMORY" && test -n "$MOZ_JEMALLOC3" -
         MANGLE=$_MANGLE
         ;;
     esac
-  elif test -z "$MOZ_JEMALLOC3"; then
+  elif test -z "$MOZ_JEMALLOC4"; then
     MANGLE=$_MANGLE
     JEMALLOC_WRAPPER=replace_
   fi

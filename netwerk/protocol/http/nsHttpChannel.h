@@ -238,6 +238,7 @@ public: /* internal necko use only */
     void MarkIntercepted();
     NS_IMETHOD GetResponseSynthesized(bool* aSynthesized) override;
     bool AwaitingCacheCallbacks();
+    void SetCouldBeSynthesized();
 
 protected:
     virtual ~nsHttpChannel();

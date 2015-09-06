@@ -3787,6 +3787,8 @@ class MCallDOMNative : public MCall
     MCallDOMNative(JSFunction* target, uint32_t numActualArgs)
         : MCall(target, numActualArgs, false)
     {
+        MOZ_ASSERT(getJitInfo()->type() != JSJitInfo::InlinableNative);
+
         // If our jitinfo is not marked eliminatable, that means that our C++
         // implementation is fallible or that it never wants to be eliminated or
         // that we have no hope of ever doing the sort of argument analysis that
@@ -8008,6 +8010,7 @@ class MUnboxedArrayInitializedLength
     AliasSet getAliasSet() const override {
         return AliasSet::Load(AliasSet::ObjectFields);
     }
+    bool mightAlias(const MDefinition* store) const override;
 
     ALLOW_CLONE(MUnboxedArrayInitializedLength)
 };
@@ -8761,6 +8764,7 @@ class MLoadUnboxedObjectOrNull
     AliasSet getAliasSet() const override {
         return AliasSet::Load(AliasSet::UnboxedElement);
     }
+    bool mightAlias(const MDefinition* store) const override;
 
     ALLOW_CLONE(MLoadUnboxedObjectOrNull)
 };
@@ -8810,6 +8814,7 @@ class MLoadUnboxedString
     AliasSet getAliasSet() const override {
         return AliasSet::Load(AliasSet::UnboxedElement);
     }
+    bool mightAlias(const MDefinition* store) const override;
 
     ALLOW_CLONE(MLoadUnboxedString)
 };
@@ -9462,6 +9467,7 @@ class MLoadUnboxedScalar
             return AliasSet::Store(AliasSet::UnboxedElement);
         return AliasSet::Load(AliasSet::UnboxedElement);
     }
+    bool mightAlias(const MDefinition* store) const override;
 
     bool congruentTo(const MDefinition* ins) const override {
         if (requiresBarrier_)
@@ -12900,7 +12906,7 @@ class MRecompileCheck : public MNullaryInstruction
 
 // All barriered operations - MMemoryBarrier, MCompareExchangeTypedArrayElement,
 // MExchangeTypedArrayElement, and MAtomicTypedArrayElementBinop, as well as
-// MLoadUnboxedScalar and MStoreUnboxedSclaar when they are marked as requiring
+// MLoadUnboxedScalar and MStoreUnboxedScalar when they are marked as requiring
 // a memory barrer - have the following attributes:
 //
 // - Not movable
@@ -13170,11 +13176,19 @@ class MAsmJSHeapAccess
     Scalar::Type accessType_ : 8;
     bool needsBoundsCheck_;
     unsigned numSimdElems_;
+    MemoryBarrierBits barrierBefore_;
+    MemoryBarrierBits barrierAfter_;
 
   public:
-    MAsmJSHeapAccess(Scalar::Type accessType, bool needsBoundsCheck, unsigned numSimdElems = 0)
-      : offset_(0), accessType_(accessType),
-        needsBoundsCheck_(needsBoundsCheck), numSimdElems_(numSimdElems)
+    MAsmJSHeapAccess(Scalar::Type accessType, bool needsBoundsCheck, unsigned numSimdElems = 0,
+                     MemoryBarrierBits barrierBefore = MembarNobits,
+                     MemoryBarrierBits barrierAfter = MembarNobits)
+      : offset_(0),
+        accessType_(accessType),
+        needsBoundsCheck_(needsBoundsCheck),
+        numSimdElems_(numSimdElems),
+        barrierBefore_(barrierBefore),
+        barrierAfter_(barrierAfter)
     {
         MOZ_ASSERT(numSimdElems <= ScalarTypeToLength(accessType));
     }
@@ -13194,6 +13208,9 @@ class MAsmJSHeapAccess
         MOZ_ASSERT(o >= 0);
         offset_ = o;
     }
+    MemoryBarrierBits barrierBefore() const { return barrierBefore_; }
+    MemoryBarrierBits barrierAfter() const { return barrierAfter_; }
+    bool isAtomicAccess() const { return (barrierBefore_|barrierAfter_) != MembarNobits; }
 };
 
 class MAsmJSLoadHeap
@@ -13201,15 +13218,10 @@ class MAsmJSLoadHeap
     public MAsmJSHeapAccess,
     public NoTypePolicy::Data
 {
-    MemoryBarrierBits barrierBefore_;
-    MemoryBarrierBits barrierAfter_;
-
     MAsmJSLoadHeap(Scalar::Type accessType, MDefinition* ptr, bool needsBoundsCheck,
                    unsigned numSimdElems, MemoryBarrierBits before, MemoryBarrierBits after)
       : MUnaryInstruction(ptr),
-        MAsmJSHeapAccess(accessType, needsBoundsCheck, numSimdElems),
-        barrierBefore_(before),
-        barrierAfter_(after)
+        MAsmJSHeapAccess(accessType, needsBoundsCheck, numSimdElems, before, after)
     {
         if (before|after)
             setGuard();         // Not removable
@@ -13258,14 +13270,12 @@ class MAsmJSLoadHeap
 
     MDefinition* ptr() const { return getOperand(0); }
     void replacePtr(MDefinition* newPtr) { replaceOperand(0, newPtr); }
-    MemoryBarrierBits barrierBefore() const { return barrierBefore_; }
-    MemoryBarrierBits barrierAfter() const { return barrierAfter_; }
 
     bool congruentTo(const MDefinition* ins) const override;
     AliasSet getAliasSet() const override {
         // When a barrier is needed make the instruction effectful by
         // giving it a "store" effect.
-        if (barrierBefore_|barrierAfter_)
+        if (isAtomicAccess())
             return AliasSet::Store(AliasSet::AsmJSHeap);
         return AliasSet::Load(AliasSet::AsmJSHeap);
     }
@@ -13277,15 +13287,10 @@ class MAsmJSStoreHeap
     public MAsmJSHeapAccess,
     public NoTypePolicy::Data
 {
-    MemoryBarrierBits barrierBefore_;
-    MemoryBarrierBits barrierAfter_;
-
     MAsmJSStoreHeap(Scalar::Type accessType, MDefinition* ptr, MDefinition* v, bool needsBoundsCheck,
                     unsigned numSimdElems, MemoryBarrierBits before, MemoryBarrierBits after)
       : MBinaryInstruction(ptr, v),
-        MAsmJSHeapAccess(accessType, needsBoundsCheck, numSimdElems),
-        barrierBefore_(before),
-        barrierAfter_(after)
+        MAsmJSHeapAccess(accessType, needsBoundsCheck, numSimdElems, before, after)
     {
         if (before|after)
             setGuard();         // Not removable
@@ -13307,8 +13312,6 @@ class MAsmJSStoreHeap
     MDefinition* ptr() const { return getOperand(0); }
     void replacePtr(MDefinition* newPtr) { replaceOperand(0, newPtr); }
     MDefinition* value() const { return getOperand(1); }
-    MemoryBarrierBits barrierBefore() const { return barrierBefore_; }
-    MemoryBarrierBits barrierAfter() const { return barrierAfter_; }
 
     AliasSet getAliasSet() const override {
         return AliasSet::Store(AliasSet::AsmJSHeap);
@@ -13644,7 +13647,7 @@ class MAsmJSCall final
         MDefinition* def;
         Arg(AnyRegister reg, MDefinition* def) : reg(reg), def(def) {}
     };
-    typedef Vector<Arg, 8> Args;
+    typedef Vector<Arg, 8, SystemAllocPolicy> Args;
 
     static MAsmJSCall* New(TempAllocator& alloc, const CallSiteDesc& desc, Callee callee,
                            const Args& args, MIRType resultType, size_t spIncrement);

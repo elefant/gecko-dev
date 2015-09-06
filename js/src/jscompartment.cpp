@@ -79,8 +79,8 @@ JSCompartment::JSCompartment(Zone* zone, const JS::CompartmentOptions& options =
     scheduledForDestruction(false),
     maybeAlive(true),
     jitCompartment_(nullptr),
-    normalArgumentsTemplate_(nullptr),
-    strictArgumentsTemplate_(nullptr)
+    mappedArgumentsTemplate_(nullptr),
+    unmappedArgumentsTemplate_(nullptr)
 {
     PodArrayZero(sawDeprecatedLanguageExtension);
     runtime_->numCompartments++;
@@ -715,11 +715,11 @@ JSCompartment::sweepCrossCompartmentWrappers()
 void
 JSCompartment::sweepTemplateObjects()
 {
-    if (normalArgumentsTemplate_ && IsAboutToBeFinalized(&normalArgumentsTemplate_))
-        normalArgumentsTemplate_.set(nullptr);
+    if (mappedArgumentsTemplate_ && IsAboutToBeFinalized(&mappedArgumentsTemplate_))
+        mappedArgumentsTemplate_.set(nullptr);
 
-    if (strictArgumentsTemplate_ && IsAboutToBeFinalized(&strictArgumentsTemplate_))
-        strictArgumentsTemplate_.set(nullptr);
+    if (unmappedArgumentsTemplate_ && IsAboutToBeFinalized(&unmappedArgumentsTemplate_))
+        unmappedArgumentsTemplate_.set(nullptr);
 }
 
 /* static */ void
@@ -807,7 +807,7 @@ JSCompartment::setNewObjectMetadata(JSContext* cx, JSObject* obj)
         assertSameCompartment(cx, metadata);
         if (!objectMetadataTable) {
             objectMetadataTable = cx->new_<ObjectWeakMap>(cx);
-            if (!objectMetadataTable)
+            if (!objectMetadataTable || !objectMetadataTable->init())
                 CrashAtUnhandlableOOM("setNewObjectMetadata");
         }
         if (!objectMetadataTable->add(cx, obj, metadata))

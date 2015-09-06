@@ -21,6 +21,7 @@
 #include "mozilla/dom/ScriptSettings.h"
 
 #include "jsfriendapi.h"
+#include "js/StructuredClone.h"
 #include "nsContentUtils.h"
 #include "nsGlobalWindow.h"
 #include "nsIScriptObjectPrincipal.h"
@@ -1486,14 +1487,10 @@ class PromiseWorkerProxyRunnable : public workers::WorkerRunnable
 {
 public:
   PromiseWorkerProxyRunnable(PromiseWorkerProxy* aPromiseWorkerProxy,
-                             const JSStructuredCloneCallbacks* aCallbacks,
-                             JSAutoStructuredCloneBuffer&& aBuffer,
                              PromiseWorkerProxy::RunCallbackFunc aFunc)
     : WorkerRunnable(aPromiseWorkerProxy->GetWorkerPrivate(),
                      WorkerThreadUnchangedBusyCount)
     , mPromiseWorkerProxy(aPromiseWorkerProxy)
-    , mCallbacks(aCallbacks)
-    , mBuffer(Move(aBuffer))
     , mFunc(aFunc)
   {
     MOZ_ASSERT(NS_IsMainThread());
@@ -1508,12 +1505,11 @@ public:
     MOZ_ASSERT(aWorkerPrivate == mWorkerPrivate);
 
     MOZ_ASSERT(mPromiseWorkerProxy);
-    nsRefPtr<Promise> workerPromise = mPromiseWorkerProxy->GetWorkerPromise();
-    MOZ_ASSERT(workerPromise);
+    nsRefPtr<Promise> workerPromise = mPromiseWorkerProxy->WorkerPromise();
 
     // Here we convert the buffer to a JS::Value.
     JS::Rooted<JS::Value> value(aCx);
-    if (!mBuffer.read(aCx, &value, mCallbacks, mPromiseWorkerProxy)) {
+    if (!mPromiseWorkerProxy->Read(aCx, &value)) {
       JS_ClearPendingException(aCx);
       return false;
     }
@@ -1530,8 +1526,6 @@ protected:
 
 private:
   nsRefPtr<PromiseWorkerProxy> mPromiseWorkerProxy;
-  const JSStructuredCloneCallbacks* mCallbacks;
-  JSAutoStructuredCloneBuffer mBuffer;
 
   // Function pointer for calling Promise::{ResolveInternal,RejectInternal}.
   PromiseWorkerProxy::RunCallbackFunc mFunc;
@@ -1541,22 +1535,22 @@ private:
 already_AddRefed<PromiseWorkerProxy>
 PromiseWorkerProxy::Create(workers::WorkerPrivate* aWorkerPrivate,
                            Promise* aWorkerPromise,
-                           const JSStructuredCloneCallbacks* aCb)
+                           const PromiseWorkerProxyStructuredCloneCallbacks* aCb)
 {
   MOZ_ASSERT(aWorkerPrivate);
   aWorkerPrivate->AssertIsOnWorkerThread();
   MOZ_ASSERT(aWorkerPromise);
+  MOZ_ASSERT_IF(aCb, !!aCb->Write && !!aCb->Read);
 
   nsRefPtr<PromiseWorkerProxy> proxy =
     new PromiseWorkerProxy(aWorkerPrivate, aWorkerPromise, aCb);
 
   // We do this to make sure the worker thread won't shut down before the
   // promise is resolved/rejected on the worker thread.
-  if (!aWorkerPrivate->AddFeature(aWorkerPrivate->GetJSContext(), proxy)) {
+  if (!proxy->AddRefObject()) {
     // Probably the worker is terminating. We cannot complete the operation
     // and we have to release all the resources.
-    proxy->mCleanedUp = true;
-    proxy->mWorkerPromise = nullptr;
+    proxy->CleanProperties();
     return nullptr;
   }
 
@@ -1567,46 +1561,85 @@ NS_IMPL_ISUPPORTS0(PromiseWorkerProxy)
 
 PromiseWorkerProxy::PromiseWorkerProxy(workers::WorkerPrivate* aWorkerPrivate,
                                        Promise* aWorkerPromise,
-                                       const JSStructuredCloneCallbacks* aCallbacks)
+                                       const PromiseWorkerProxyStructuredCloneCallbacks* aCallbacks)
   : mWorkerPrivate(aWorkerPrivate)
   , mWorkerPromise(aWorkerPromise)
   , mCleanedUp(false)
   , mCallbacks(aCallbacks)
   , mCleanUpLock("cleanUpLock")
+  , mFeatureAdded(false)
 {
 }
 
 PromiseWorkerProxy::~PromiseWorkerProxy()
 {
   MOZ_ASSERT(mCleanedUp);
+  MOZ_ASSERT(!mFeatureAdded);
   MOZ_ASSERT(!mWorkerPromise);
+  MOZ_ASSERT(!mWorkerPrivate);
 }
 
-workers::WorkerPrivate*
-PromiseWorkerProxy::GetWorkerPrivate() const
+void
+PromiseWorkerProxy::CleanProperties()
 {
-  // It's ok to race on |mCleanedUp|, because it will never cause us to fire
-  // the assertion when we should not.
-  MOZ_ASSERT(!mCleanedUp);
-
-#ifdef DEBUG
-  if (NS_IsMainThread()) {
-    mCleanUpLock.AssertCurrentThreadOwns();
-  }
-#endif
-
-  return mWorkerPrivate;
-}
-
-Promise*
-PromiseWorkerProxy::GetWorkerPromise() const
-{
-
 #ifdef DEBUG
   workers::WorkerPrivate* worker = GetCurrentThreadWorkerPrivate();
   MOZ_ASSERT(worker);
   worker->AssertIsOnWorkerThread();
 #endif
+  // Ok to do this unprotected from Create().
+  // CleanUp() holds the lock before calling this.
+  mCleanedUp = true;
+  mWorkerPromise = nullptr;
+  mWorkerPrivate = nullptr;
+
+  // Shutdown the StructuredCloneHelperInternal class.
+  Shutdown();
+}
+
+bool
+PromiseWorkerProxy::AddRefObject()
+{
+  MOZ_ASSERT(mWorkerPrivate);
+  mWorkerPrivate->AssertIsOnWorkerThread();
+  MOZ_ASSERT(!mFeatureAdded);
+  if (!mWorkerPrivate->AddFeature(mWorkerPrivate->GetJSContext(),
+                                  this)) {
+    return false;
+  }
+
+  mFeatureAdded = true;
+  // Maintain a reference so that we have a valid object to clean up when
+  // removing the feature.
+  AddRef();
+  return true;
+}
+
+workers::WorkerPrivate*
+PromiseWorkerProxy::GetWorkerPrivate() const
+{
+#ifdef DEBUG
+  if (NS_IsMainThread()) {
+    mCleanUpLock.AssertCurrentThreadOwns();
+  }
+#endif
+  // Safe to check this without a lock since we assert lock ownership on the
+  // main thread above.
+  MOZ_ASSERT(!mCleanedUp);
+  MOZ_ASSERT(mFeatureAdded);
+
+  return mWorkerPrivate;
+}
+
+Promise*
+PromiseWorkerProxy::WorkerPromise() const
+{
+#ifdef DEBUG
+  workers::WorkerPrivate* worker = GetCurrentThreadWorkerPrivate();
+  MOZ_ASSERT(worker);
+  worker->AssertIsOnWorkerThread();
+#endif
+  MOZ_ASSERT(mWorkerPromise);
   return mWorkerPromise;
 }
 
@@ -1620,14 +1653,6 @@ PromiseWorkerProxy::StoreISupports(nsISupports* aSupports)
   mSupportsArray.AppendElement(supports);
 }
 
-bool
-PromiseWorkerProxyControlRunnable::WorkerRun(JSContext* aCx,
-                                             workers::WorkerPrivate* aWorkerPrivate)
-{
-  mProxy->CleanUp(aCx);
-  return true;
-}
-
 void
 PromiseWorkerProxy::RunCallback(JSContext* aCx,
                                 JS::Handle<JS::Value> aValue,
@@ -1635,32 +1660,22 @@ PromiseWorkerProxy::RunCallback(JSContext* aCx,
 {
   MOZ_ASSERT(NS_IsMainThread());
 
-  MutexAutoLock lock(GetCleanUpLock());
+  MutexAutoLock lock(Lock());
   // If the worker thread's been cancelled we don't need to resolve the Promise.
-  if (IsClean()) {
+  if (CleanedUp()) {
     return;
   }
 
-  // The |aValue| is written into the buffer. Note that we also pass |this|
-  // into the structured-clone write in order to set its |mSupportsArray| to
-  // keep objects alive until the structured-clone read/write is done.
-  JSAutoStructuredCloneBuffer buffer;
-  if (!buffer.write(aCx, aValue, mCallbacks, this)) {
+  // The |aValue| is written into the StructuredCloneHelperInternal.
+  if (!Write(aCx, aValue)) {
     JS_ClearPendingException(aCx);
-    MOZ_ASSERT(false, "cannot write the JSAutoStructuredCloneBuffer!");
+    MOZ_ASSERT(false, "cannot serialize the value with the StructuredCloneAlgorithm!");
   }
 
   nsRefPtr<PromiseWorkerProxyRunnable> runnable =
-    new PromiseWorkerProxyRunnable(this,
-                                   mCallbacks,
-                                   Move(buffer),
-                                   aFunc);
+    new PromiseWorkerProxyRunnable(this, aFunc);
 
-  if (!runnable->Dispatch(aCx)) {
-    nsRefPtr<WorkerControlRunnable> runnable =
-      new PromiseWorkerProxyControlRunnable(mWorkerPrivate, this);
-    mWorkerPrivate->DispatchControlRunnable(runnable.forget());
-  }
+  runnable->Dispatch(aCx);
 }
 
 void
@@ -1680,10 +1695,6 @@ PromiseWorkerProxy::RejectedCallback(JSContext* aCx,
 bool
 PromiseWorkerProxy::Notify(JSContext* aCx, Status aStatus)
 {
-  MOZ_ASSERT(mWorkerPrivate);
-  mWorkerPrivate->AssertIsOnWorkerThread();
-  MOZ_ASSERT(mWorkerPrivate->GetJSContext() == aCx);
-
   if (aStatus >= Canceling) {
     CleanUp(aCx);
   }
@@ -1694,24 +1705,54 @@ PromiseWorkerProxy::Notify(JSContext* aCx, Status aStatus)
 void
 PromiseWorkerProxy::CleanUp(JSContext* aCx)
 {
-  MutexAutoLock lock(mCleanUpLock);
+  // Can't release Mutex while it is still locked, so scope the lock.
+  {
+    MutexAutoLock lock(Lock());
 
-  // |mWorkerPrivate| might not be safe to use anymore if we have already
-  // cleaned up and RemoveFeature(), so we need to check |mCleanedUp| first.
-  if (mCleanedUp) {
-    return;
+    // |mWorkerPrivate| is not safe to use anymore if we have already
+    // cleaned up and RemoveFeature(), so we need to check |mCleanedUp| first.
+    if (CleanedUp()) {
+      return;
+    }
+
+    MOZ_ASSERT(mWorkerPrivate);
+    mWorkerPrivate->AssertIsOnWorkerThread();
+    MOZ_ASSERT(mWorkerPrivate->GetJSContext() == aCx);
+
+    // Release the Promise and remove the PromiseWorkerProxy from the features of
+    // the worker thread since the Promise has been resolved/rejected or the
+    // worker thread has been cancelled.
+    MOZ_ASSERT(mFeatureAdded);
+    mWorkerPrivate->RemoveFeature(mWorkerPrivate->GetJSContext(), this);
+    mFeatureAdded = false;
+    CleanProperties();
+  }
+  Release();
+}
+
+JSObject*
+PromiseWorkerProxy::ReadCallback(JSContext* aCx,
+                                 JSStructuredCloneReader* aReader,
+                                 uint32_t aTag,
+                                 uint32_t aIndex)
+{
+  if (NS_WARN_IF(!mCallbacks)) {
+    return nullptr;
   }
 
-  MOZ_ASSERT(mWorkerPrivate);
-  mWorkerPrivate->AssertIsOnWorkerThread();
-  MOZ_ASSERT(mWorkerPrivate->GetJSContext() == aCx);
+  return mCallbacks->Read(aCx, aReader, this, aTag, aIndex);
+}
 
-  // Release the Promise and remove the PromiseWorkerProxy from the features of
-  // the worker thread since the Promise has been resolved/rejected or the
-  // worker thread has been cancelled.
-  mWorkerPromise = nullptr;
-  mWorkerPrivate->RemoveFeature(aCx, this);
-  mCleanedUp = true;
+bool
+PromiseWorkerProxy::WriteCallback(JSContext* aCx,
+                                  JSStructuredCloneWriter* aWriter,
+                                  JS::Handle<JSObject*> aObj)
+{
+  if (NS_WARN_IF(!mCallbacks)) {
+    return false;
+  }
+
+  return mCallbacks->Write(aCx, aWriter, this, aObj);
 }
 
 // Specializations of MaybeRejectBrokenly we actually support.

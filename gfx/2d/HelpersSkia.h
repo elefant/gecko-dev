@@ -235,6 +235,12 @@ static inline SkColor ColorToSkColor(const Color &color, Float aAlpha)
                         ColorFloatToByte(color.g), ColorFloatToByte(color.b));
 }
 
+static inline SkPoint
+PointToSkPoint(const Point &aPoint)
+{
+  return SkPoint::Make(SkFloatToScalar(aPoint.x), SkFloatToScalar(aPoint.y));
+}
+
 static inline SkRect
 RectToSkRect(const Rect& aRect)
 {
@@ -288,6 +294,22 @@ ExtendModeToTileMode(ExtendMode aMode)
       return SkShader::kMirror_TileMode;
   }
   return SkShader::kClamp_TileMode;
+}
+
+static inline SkPaint::Hinting
+GfxHintingToSkiaHinting(FontHinting aHinting)
+{
+  switch (aHinting) {
+    case FontHinting::NONE:
+      return SkPaint::kNo_Hinting;
+    case FontHinting::LIGHT:
+      return SkPaint::kSlight_Hinting;
+    case FontHinting::NORMAL:
+      return SkPaint::kNormal_Hinting;
+    case FontHinting::FULL:
+      return SkPaint::kFull_Hinting;
+  }
+  return SkPaint::kNormal_Hinting;
 }
 
 } // namespace gfx

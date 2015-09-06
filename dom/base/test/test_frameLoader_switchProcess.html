@@ -59,10 +59,6 @@
       iframe.addEventListener("mozbrowsershowmodalprompt", function prompt(e) {
         iframe.removeEventListener("mozbrowsershowmodalprompt", prompt);
         ok(true, "Browser API still works after process switch");
-        expectProcessCreated().then(() => ok(false, "Unexpected process created"));
-        switchProcessAndLoadURI(iframe, "http://example.org");
-        newMessageManager = SpecialPowers.getBrowserFrameMessageManager(iframe);
-        isnot(messageManager, newMessageManager, "Got a new message manager");
         next();
       });
     }))
@@ -72,12 +68,11 @@
   }
 
   SpecialPowers.pushPrefEnv(
-    { "set": [["dom.ipc.processPriorityManager.enabled", true],
-              ["dom.ipc.processPriorityManager.testMode", true],
+    { "set": [["dom.ipc.processPriorityManager.testMode", true],
+              ["dom.ipc.processPriorityManager.enabled", true],
               ["dom.ipc.tabs.disabled", false],
               ["dom.ipc.processCount", 3],
-              ["dom.mozBrowserFramesEnabled", true],
-              ["nsec.tabs.lru-size", 3]] },
+              ["dom.mozBrowserFramesEnabled", true]] },
     () => SpecialPowers.pushPermissions([
       { "type": "browser", "allow": 1, "context": document }
     ], runTest));

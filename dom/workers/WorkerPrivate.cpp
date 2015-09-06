@@ -605,7 +605,8 @@ public:
                        TargetAndBusyBehavior aBehavior,
                        bool aToMessagePort, uint64_t aMessagePortSerial)
   : WorkerRunnable(aWorkerPrivate, aBehavior)
-  , StructuredCloneHelper(CloningSupported, TransferringSupported)
+  , StructuredCloneHelper(CloningSupported, TransferringSupported,
+                          SameProcessDifferentThread)
   , mMessagePortSerial(aMessagePortSerial)
   , mToMessagePort(aToMessagePort)
   {
@@ -1673,7 +1674,7 @@ WorkerLoadInfo::WorkerLoadInfo()
   , mPrincipalIsSystem(false)
   , mIsInPrivilegedApp(false)
   , mIsInCertifiedApp(false)
-  , mIndexedDBAllowed(false)
+  , mStorageAllowed(false)
   , mPrivateBrowsing(true)
   , mServiceWorkersTestingInWindow(false)
 {
@@ -1732,7 +1733,7 @@ WorkerLoadInfo::StealFrom(WorkerLoadInfo& aOther)
   mPrincipalIsSystem = aOther.mPrincipalIsSystem;
   mIsInPrivilegedApp = aOther.mIsInPrivilegedApp;
   mIsInCertifiedApp = aOther.mIsInCertifiedApp;
-  mIndexedDBAllowed = aOther.mIndexedDBAllowed;
+  mStorageAllowed = aOther.mStorageAllowed;
   mPrivateBrowsing = aOther.mPrivateBrowsing;
   mServiceWorkersTestingInWindow = aOther.mServiceWorkersTestingInWindow;
 }
@@ -2799,7 +2800,7 @@ WorkerPrivateParent<Derived>::PostMessageInternal(
                              WorkerRunnable::WorkerThreadModifyBusyCount,
                              aToMessagePort, aMessagePortSerial);
 
-  runnable->Write(aCx, aMessage, transferable, true, aRv);
+  runnable->Write(aCx, aMessage, transferable, aRv);
   if (NS_WARN_IF(aRv.Failed())) {
     return;
   }
@@ -4153,7 +4154,8 @@ WorkerPrivate::Constructor(JSContext* aCx,
                               aIsChromeWorker, InheritLoadGroup,
                               aWorkerType, stackLoadInfo.ptr());
     if (NS_FAILED(rv)) {
-      scriptloader::ReportLoadError(aCx, aScriptURL, rv, !parent);
+      // XXXkhuey this is weird, why throw again after setting an exception?
+      scriptloader::ReportLoadError(aCx, rv);
       aRv.Throw(rv);
       return nullptr;
     }
@@ -4266,12 +4268,15 @@ WorkerPrivate::GetLoadInfo(JSContext* aCx, nsPIDOMWindow* aWindow,
     loadInfo.mDomain = aParent->Domain();
     loadInfo.mFromWindow = aParent->IsFromWindow();
     loadInfo.mWindowID = aParent->WindowID();
-    loadInfo.mIndexedDBAllowed = aParent->IsIndexedDBAllowed();
+    loadInfo.mStorageAllowed = aParent->IsStorageAllowed();
     loadInfo.mPrivateBrowsing = aParent->IsInPrivateBrowsing();
     loadInfo.mServiceWorkersTestingInWindow =
       aParent->ServiceWorkersTestingInWindow();
   } else {
     AssertIsOnMainThread();
+
+    // Make sure that the IndexedDatabaseManager is set up
+    NS_WARN_IF(!indexedDB::IndexedDatabaseManager::GetOrCreate());
 
     nsIScriptSecurityManager* ssm = nsContentUtils::GetSecurityManager();
     MOZ_ASSERT(ssm);
@@ -4391,7 +4396,9 @@ WorkerPrivate::GetLoadInfo(JSContext* aCx, nsPIDOMWindow* aWindow,
       loadInfo.mIsInCertifiedApp = (appStatus == nsIPrincipal::APP_STATUS_CERTIFIED);
       loadInfo.mFromWindow = true;
       loadInfo.mWindowID = globalWindow->WindowID();
-      loadInfo.mIndexedDBAllowed = IDBFactory::AllowedForWindow(globalWindow);
+      nsContentUtils::StorageAccess access =
+        nsContentUtils::StorageAllowedForWindow(globalWindow);
+      loadInfo.mStorageAllowed = access > nsContentUtils::StorageAccess::eDeny;
       loadInfo.mPrivateBrowsing = nsContentUtils::IsInPrivateBrowsing(document);
     } else {
       // Not a window
@@ -4433,7 +4440,7 @@ WorkerPrivate::GetLoadInfo(JSContext* aCx, nsPIDOMWindow* aWindow,
       loadInfo.mXHRParamsAllowed = true;
       loadInfo.mFromWindow = false;
       loadInfo.mWindowID = UINT64_MAX;
-      loadInfo.mIndexedDBAllowed = true;
+      loadInfo.mStorageAllowed = true;
       loadInfo.mPrivateBrowsing = false;
     }
 
@@ -5550,7 +5557,7 @@ WorkerPrivate::PostMessageToParentInternal(
                              WorkerRunnable::ParentThreadUnchangedBusyCount,
                              aToMessagePort, aMessagePortSerial);
 
-  runnable->Write(aCx, aMessage, transferable, true, aRv);
+  runnable->Write(aCx, aMessage, transferable, aRv);
   if (NS_WARN_IF(aRv.Failed())) {
     return;
   }

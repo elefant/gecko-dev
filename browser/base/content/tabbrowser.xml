@@ -2470,6 +2470,13 @@
                 PrivateBrowsingUtils.isWindowPrivate(aOtherTab.ownerDocument.defaultView))
               return;
 
+            let ourBrowser = this.getBrowserForTab(aOurTab);
+            let otherBrowser = aOtherTab.linkedBrowser;
+
+            // Can't swap between chrome and content processes.
+            if (ourBrowser.isRemoteBrowser != otherBrowser.isRemoteBrowser)
+              return;
+
             // That's gBrowser for the other window, not the tab's browser!
             var remoteBrowser = aOtherTab.ownerDocument.defaultView.gBrowser;
             var isPending = aOtherTab.hasAttribute("pending");
@@ -2489,9 +2496,6 @@
               aOurTab.setAttribute("soundplaying", "true");
               modifiedAttrs.push("soundplaying");
             }
-
-            let ourBrowser = this.getBrowserForTab(aOurTab);
-            let otherBrowser = aOtherTab.linkedBrowser;
 
             // If the other tab is pending (i.e. has not been restored, yet)
             // then do not switch docShells but retrieve the other tab's state
@@ -3945,16 +3949,31 @@
             event.preventDefault();
             return;
           }
+
+          let stringWithShortcut = (stringId, keyElemId) => {
+            let keyElem = document.getElementById(keyElemId);
+            let shortcut = ShortcutUtils.prettifyShortcut(keyElem);
+            return this.mStringBundle.getFormattedString(stringId, [shortcut]);
+          };
+
           var label;
           if (tab.mOverCloseButton) {
-            label = this.mStringBundle.getString("tabs.closeTab.tooltip");
+            label = tab.selected ?
+                    stringWithShortcut("tabs.closeSelectedTab.tooltip", "key_close") :
+                    this.mStringBundle.getString("tabs.closeTab.tooltip");
           } else if (tab._overPlayingIcon) {
-            var stringID = tab.linkedBrowser.audioMuted ?
-              "tabs.unmuteAudio.tooltip" :
-              "tabs.muteAudio.tooltip";
-            var key = document.getElementById("key_toggleMute");
-            var shortcut = ShortcutUtils.prettifyShortcut(key);
-            label = this.mStringBundle.getFormattedString(stringID, [shortcut]);
+            let stringID;
+            if (tab.selected) {
+              stringID = tab.linkedBrowser.audioMuted ?
+                "tabs.unmuteAudio.tooltip" :
+                "tabs.muteAudio.tooltip";
+              label = stringWithShortcut(stringID, "key_toggleMute");
+            } else {
+              stringID = tab.linkedBrowser.audioMuted ?
+                "tabs.unmuteAudio.background.tooltip" :
+                "tabs.muteAudio.background.tooltip";
+              label = this.mStringBundle.getString(stringID);
+            }
           } else {
             label = tab.getAttribute("label") +
                       (this.AppConstants.E10S_TESTING_ONLY && tab.linkedBrowser && tab.linkedBrowser.isRemoteBrowser ? " - e10s" : "");
@@ -4037,6 +4056,7 @@
                                           frameOuterWindowID: aMessage.data.frameOuterWindowID,
                                           selectionInfo: aMessage.data.selectionInfo,
                                           disableSetDesktopBackground: aMessage.data.disableSetDesktopBg,
+                                          loginFillInfo: aMessage.data.loginFillInfo,
                                         };
               let popup = browser.ownerDocument.getElementById("contentAreaContextMenu");
               let event = gContextMenuContentData.event;
@@ -5439,23 +5459,30 @@
         // to get a full-resolution drag image for use on HiDPI displays.
         let windowUtils = window.getInterface(Ci.nsIDOMWindowUtils);
         let scale = windowUtils.screenPixelsPerCSSPixel / windowUtils.fullZoom;
-        let canvas = document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
+        let canvas = this._dndCanvas ? this._dndCanvas
+                                     : document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
         canvas.mozOpaque = true;
         canvas.width = 160 * scale;
         canvas.height = 90 * scale;
         let toDrag;
         if (gMultiProcessBrowser) {
+          var context = canvas.getContext('2d');
+          context.fillStyle = "white";
+          context.fillRect(0, 0, canvas.width, canvas.height);
           // Create a panel to use it in setDragImage
           // which will tell xul to render a panel that follows
           // the pointer while a dnd session is on.
-          var panel = document.createElement("panel");
-          panel.setAttribute("type", "drag");
-          panel.appendChild(canvas);
-          document.documentElement.appendChild(panel);
+          if (!this._dndPanel) {
+            this._dndCanvas = canvas;
+            this._dndPanel = document.createElement("panel");
+            this._dndPanel.setAttribute("type", "drag");
+            this._dndPanel.appendChild(canvas);
+            document.documentElement.appendChild(this._dndPanel);
+          }
           // PageThumb is async with e10s but that's fine
           // since we can update the panel during the dnd.
           PageThumbs.captureToCanvas(browser, canvas);
-          toDrag = panel;
+          toDrag = this._dndPanel;
         } else {
           // For the non e10s case we can just use PageThumbs
           // sync. No need for xul magic, the native dnd will

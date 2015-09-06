@@ -192,6 +192,10 @@
 #include "xpcprivate.h" // nsXPConnect
 #include "HTMLSplitOnSpacesTokenizer.h"
 #include "nsContentTypeParser.h"
+#include "nsICookiePermission.h"
+#include "mozIThirdPartyUtil.h"
+#include "nsICookieService.h"
+#include "mozilla/EnumSet.h"
 
 #include "nsIBidiKeyboard.h"
 
@@ -265,6 +269,9 @@ bool nsContentUtils::sPrivacyResistFingerprinting = false;
 bool nsContentUtils::sSendPerformanceTimingNotifications = false;
 
 uint32_t nsContentUtils::sHandlingInputTimeout = 1000;
+
+uint32_t nsContentUtils::sCookiesLifetimePolicy = nsICookieService::ACCEPT_NORMALLY;
+uint32_t nsContentUtils::sCookiesBehavior = nsICookieService::BEHAVIOR_ACCEPT;
 
 nsHtml5StringParser* nsContentUtils::sHTMLFragmentParser = nullptr;
 nsIParser* nsContentUtils::sXMLFragmentParser = nullptr;
@@ -538,7 +545,7 @@ nsContentUtils::Init()
                                "dom.performance.enable_user_timing_logging", false);
 
   Preferences::AddBoolVarCache(&sIsFrameTimingPrefEnabled,
-                               "dom.enable_frame_timing", true);
+                               "dom.enable_frame_timing", false);
 
   Preferences::AddBoolVarCache(&sIsExperimentalAutocompleteEnabled,
                                "dom.forms.autocomplete.experimental", false);
@@ -558,6 +565,14 @@ nsContentUtils::Init()
 
   Preferences::AddBoolVarCache(&sSendPerformanceTimingNotifications,
                                "dom.performance.enable_notify_performance_timing", false);
+
+  Preferences::AddUintVarCache(&sCookiesLifetimePolicy,
+                               "network.cookie.lifetimePolicy",
+                               nsICookieService::ACCEPT_NORMALLY);
+
+  Preferences::AddUintVarCache(&sCookiesBehavior,
+                               "network.cookie.cookieBehavior",
+                               nsICookieService::BEHAVIOR_ACCEPT);
 
 #if !(defined(DEBUG) || defined(MOZ_ENABLE_JS_DUMP))
   Preferences::AddBoolVarCache(&sDOMWindowDumpEnabled,
@@ -3443,6 +3458,8 @@ nsContentUtils::MaybeReportInterceptionErrorToConsole(nsIDocument* aDocument,
     messageName = "InterceptedUsedResponse";
   } else if (aError == NS_ERROR_CLIENT_REQUEST_OPAQUE_INTERCEPTION) {
     messageName = "ClientRequestOpaqueInterception";
+  } else if (aError == NS_ERROR_BAD_OPAQUE_REDIRECT_INTERCEPTION) {
+    messageName = "BadOpaqueRedirectInterception";
   }
 
   if (messageName) {
@@ -3485,7 +3502,7 @@ nsContentUtils::ReportToConsoleNonLocalized(const nsAString& aErrorText,
   if (!aLineNumber) {
     JSContext *cx = GetCurrentJSContext();
     if (cx) {
-      nsJSUtils::GetCallingLocation(cx, spec, &aLineNumber);
+      nsJSUtils::GetCallingLocation(cx, spec, &aLineNumber, &aColumnNumber);
     }
   }
   if (spec.IsEmpty() && aURI)
@@ -5447,8 +5464,8 @@ nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent)
   // For draggesture and dragstart events, the data transfer object is
   // created before the event fires, so it should already be set. For other
   // drag events, get the object from the drag session.
-  NS_ASSERTION(aDragEvent->mMessage != NS_DRAGDROP_GESTURE &&
-               aDragEvent->mMessage != NS_DRAGDROP_START,
+  NS_ASSERTION(aDragEvent->mMessage != eLegacyDragGesture &&
+               aDragEvent->mMessage != eDragStart,
                "draggesture event created without a dataTransfer");
 
   nsCOMPtr<nsIDragSession> dragSession = GetDragSession();
@@ -5475,8 +5492,8 @@ nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent)
   }
 
   bool isCrossDomainSubFrameDrop = false;
-  if (aDragEvent->mMessage == NS_DRAGDROP_DROP ||
-      aDragEvent->mMessage == NS_DRAGDROP_DRAGDROP) {
+  if (aDragEvent->mMessage == eDrop ||
+      aDragEvent->mMessage == eLegacyDragDrop) {
     isCrossDomainSubFrameDrop = CheckForSubFrameDrop(dragSession, aDragEvent);
   }
 
@@ -5490,16 +5507,15 @@ nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent)
   // for the dragenter and dragover events, initialize the drop effect
   // from the drop action, which platform specific widget code sets before
   // the event is fired based on the keyboard state.
-  if (aDragEvent->mMessage == NS_DRAGDROP_ENTER ||
-      aDragEvent->mMessage == NS_DRAGDROP_OVER) {
+  if (aDragEvent->mMessage == eDragEnter || aDragEvent->mMessage == eDragOver) {
     uint32_t action, effectAllowed;
     dragSession->GetDragAction(&action);
     aDragEvent->dataTransfer->GetEffectAllowedInt(&effectAllowed);
     aDragEvent->dataTransfer->SetDropEffectInt(FilterDropEffect(action, effectAllowed));
   }
-  else if (aDragEvent->mMessage == NS_DRAGDROP_DROP ||
-           aDragEvent->mMessage == NS_DRAGDROP_DRAGDROP ||
-           aDragEvent->mMessage == NS_DRAGDROP_END) {
+  else if (aDragEvent->mMessage == eDrop ||
+           aDragEvent->mMessage == eLegacyDragDrop ||
+           aDragEvent->mMessage == eDragEnd) {
     // For the drop and dragend events, set the drop effect based on the
     // last value that the dropEffect had. This will have been set in
     // EventStateManager::PostHandleEvent for the last dragenter or
@@ -7709,18 +7725,18 @@ nsContentUtils::SendKeyEvent(nsIWidget* aWidget,
 
   EventMessage msg;
   if (aType.EqualsLiteral("keydown"))
-    msg = NS_KEY_DOWN;
+    msg = eKeyDown;
   else if (aType.EqualsLiteral("keyup"))
-    msg = NS_KEY_UP;
+    msg = eKeyUp;
   else if (aType.EqualsLiteral("keypress"))
-    msg = NS_KEY_PRESS;
+    msg = eKeyPress;
   else
     return NS_ERROR_FAILURE;
 
   WidgetKeyboardEvent event(true, msg, aWidget);
   event.modifiers = GetWidgetModifiers(aModifiers);
 
-  if (msg == NS_KEY_PRESS) {
+  if (msg == eKeyPress) {
     event.keyCode = aCharCode ? 0 : aKeyCode;
     event.charCode = aCharCode;
   } else {
@@ -7823,20 +7839,20 @@ nsContentUtils::SendMouseEvent(nsCOMPtr<nsIPresShell> aPresShell,
   EventMessage msg;
   bool contextMenuKey = false;
   if (aType.EqualsLiteral("mousedown"))
-    msg = NS_MOUSE_BUTTON_DOWN;
+    msg = eMouseDown;
   else if (aType.EqualsLiteral("mouseup"))
-    msg = NS_MOUSE_BUTTON_UP;
+    msg = eMouseUp;
   else if (aType.EqualsLiteral("mousemove"))
-    msg = NS_MOUSE_MOVE;
+    msg = eMouseMove;
   else if (aType.EqualsLiteral("mouseover"))
-    msg = NS_MOUSE_ENTER_WIDGET;
+    msg = eMouseEnterIntoWidget;
   else if (aType.EqualsLiteral("mouseout"))
-    msg = NS_MOUSE_EXIT_WIDGET;
+    msg = eMouseExitFromWidget;
   else if (aType.EqualsLiteral("contextmenu")) {
-    msg = NS_CONTEXTMENU;
+    msg = eContextMenu;
     contextMenuKey = (aButton == 0);
   } else if (aType.EqualsLiteral("MozMouseHittest"))
-    msg = NS_MOUSE_MOZHITTEST;
+    msg = eMouseHitTest;
   else
     return NS_ERROR_FAILURE;
 
@@ -8054,4 +8070,136 @@ nsContentUtils::PushEnabled(JSContext* aCx, JSObject* aObj)
   }
 
   return workerPrivate->PushEnabled();
+}
+
+// static, public
+nsContentUtils::StorageAccess
+nsContentUtils::StorageAllowedForWindow(nsPIDOMWindow* aWindow)
+{
+  MOZ_ASSERT(aWindow->IsInnerWindow());
+
+  nsIDocument* document = aWindow->GetExtantDoc();
+  if (document) {
+    nsCOMPtr<nsIPrincipal> principal = document->NodePrincipal();
+    return InternalStorageAllowedForPrincipal(principal, aWindow);
+  }
+
+  return StorageAccess::eDeny;
+}
+
+// static, public
+nsContentUtils::StorageAccess
+nsContentUtils::StorageAllowedForPrincipal(nsIPrincipal* aPrincipal)
+{
+  return InternalStorageAllowedForPrincipal(aPrincipal, nullptr);
+}
+
+// static, private
+nsContentUtils::StorageAccess
+nsContentUtils::InternalStorageAllowedForPrincipal(nsIPrincipal* aPrincipal,
+                                                   nsPIDOMWindow* aWindow)
+{
+  MOZ_ASSERT(aPrincipal);
+  MOZ_ASSERT(!aWindow || aWindow->IsInnerWindow());
+
+  StorageAccess access = StorageAccess::eAllow;
+
+  // We don't allow storage on the null principal, in general. Even if the
+  // calling context is chrome.
+  bool isNullPrincipal;
+  if (NS_WARN_IF(NS_FAILED(aPrincipal->GetIsNullPrincipal(&isNullPrincipal))) ||
+      isNullPrincipal) {
+    return StorageAccess::eDeny;
+  }
+
+  if (aWindow) {
+    // If the document is sandboxed, then it is not permitted to use storage
+    nsIDocument* document = aWindow->GetExtantDoc();
+    if (document->GetSandboxFlags() & SANDBOXED_ORIGIN) {
+      return StorageAccess::eDeny;
+    }
+
+    // Check if we are in private browsing, and record that fact
+    if (IsInPrivateBrowsing(document)) {
+      access = StorageAccess::ePrivateBrowsing;
+    }
+  }
+
+  // Check if we should only allow storage for the session, and record that fact
+  if (sCookiesLifetimePolicy == nsICookieService::ACCEPT_SESSION) {
+    // Storage could be StorageAccess::ePrivateBrowsing or StorageAccess::eAllow
+    // so perform a std::min comparison to make sure we preserve ePrivateBrowsing
+    // if it has been set.
+    access = std::min(StorageAccess::eSessionScoped, access);
+  }
+
+  // If the caller is chrome privileged, then it is allowed to access any
+  // storage it likes, no matter whether the storage for that window/principal
+  // would normally be permitted.
+  if (IsSystemPrincipal(SubjectPrincipal())) {
+    return access;
+  }
+
+  if (!SubjectPrincipal()->Subsumes(aPrincipal)) {
+    NS_WARNING("A principal is attempting to access storage for a principal "
+               "which it doesn't subsume!");
+    return StorageAccess::eDeny;
+  }
+
+  // About URIs are allowed to access storage, even if they don't have chrome
+  // privileges. If this is not desired, than the consumer will have to
+  // implement their own restriction functionality.
+  nsCOMPtr<nsIURI> uri;
+  MOZ_ALWAYS_TRUE(NS_SUCCEEDED(aPrincipal->GetURI(getter_AddRefs(uri))));
+  bool isAbout = false;
+  MOZ_ALWAYS_TRUE(NS_SUCCEEDED(uri->SchemeIs("about", &isAbout)));
+  if (isAbout) {
+    return access;
+  }
+
+  nsCOMPtr<nsIPermissionManager> permissionManager =
+    services::GetPermissionManager();
+  if (!permissionManager) {
+    return StorageAccess::eDeny;
+  }
+
+  // check the permission manager for any allow or deny permissions
+  // for cookies for the window.
+  uint32_t perm;
+  permissionManager->TestPermissionFromPrincipal(aPrincipal, "cookie", &perm);
+  if (perm == nsIPermissionManager::DENY_ACTION) {
+    return StorageAccess::eDeny;
+  } else if (perm == nsICookiePermission::ACCESS_SESSION) {
+    return std::min(access, StorageAccess::eSessionScoped);
+  } else if (perm == nsIPermissionManager::ALLOW_ACTION) {
+    return access;
+  }
+
+  // We don't want to prompt for every attempt to access permissions, so we
+  // treat the cookie ASK_BEFORE_ACCEPT as though it was a reject.
+  if (sCookiesBehavior == nsICookieService::BEHAVIOR_REJECT ||
+      sCookiesLifetimePolicy == nsICookieService::ASK_BEFORE_ACCEPT) {
+    return StorageAccess::eDeny;
+  }
+
+  // In the absense of a window, we assume that we are first-party.
+  if (aWindow && (sCookiesBehavior == nsICookieService::BEHAVIOR_REJECT_FOREIGN ||
+                  sCookiesBehavior == nsICookieService::BEHAVIOR_LIMIT_FOREIGN)) {
+    nsCOMPtr<mozIThirdPartyUtil> thirdPartyUtil =
+      do_GetService(THIRDPARTYUTIL_CONTRACTID);
+    MOZ_ASSERT(thirdPartyUtil);
+
+    bool thirdPartyWindow = false;
+    if (NS_SUCCEEDED(thirdPartyUtil->IsThirdPartyWindow(
+          aWindow, nullptr, &thirdPartyWindow)) && thirdPartyWindow) {
+      // XXX For non-cookie forms of storage, we handle BEHAVIOR_LIMIT_FOREIGN by
+      // simply rejecting the request to use the storage. In the future, if we
+      // change the meaning of BEHAVIOR_LIMIT_FOREIGN to be one which makes sense
+      // for non-cookie storage types, this may change.
+
+      return StorageAccess::eDeny;
+    }
+  }
+
+  return access;
 }

@@ -54,7 +54,10 @@ class WebMDemuxer : public MediaDataDemuxer
 {
 public:
   explicit WebMDemuxer(MediaResource* aResource);
-
+  // Indicate if the WebMDemuxer is to be used with MediaSource. In which
+  // case the demuxer will stop reads to the last known complete block.
+  WebMDemuxer(MediaResource* aResource, bool aIsMediaSource);
+  
   nsRefPtr<InitPromise> Init() override;
 
   already_AddRefed<MediaDataDemuxer> Clone() const override;
@@ -91,10 +94,14 @@ public:
     return &mResource;
   }
 
-  int64_t GetEndDataOffset()
+  int64_t GetEndDataOffset() const
   {
-    return mLastWebMBlockOffset < 0 || mIsExpectingMoreData
+    return (!mIsMediaSource || mLastWebMBlockOffset < 0)
       ? mResource.GetLength() : mLastWebMBlockOffset;
+  }
+  int64_t IsMediaSource() const
+  {
+    return mIsMediaSource;
   }
 
 private:
@@ -149,11 +156,10 @@ private:
   // Nanoseconds to discard after seeking.
   uint64_t mSeekPreroll;
 
-  int64_t mLastAudioFrameTime;
-
   // Calculate the frame duration from the last decodeable frame using the
   // previous frame's timestamp.  In NS.
-  int64_t mLastVideoFrameTime;
+  Maybe<int64_t> mLastAudioFrameTime;
+  Maybe<int64_t> mLastVideoFrameTime;
 
   // Codec ID of audio track
   int mAudioCodec;
@@ -169,7 +175,7 @@ private:
   // We cache those values rather than retrieving them for performance reasons
   // as nestegg only performs 1-byte read at a time.
   int64_t mLastWebMBlockOffset;
-  bool mIsExpectingMoreData;
+  const bool mIsMediaSource;
 };
 
 class WebMTrackDemuxer : public MediaTrackDemuxer

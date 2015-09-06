@@ -26,7 +26,6 @@
 #include "nsWeakReference.h"
 #include "nsITabChild.h"
 #include "nsITooltipListener.h"
-#include "nsIWebProgressListener.h"
 #include "mozilla/Attributes.h"
 #include "mozilla/dom/TabContext.h"
 #include "mozilla/DOMEventTargetHelper.h"
@@ -226,8 +225,7 @@ class TabChild final : public TabChildBase,
                        public nsITabChild,
                        public nsIObserver,
                        public TabContext,
-                       public nsITooltipListener,
-                       public nsIWebProgressListener
+                       public nsITooltipListener
 {
     typedef mozilla::dom::ClonedMessageData ClonedMessageData;
     typedef mozilla::OwningSerializedStructuredCloneBuffer OwningSerializedStructuredCloneBuffer;
@@ -273,21 +271,20 @@ public:
     NS_DECL_NSITABCHILD
     NS_DECL_NSIOBSERVER
     NS_DECL_NSITOOLTIPLISTENER
-    NS_DECL_NSIWEBPROGRESSLISTENER
 
     /**
      * MessageManagerCallback methods that we override.
      */
     virtual bool DoSendBlockingMessage(JSContext* aCx,
                                        const nsAString& aMessage,
-                                       const mozilla::dom::StructuredCloneData& aData,
+                                       mozilla::dom::StructuredCloneIPCHelper& aHelper,
                                        JS::Handle<JSObject *> aCpows,
                                        nsIPrincipal* aPrincipal,
                                        nsTArray<OwningSerializedStructuredCloneBuffer>* aRetVal,
                                        bool aIsSync) override;
     virtual bool DoSendAsyncMessage(JSContext* aCx,
                                     const nsAString& aMessage,
-                                    const mozilla::dom::StructuredCloneData& aData,
+                                    mozilla::dom::StructuredCloneIPCHelper& aHelper,
                                     JS::Handle<JSObject *> aCpows,
                                     nsIPrincipal* aPrincipal) override;
     virtual bool DoUpdateZoomConstraints(const uint32_t& aPresShellId,
@@ -306,6 +303,7 @@ public:
                           const bool& aParentIsActive) override;
     virtual bool RecvUpdateDimensions(const CSSRect& rect,
                                       const CSSSize& size,
+                                      const nsSizeMode& sizeMode,
                                       const ScreenOrientationInternal& orientation,
                                       const LayoutDeviceIntPoint& chromeDisp) override;
     virtual bool RecvUpdateFrame(const layers::FrameMetrics& aFrameMetrics) override;
@@ -337,6 +335,7 @@ public:
                                 const int32_t&  aModifiers,
                                 const bool&     aIgnoreRootScrollFrame) override;
     virtual bool RecvRealMouseMoveEvent(const mozilla::WidgetMouseEvent& event) override;
+    virtual bool RecvSynthMouseMoveEvent(const mozilla::WidgetMouseEvent& event) override;
     virtual bool RecvRealMouseButtonEvent(const mozilla::WidgetMouseEvent& event) override;
     virtual bool RecvRealDragEvent(const WidgetDragEvent& aEvent,
                                    const uint32_t& aDragAction,
@@ -376,9 +375,6 @@ public:
     virtual bool RecvAppOfflineStatus(const uint32_t& aId, const bool& aOffline) override;
 
     virtual bool RecvSwappedWithOtherRemoteLoader() override;
-
-    virtual bool RecvGotoBFCache() override;
-    virtual bool RecvResumeFromBFCache() override;
 
     virtual PDocAccessibleChild* AllocPDocAccessibleChild(PDocAccessibleChild*,
                                                           const uint64_t&)
@@ -516,7 +512,7 @@ protected:
     virtual bool DeallocPRenderFrameChild(PRenderFrameChild* aFrame) override;
     virtual bool RecvDestroy() override;
     virtual bool RecvSetUpdateHitRegion(const bool& aEnabled) override;
-    virtual bool RecvSetIsDocShellActive(const bool& aIsActive) override;
+    virtual bool RecvSetDocShellIsActive(const bool& aIsActive) override;
     virtual bool RecvNavigateByKey(const bool& aForward, const bool& aForDocumentNavigation) override;
 
     virtual bool RecvRequestNotifyAfterRemotePaint() override;
@@ -657,8 +653,6 @@ private:
     bool mParentIsActive;
     bool mAsyncPanZoomEnabled;
     CSSSize mUnscaledInnerSize;
-
-    bool mIsInBFCache;
 
     nsAutoTArray<bool, NUMBER_OF_AUDIO_CHANNELS> mAudioChannelsActive;
 

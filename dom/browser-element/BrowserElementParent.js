@@ -232,9 +232,9 @@ BrowserElementParent.prototype = {
     };
 
     if (aMsg.data.msg_name in mmCalls) {
-      mmCalls[aMsg.data.msg_name].apply(this, arguments);
+      return mmCalls[aMsg.data.msg_name].apply(this, arguments);
     } else if (!this._isWidget && aMsg.data.msg_name in mmSecuritySensitiveCalls) {
-      mmSecuritySensitiveCalls[aMsg.data.msg_name].apply(this, arguments);
+      return mmSecuritySensitiveCalls[aMsg.data.msg_name].apply(this, arguments);
     }
   },
 

@@ -79,7 +79,7 @@
 #include "nsWindowWatcher.h"
 #include "private/pprio.h"
 #include "PermissionMessageUtils.h"
-#include "StructuredCloneUtils.h"
+#include "StructuredCloneIPCHelper.h"
 #include "ColorPickerParent.h"
 #include "FilePickerParent.h"
 #include "TabChild.h"
@@ -99,7 +99,6 @@
 #include "UnitTransforms.h"
 #include <algorithm>
 #include "mozilla/WebBrowserPersistDocumentParent.h"
-#include "TabParentLRU.h"
 
 using namespace mozilla::dom;
 using namespace mozilla::ipc;
@@ -108,13 +107,6 @@ using namespace mozilla::layout;
 using namespace mozilla::services;
 using namespace mozilla::widget;
 using namespace mozilla::jsipc;
-
-#define LOG(args) NS_WARNING args
-
-#ifdef MOZ_WIDGET_GONK
-  #undef LOG
-  #define LOG(args) printf_stderr args
-#endif
 
 // The flags passed by the webProgress notifications are 16 bits shifted
 // from the ones registered by webProgressListeners.
@@ -284,6 +276,7 @@ TabParent::TabParent(nsIContentParent* aManager,
   , mDefaultScale(0)
   , mUpdatedDimensions(false)
   , mManager(aManager)
+  , mDocShellIsActive(false)
   , mMarkedDestroying(false)
   , mIsDestroyed(false)
   , mIsDetached(true)
@@ -451,21 +444,15 @@ TabParent::SwitchProcessAndLoadURI(nsIURI* aURI)
 
   nsRefPtr<nsFrameLoader> frameLoader = GetFrameLoader();
   if (!frameLoader) {
-    LOG(("No frame loader in this tab. What up?!"));
     return;
   }
 
-  LOG(("Switch to new process and load URI"));
   frameLoader->SwitchProcessAndLoadURI(aURI);
 }
 
 void
-TabParent::Destroy()
+TabParent::DestroyInternal()
 {
-  if (mIsDestroyed) {
-    return;
-  }
-
   IMEStateManager::OnTabParentDestroying(this);
 
   RemoveWindowListeners();
@@ -479,11 +466,6 @@ TabParent::Destroy()
     RemoveTabParentFromTable(frame->GetLayersId());
     frame->Destroy();
   }
-  mIsDestroyed = true;
-
-  if (XRE_IsParentProcess()) {
-    Manager()->AsContentParent()->NotifyTabDestroying(this);
-  }
 
   // Let all PluginWidgets know we are tearing down. Prevents
   // these objects from sending async events after the child side
@@ -491,6 +473,24 @@ TabParent::Destroy()
   const nsTArray<PPluginWidgetParent*>& kids = ManagedPPluginWidgetParent();
   for (uint32_t idx = 0; idx < kids.Length(); ++idx) {
       static_cast<mozilla::plugins::PluginWidgetParent*>(kids[idx])->ParentDestroy();
+  }
+}
+
+void
+TabParent::Destroy()
+{
+  if (mIsDestroyed) {
+    return;
+  }
+
+  DestroyInternal();
+
+  mIsDestroyed = true;
+
+  if (XRE_IsParentProcess()) {
+    ContentParent::NotifyTabDestroying(this->GetTabId(), Manager()->AsContentParent()->ChildID());
+  } else {
+    ContentParent::NotifyTabDestroying(this->GetTabId(), Manager()->ChildID());
   }
 
   mMarkedDestroying = true;
@@ -505,9 +505,6 @@ TabParent::Detach()
   RemoveWindowListeners();
   if (RenderFrameParent* frame = GetRenderFrame()) {
     RemoveTabParentFromTable(frame->GetLayersId());
-  }
-  if (XRE_IsParentProcess()) {
-    Manager()->AsContentParent()->CacheTabParent(this);
   }
   mIsDetached = true;
 }
@@ -525,9 +522,6 @@ TabParent::Attach(nsFrameLoader* aFrameLoader)
     AddTabParentToTable(frame->GetLayersId(), this);
     frame->OwnerContentChanged(ownerElement);
   }
-  if (XRE_IsParentProcess()) {
-    Manager()->AsContentParent()->TakeTabParent(this);
-  }
   mIsDetached = false;
 }
 
@@ -535,12 +529,15 @@ bool
 TabParent::Recv__delete__()
 {
   if (XRE_IsParentProcess()) {
-    Manager()->AsContentParent()->NotifyTabDestroyed(this, mMarkedDestroying);
     ContentParent::DeallocateTabId(mTabId,
-                                   Manager()->AsContentParent()->ChildID());
+                                   Manager()->AsContentParent()->ChildID(),
+                                   mMarkedDestroying);
   }
   else {
-    ContentParent::DeallocateTabId(mTabId, ContentParentId(0));
+    Manager()->AsContentBridgeParent()->NotifyTabDestroyed();
+    ContentParent::DeallocateTabId(mTabId,
+                                   Manager()->ChildID(),
+                                   mMarkedDestroying);
   }
 
   return true;
@@ -552,6 +549,22 @@ TabParent::ActorDestroy(ActorDestroyReason why)
   // Even though TabParent::Destroy calls this, we need to do it here too in
   // case of a crash.
   IMEStateManager::OnTabParentDestroying(this);
+
+  // Prevent executing ContentParent::NotifyTabDestroying in
+  // TabParent::Destroy() called by frameLoader->DestroyComplete() below
+  // when tab crashes in contentprocess because ContentParent::ActorDestroy()
+  // in main process will be triggered before this function
+  // and remove the process information that
+  // ContentParent::NotifyTabDestroying need from mContentParentMap.
+
+  // When tab crashes in content process,
+  // there is no need to call ContentParent::NotifyTabDestroying
+  // because the jobs in ContentParent::NotifyTabDestroying
+  // will be done by ContentParent::ActorDestroy.
+  if (XRE_IsContentProcess() && why == AbnormalShutdown && !mIsDestroyed) {
+    DestroyInternal();
+    mIsDestroyed = true;
+  }
 
   nsRefPtr<nsFrameLoader> frameLoader = GetFrameLoader(true);
   nsCOMPtr<nsIObserverService> os = services::GetObserverService();
@@ -1118,7 +1131,9 @@ TabParent::UpdateDimensions(const nsIntRect& rect, const ScreenIntSize& size)
 
     CSSRect unscaledRect = devicePixelRect / widgetScale;
     CSSSize unscaledSize = devicePixelSize / widgetScale;
-    unused << SendUpdateDimensions(unscaledRect, unscaledSize, orientation, chromeOffset);
+    unused << SendUpdateDimensions(unscaledRect, unscaledSize,
+                                   widget->SizeMode(),
+                                   orientation, chromeOffset);
   }
 }
 
@@ -1442,20 +1457,24 @@ bool TabParent::SendRealMouseEvent(WidgetMouseEvent& event)
   if (widget) {
     // When we mouseenter the tab, the tab's cursor should
     // become the current cursor.  When we mouseexit, we stop.
-    if (NS_MOUSE_ENTER_WIDGET == event.mMessage) {
+    if (eMouseEnterIntoWidget == event.mMessage) {
       mTabSetsCursor = true;
       if (mCustomCursor) {
         widget->SetCursor(mCustomCursor, mCustomCursorHotspotX, mCustomCursorHotspotY);
       } else if (mCursor != nsCursor(-1)) {
         widget->SetCursor(mCursor);
       }
-    } else if (NS_MOUSE_EXIT_WIDGET == event.mMessage) {
+    } else if (eMouseExitFromWidget == event.mMessage) {
       mTabSetsCursor = false;
     }
   }
 
-  if (NS_MOUSE_MOVE == event.mMessage) {
-    return SendRealMouseMoveEvent(event);
+  if (eMouseMove == event.mMessage) {
+    if (event.reason == WidgetMouseEvent::eSynthesized) {
+      return SendSynthMouseMoveEvent(event);
+    } else {
+      return SendRealMouseMoveEvent(event);
+    }
   }
   return SendRealMouseButtonEvent(event);
 }
@@ -1796,7 +1815,7 @@ bool TabParent::SendRealKeyEvent(WidgetKeyboardEvent& event)
 
   MaybeNativeKeyBinding bindings;
   bindings = void_t();
-  if (event.mMessage == NS_KEY_PRESS) {
+  if (event.mMessage == eKeyPress) {
     nsCOMPtr<nsIWidget> widget = GetWidget();
 
     AutoInfallibleTArray<mozilla::CommandInt, 4> singleLine;
@@ -1872,9 +1891,11 @@ TabParent::RecvSyncMessage(const nsString& aMessage,
     }
   }
 
-  StructuredCloneData cloneData = ipc::UnpackClonedMessageDataForParent(aData);
+  StructuredCloneIPCHelper helper;
+  ipc::UnpackClonedMessageDataForParent(aData, helper);
+
   CrossProcessCpowHolder cpows(Manager(), aCpows);
-  return ReceiveMessage(aMessage, true, &cloneData, &cpows, aPrincipal, aRetVal);
+  return ReceiveMessage(aMessage, true, &helper, &cpows, aPrincipal, aRetVal);
 }
 
 bool
@@ -1894,9 +1915,11 @@ TabParent::RecvRpcMessage(const nsString& aMessage,
     }
   }
 
-  StructuredCloneData cloneData = ipc::UnpackClonedMessageDataForParent(aData);
+  StructuredCloneIPCHelper helper;
+  ipc::UnpackClonedMessageDataForParent(aData, helper);
+
   CrossProcessCpowHolder cpows(Manager(), aCpows);
-  return ReceiveMessage(aMessage, true, &cloneData, &cpows, aPrincipal, aRetVal);
+  return ReceiveMessage(aMessage, true, &helper, &cpows, aPrincipal, aRetVal);
 }
 
 bool
@@ -1915,9 +1938,11 @@ TabParent::RecvAsyncMessage(const nsString& aMessage,
     }
   }
 
-  StructuredCloneData cloneData = ipc::UnpackClonedMessageDataForParent(aData);
+  StructuredCloneIPCHelper helper;
+  ipc::UnpackClonedMessageDataForParent(aData, helper);
+
   CrossProcessCpowHolder cpows(Manager(), aCpows);
-  return ReceiveMessage(aMessage, false, &cloneData, &cpows, aPrincipal, nullptr);
+  return ReceiveMessage(aMessage, false, &helper, &cpows, aPrincipal, nullptr);
 }
 
 bool
@@ -2337,7 +2362,7 @@ TabParent::RecvDispatchAfterKeyboardEvent(const WidgetKeyboardEvent& aEvent)
 
   if (mFrameElement &&
       PresShell::BeforeAfterKeyboardEventEnabled() &&
-      localEvent.mMessage != NS_KEY_PRESS) {
+      localEvent.mMessage != eKeyPress) {
     presShell->DispatchAfterKeyboardEvent(mFrameElement, localEvent,
                                           aEvent.mFlags.mDefaultPrevented);
   }
@@ -2483,7 +2508,7 @@ TabParent::RecvStartPluginIME(const WidgetKeyboardEvent& aKeyboardEvent,
     return true;
   }
   widget->StartPluginIME(aKeyboardEvent,
-                         (int32_t&)aPanelX,
+                         (int32_t&)aPanelX, 
                          (int32_t&)aPanelY,
                          *aCommitted);
   return true;
@@ -2651,7 +2676,7 @@ TabParent::RecvDispatchFocusToTopLevelWindow()
 bool
 TabParent::ReceiveMessage(const nsString& aMessage,
                           bool aSync,
-                          const StructuredCloneData* aCloneData,
+                          StructuredCloneIPCHelper* aHelper,
                           CpowHolder* aCpows,
                           nsIPrincipal* aPrincipal,
                           nsTArray<OwningSerializedStructuredCloneBuffer>* aRetVal)
@@ -2665,7 +2690,7 @@ TabParent::ReceiveMessage(const nsString& aMessage,
                             frameLoader,
                             aMessage,
                             aSync,
-                            aCloneData,
+                            aHelper,
                             aCpows,
                             aPrincipal,
                             aRetVal);
@@ -2905,6 +2930,16 @@ TabParent::RecvUpdateZoomConstraints(const uint32_t& aPresShellId,
 }
 
 bool
+TabParent::RecvRespondStartSwipeEvent(const uint64_t& aInputBlockId,
+                                      const bool& aStartSwipe)
+{
+  if (nsCOMPtr<nsIWidget> widget = GetWidget()) {
+    widget->ReportSwipeStarted(aInputBlockId, aStartSwipe);
+  }
+  return true;
+}
+
+bool
 TabParent::RecvContentReceivedInputBlock(const ScrollableLayerGuid& aGuid,
                                          const uint64_t& aInputBlockId,
                                          const bool& aPreventDefault)
@@ -3023,10 +3058,19 @@ TabParent::GetUseAsyncPanZoom(bool* useAsyncPanZoom)
   return NS_OK;
 }
 
+// defined in nsITabParent
 NS_IMETHODIMP
-TabParent::SetIsDocShellActive(bool isActive)
+TabParent::SetDocShellIsActive(bool isActive)
 {
-  unused << SendSetIsDocShellActive(isActive);
+  mDocShellIsActive = isActive;
+  unused << SendSetDocShellIsActive(isActive);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+TabParent::GetDocShellIsActive(bool* aIsActive)
+{
+  *aIsActive = mDocShellIsActive;
   return NS_OK;
 }
 
@@ -3412,7 +3456,7 @@ TabParent::RecvInvokeDragSession(nsTArray<IPCDataTransfer>&& aTransfers,
   }
   mDragAreaX = aDragAreaX;
   mDragAreaY = aDragAreaY;
-
+  
   esm->BeginTrackingRemoteDragGesture(mFrameElement);
 
   return true;
@@ -3489,42 +3533,6 @@ TabParent::StartPersistence(uint64_t aOuterWindowID,
   return SendPWebBrowserPersistDocumentConstructor(actor, aOuterWindowID)
     ? NS_OK : NS_ERROR_FAILURE;
   // (The actor will be destroyed on constructor failure.)
-}
-
-bool
-TabParent::RecvLocationChange(const URIParams& aCurrentURI)
-{
-  mCurrentLocation = DeserializeURI(aCurrentURI);
-  return true;
-}
-
-already_AddRefed<nsIURI>
-TabParent::GetCurrentLocation()
-{
-  nsCOMPtr<nsIURI> uri = mCurrentLocation;
-  return uri.forget();
-}
-
-bool
-TabParent::SendGotoBFCache()
-{
-  TabParentLRU* lru = TabParentLRU::GetSingleton();
-  if (PBrowserParent::SendGotoBFCache()) {
-    lru->Add(this);
-    return true;
-  }
-  return false;
-}
-
-bool
-TabParent::SendResumeFromBFCache()
-{
-  TabParentLRU* lru = TabParentLRU::GetSingleton();
-  if (PBrowserParent::SendResumeFromBFCache()) {
-    lru->Remove(this);
-    return true;
-  }
-  return false;
 }
 
 NS_IMETHODIMP

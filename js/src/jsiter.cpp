@@ -935,7 +935,7 @@ IsIterator(HandleValue v)
 }
 
 MOZ_ALWAYS_INLINE bool
-iterator_next_impl(JSContext* cx, CallArgs args)
+iterator_next_impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(IsIterator(args.thisv()));
 
@@ -992,7 +992,6 @@ PropertyIteratorObject::finalize(FreeOp* fop, JSObject* obj)
 
 const Class PropertyIteratorObject::class_ = {
     "Iterator",
-    JSCLASS_IMPLEMENTS_BARRIERS |
     JSCLASS_HAS_CACHED_PROTO(JSProto_Iterator) |
     JSCLASS_HAS_PRIVATE |
     JSCLASS_BACKGROUND_FINALIZE,
@@ -1013,7 +1012,7 @@ const Class PropertyIteratorObject::class_ = {
 
 static const Class ArrayIteratorPrototypeClass = {
     "Array Iterator",
-    JSCLASS_IMPLEMENTS_BARRIERS
+    0
 };
 
 enum {
@@ -1025,7 +1024,6 @@ enum {
 
 const Class ArrayIteratorObject::class_ = {
     "Array Iterator",
-    JSCLASS_IMPLEMENTS_BARRIERS |
     JSCLASS_HAS_RESERVED_SLOTS(ArrayIteratorSlotCount)
 };
 
@@ -1037,7 +1035,7 @@ static const JSFunctionSpec array_iterator_methods[] = {
 
 static const Class StringIteratorPrototypeClass = {
     "String Iterator",
-    JSCLASS_IMPLEMENTS_BARRIERS
+    0
 };
 
 enum {
@@ -1048,7 +1046,6 @@ enum {
 
 const Class StringIteratorObject::class_ = {
     "String Iterator",
-    JSCLASS_IMPLEMENTS_BARRIERS |
     JSCLASS_HAS_RESERVED_SLOTS(StringIteratorSlotCount)
 };
 

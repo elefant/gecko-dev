@@ -221,7 +221,7 @@ IsWeakMap(HandleValue v)
 }
 
 MOZ_ALWAYS_INLINE bool
-WeakMap_has_impl(JSContext* cx, CallArgs args)
+WeakMap_has_impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(IsWeakMap(args.thisv()));
 
@@ -250,7 +250,7 @@ js::WeakMap_has(JSContext* cx, unsigned argc, Value* vp)
 }
 
 MOZ_ALWAYS_INLINE bool
-WeakMap_clear_impl(JSContext* cx, CallArgs args)
+WeakMap_clear_impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(IsWeakMap(args.thisv()));
 
@@ -271,7 +271,7 @@ js::WeakMap_clear(JSContext* cx, unsigned argc, Value* vp)
 }
 
 MOZ_ALWAYS_INLINE bool
-WeakMap_get_impl(JSContext* cx, CallArgs args)
+WeakMap_get_impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(IsWeakMap(args.thisv()));
 
@@ -300,7 +300,7 @@ js::WeakMap_get(JSContext* cx, unsigned argc, Value* vp)
 }
 
 MOZ_ALWAYS_INLINE bool
-WeakMap_delete_impl(JSContext* cx, CallArgs args)
+WeakMap_delete_impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(IsWeakMap(args.thisv()));
 
@@ -392,7 +392,7 @@ SetWeakMapEntryInternal(JSContext* cx, Handle<WeakMapObject*> mapObj,
 }
 
 MOZ_ALWAYS_INLINE bool
-WeakMap_set_impl(JSContext* cx, CallArgs args)
+WeakMap_set_impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(IsWeakMap(args.thisv()));
 
@@ -614,7 +614,7 @@ WeakMap_construct(JSContext* cx, unsigned argc, Value* vp)
 
 const Class WeakMapObject::class_ = {
     "WeakMap",
-    JSCLASS_HAS_PRIVATE | JSCLASS_IMPLEMENTS_BARRIERS |
+    JSCLASS_HAS_PRIVATE |
     JSCLASS_HAS_CACHED_PROTO(JSProto_WeakMap),
     nullptr, /* addProperty */
     nullptr, /* delProperty */
@@ -683,9 +683,12 @@ js::InitBareWeakMapCtor(JSContext* cx, HandleObject obj)
 
 ObjectWeakMap::ObjectWeakMap(JSContext* cx)
   : map(cx, nullptr)
+{}
+
+bool
+ObjectWeakMap::init()
 {
-    if (!map.init())
-        CrashAtUnhandlableOOM("ObjectWeakMap");
+    return map.init();
 }
 
 ObjectWeakMap::~ObjectWeakMap()
@@ -696,6 +699,7 @@ ObjectWeakMap::~ObjectWeakMap()
 JSObject*
 ObjectWeakMap::lookup(const JSObject* obj)
 {
+    MOZ_ASSERT(map.initialized());
     if (ObjectValueMap::Ptr p = map.lookup(const_cast<JSObject*>(obj)))
         return &p->value().toObject();
     return nullptr;
@@ -705,6 +709,7 @@ bool
 ObjectWeakMap::add(JSContext* cx, JSObject* obj, JSObject* target)
 {
     MOZ_ASSERT(obj && target);
+    MOZ_ASSERT(map.initialized());
 
     MOZ_ASSERT(!map.has(obj));
     if (!map.put(obj, ObjectValue(*target))) {
@@ -720,18 +725,21 @@ ObjectWeakMap::add(JSContext* cx, JSObject* obj, JSObject* target)
 void
 ObjectWeakMap::clear()
 {
+    MOZ_ASSERT(map.initialized());
     map.clear();
 }
 
 void
 ObjectWeakMap::trace(JSTracer* trc)
 {
+    MOZ_ASSERT(map.initialized());
     map.trace(trc);
 }
 
 size_t
 ObjectWeakMap::sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf)
 {
+    MOZ_ASSERT(map.initialized());
     return map.sizeOfExcludingThis(mallocSizeOf);
 }
 
@@ -739,6 +747,7 @@ ObjectWeakMap::sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf)
 void
 ObjectWeakMap::checkAfterMovingGC()
 {
+    MOZ_ASSERT(map.initialized());
     for (ObjectValueMap::Range r = map.all(); !r.empty(); r.popFront()) {
         CheckGCThingAfterMovingGC(r.front().key().get());
         CheckGCThingAfterMovingGC(&r.front().value().toObject());

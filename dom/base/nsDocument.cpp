@@ -1591,6 +1591,18 @@ nsIDocument::~nsIDocument()
   UnlinkOriginalDocumentIfStatic();
 }
 
+bool
+nsDocument::IsAboutPage()
+{
+  nsCOMPtr<nsIPrincipal> principal = GetPrincipal();
+  nsCOMPtr<nsIURI> uri;
+  principal->GetURI(getter_AddRefs(uri));
+  bool isAboutScheme = true;
+  if (uri) {
+    uri->SchemeIs("about", &isAboutScheme);
+  }
+  return isAboutScheme;
+}
 
 nsDocument::~nsDocument()
 {
@@ -1608,15 +1620,7 @@ nsDocument::~nsDocument()
 
   if (IsTopLevelContentDocument()) {
     //don't report for about: pages
-    nsCOMPtr<nsIPrincipal> principal = GetPrincipal();
-    nsCOMPtr<nsIURI> uri;
-    principal->GetURI(getter_AddRefs(uri));
-    bool isAboutScheme = true;
-    if (uri) {
-      uri->SchemeIs("about", &isAboutScheme);
-    }
-
-    if (!isAboutScheme) {
+    if (!IsAboutPage()) {
       // Record the page load
       uint32_t pageLoaded = 1;
       Accumulate(Telemetry::MIXED_CONTENT_UNBLOCK_COUNTER, pageLoaded);
@@ -7900,9 +7904,10 @@ nsDocument::GetViewportInfo(const ScreenIntSize& aDisplaySize)
 
   CSSToScreenScale defaultScale = layoutDeviceScale
                                 * LayoutDeviceToScreenScale(1.0);
-  // Get requested Desktopmode
+
+  // Special behaviour for desktop mode, provided we are not on an about: page
   nsPIDOMWindow* win = GetWindow();
-  if (win && win->IsDesktopModeViewport())
+  if (win && win->IsDesktopModeViewport() && !IsAboutPage())
   {
     float viewportWidth = gfxPrefs::DesktopViewportWidth() / fullZoom;
     float scaleToFit = aDisplaySize.width / viewportWidth;
@@ -7910,15 +7915,13 @@ nsDocument::GetViewportInfo(const ScreenIntSize& aDisplaySize)
     ScreenSize viewportSize(viewportWidth, viewportWidth * aspectRatio);
     return nsViewportInfo(RoundedToInt(viewportSize),
                           CSSToScreenScale(scaleToFit),
-                          /*allowZoom*/false,
-                          /*allowDoubleTapZoom*/ false);
+                          /*allowZoom*/ true);
   }
 
   if (!gfxPrefs::MetaViewportEnabled()) {
     return nsViewportInfo(aDisplaySize,
                           defaultScale,
-                          /*allowZoom*/ false,
-                          /*allowDoubleTapZoom*/ false);
+                          /*allowZoom*/ false);
   }
 
   // In cases where the width of the CSS viewport is less than or equal to the width
@@ -7929,13 +7932,7 @@ nsDocument::GetViewportInfo(const ScreenIntSize& aDisplaySize)
   case DisplayWidthHeight:
     return nsViewportInfo(aDisplaySize,
                           defaultScale,
-                          /*allowZoom*/ true,
-                          /*allowDoubleTapZoom*/ true);
-  case DisplayWidthHeightNoZoom:
-    return nsViewportInfo(aDisplaySize,
-                          defaultScale,
-                          /*allowZoom*/ false,
-                          /*allowDoubleTapZoom*/ false);
+                          /*allowZoom*/ true);
   case Unknown:
   {
     nsAutoString viewport;
@@ -7957,8 +7954,7 @@ nsDocument::GetViewportInfo(const ScreenIntSize& aDisplaySize)
             mViewportType = DisplayWidthHeight;
             return nsViewportInfo(aDisplaySize,
                                   defaultScale,
-                                  /*allowZoom*/true,
-                                  /*allowDoubleTapZoom*/false);
+                                  /*allowZoom*/true);
           }
         }
       }
@@ -7969,8 +7965,7 @@ nsDocument::GetViewportInfo(const ScreenIntSize& aDisplaySize)
         mViewportType = DisplayWidthHeight;
         return nsViewportInfo(aDisplaySize,
                               defaultScale,
-                              /*allowZoom*/true,
-                              /*allowDoubleTapZoom*/false);
+                              /*allowZoom*/true);
       }
     }
 
@@ -8044,7 +8039,6 @@ nsDocument::GetViewportInfo(const ScreenIntSize& aDisplaySize)
         (userScalable.EqualsLiteral("false"))) {
       mAllowZoom = false;
     }
-    mAllowDoubleTapZoom = mAllowZoom;
 
     mScaleStrEmpty = scaleStr.IsEmpty();
     mWidthStrEmpty = widthStr.IsEmpty();
@@ -8055,6 +8049,24 @@ nsDocument::GetViewportInfo(const ScreenIntSize& aDisplaySize)
   }
   case Specified:
   default:
+    LayoutDeviceToScreenScale effectiveMinScale = mScaleMinFloat;
+    LayoutDeviceToScreenScale effectiveMaxScale = mScaleMaxFloat;
+    bool effectiveValidMaxScale = mValidMaxScale;
+    bool effectiveAllowZoom = mAllowZoom;
+    if (gfxPrefs::ForceUserScalable()) {
+      // If the pref to force user-scalable is enabled, we ignore the values
+      // from the meta-viewport tag for these properties and just assume they
+      // allow the page to be scalable. Note in particular that this code is
+      // in the "Specified" branch of the enclosing switch statement, so that
+      // calls to GetViewportInfo always use the latest value of the
+      // ForceUserScalable pref. Other codepaths that return nsViewportInfo
+      // instances are all consistent with ForceUserScalable() already.
+      effectiveMinScale = kViewportMinScale;
+      effectiveMaxScale = kViewportMaxScale;
+      effectiveValidMaxScale = true;
+      effectiveAllowZoom = true;
+    }
+
     CSSSize size = mViewportSize;
 
     if (!mValidWidth) {
@@ -8077,8 +8089,8 @@ nsDocument::GetViewportInfo(const ScreenIntSize& aDisplaySize)
     }
 
     CSSToScreenScale scaleFloat = mScaleFloat * layoutDeviceScale;
-    CSSToScreenScale scaleMinFloat = mScaleMinFloat * layoutDeviceScale;
-    CSSToScreenScale scaleMaxFloat = mScaleMaxFloat * layoutDeviceScale;
+    CSSToScreenScale scaleMinFloat = effectiveMinScale * layoutDeviceScale;
+    CSSToScreenScale scaleMaxFloat = effectiveMaxScale * layoutDeviceScale;
 
     if (mAutoSize) {
       // aDisplaySize is in screen pixels; convert them to CSS pixels for the viewport size.
@@ -8103,14 +8115,14 @@ nsDocument::GetViewportInfo(const ScreenIntSize& aDisplaySize)
       CSSSize displaySize = ScreenSize(aDisplaySize) / scaleFloat;
       size.width = std::max(size.width, displaySize.width);
       size.height = std::max(size.height, displaySize.height);
-    } else if (mValidMaxScale) {
+    } else if (effectiveValidMaxScale) {
       CSSSize displaySize = ScreenSize(aDisplaySize) / scaleMaxFloat;
       size.width = std::max(size.width, displaySize.width);
       size.height = std::max(size.height, displaySize.height);
     }
 
     return nsViewportInfo(scaleFloat, scaleMinFloat, scaleMaxFloat, size,
-                          mAutoSize, mAllowZoom, mAllowDoubleTapZoom);
+                          mAutoSize, effectiveAllowZoom);
   }
 }
 
@@ -8141,7 +8153,7 @@ nsDocument::PreHandleEvent(EventChainPreVisitor& aVisitor)
   aVisitor.mForceContentDispatch = true;
 
   // Load events must not propagate to |window| object, see bug 335251.
-  if (aVisitor.mEvent->mMessage != NS_LOAD) {
+  if (aVisitor.mEvent->mMessage != eLoad) {
     nsGlobalWindow* window = static_cast<nsGlobalWindow*>(GetWindow());
     aVisitor.mParentTarget =
       window ? window->GetTargetForEventTargetChain() : nullptr;
@@ -11386,20 +11398,21 @@ LogFullScreenDenied(bool aLogFailure, const char* aMessage, nsIDocument* aDoc)
 void
 nsDocument::CleanupFullscreenState()
 {
-  if (!mFullScreenStack.IsEmpty()) {
-    // The top element in the full-screen stack will have full-screen
-    // style bits set on it and its ancestors. Remove the style bits.
-    // Note the non-top elements won't have the style bits set.
-    Element* top = FullScreenStackTop();
-    NS_ASSERTION(top, "Should have a top when full-screen stack isn't empty");
-    if (top) {
+  // Iterate the fullscreen stack and clear the fullscreen states.
+  // Since we also need to clear the fullscreen-ancestor state, and
+  // currently fullscreen elements can only be placed in hierarchy
+  // order in the stack, reversely iterating the stack could be more
+  // efficient. NOTE that fullscreen-ancestor state would be removed
+  // in bug 1199529, and the elements may not in hierarchy order
+  // after bug 1195213.
+  for (nsWeakPtr& weakPtr : Reversed(mFullScreenStack)) {
+    if (nsCOMPtr<Element> element = do_QueryReferent(weakPtr)) {
       // Remove any VR state properties
-      top->DeleteProperty(nsGkAtoms::vr_state);
-
-      EventStateManager::SetFullScreenState(top, false);
+      element->DeleteProperty(nsGkAtoms::vr_state);
+      EventStateManager::SetFullScreenState(element, false);
     }
-    mFullScreenStack.Clear();
   }
+  mFullScreenStack.Clear();
   mFullscreenRoot = nullptr;
 }
 
@@ -11410,12 +11423,6 @@ nsDocument::FullScreenStackPush(Element* aElement)
   Element* top = FullScreenStackTop();
   if (top == aElement || !aElement) {
     return false;
-  }
-  if (top) {
-    // We're pushing a new element onto the full-screen stack, so we must
-    // remove the ancestor and full-screen styles from the former top of the
-    // stack.
-    EventStateManager::SetFullScreenState(top, false);
   }
   EventStateManager::SetFullScreenState(aElement, true);
   mFullScreenStack.AppendElement(do_GetWeakReference(aElement));
@@ -11455,9 +11462,7 @@ nsDocument::FullScreenStackPop()
       uint32_t last = mFullScreenStack.Length() - 1;
       mFullScreenStack.RemoveElementAt(last);
     } else {
-      // The top element of the stack is now an in-doc element. Apply the
-      // full-screen styles and return.
-      EventStateManager::SetFullScreenState(element, true);
+      // The top element of the stack is now an in-doc element. Return here.
       break;
     }
   }
@@ -11644,14 +11649,30 @@ public:
     return sList.getLast();
   }
 
+  enum IteratorOption
+  {
+    // When we are committing fullscreen changes or preparing for
+    // that, we generally want to iterate all requests in the same
+    // window with eDocumentsWithSameRoot option.
+    eDocumentsWithSameRoot,
+    // If we are removing a document from the tree, we would only
+    // want to remove the requests from the given document and its
+    // descendants. For that case, use eInclusiveDescendants.
+    eInclusiveDescendants
+  };
+
   class Iterator
   {
   public:
-    explicit Iterator(nsIDocument* aDoc)
+    explicit Iterator(nsIDocument* aDoc, IteratorOption aOption)
       : mCurrent(PendingFullscreenRequestList::sList.getFirst())
+      , mRootShellForIteration(aDoc->GetDocShell())
     {
       if (mCurrent) {
-        mRootShell = GetRootShell(aDoc);
+        if (mRootShellForIteration && aOption == eDocumentsWithSameRoot) {
+          mRootShellForIteration->
+            GetRootTreeItem(getter_AddRefs(mRootShellForIteration));
+        }
         SkipToNextMatch();
       }
     }
@@ -11665,16 +11686,6 @@ public:
     const FullscreenRequest& Get() const { return *mCurrent; }
 
   private:
-    already_AddRefed<nsIDocShellTreeItem> GetRootShell(nsIDocument* aDoc)
-    {
-      if (nsIDocShellTreeItem* shell = aDoc->GetDocShell()) {
-        nsCOMPtr<nsIDocShellTreeItem> rootShell;
-        shell->GetRootTreeItem(getter_AddRefs(rootShell));
-        return rootShell.forget();
-      }
-      return nullptr;
-    }
-
     void DeleteAndNextInternal()
     {
       FullscreenRequest* thisRequest = mCurrent;
@@ -11685,21 +11696,28 @@ public:
     {
       while (mCurrent) {
         nsCOMPtr<nsIDocShellTreeItem>
-          rootShell = GetRootShell(mCurrent->GetDocument());
-        if (!rootShell) {
+          docShell = mCurrent->GetDocument()->GetDocShell();
+        if (!docShell) {
           // Always automatically drop documents which has been
           // detached from the doc shell.
           DeleteAndNextInternal();
-        } else if (rootShell != mRootShell) {
-          mCurrent = mCurrent->getNext();
         } else {
-          break;
+          while (docShell && docShell != mRootShellForIteration) {
+            docShell->GetParent(getter_AddRefs(docShell));
+          }
+          if (!docShell) {
+            // We've gone over the root, but haven't find the target
+            // ancestor, so skip this item.
+            mCurrent = mCurrent->getNext();
+          } else {
+            break;
+          }
         }
       }
     }
 
     FullscreenRequest* mCurrent;
-    nsCOMPtr<nsIDocShellTreeItem> mRootShell;
+    nsCOMPtr<nsIDocShellTreeItem> mRootShellForIteration;
   };
 
 private:
@@ -11740,7 +11758,8 @@ nsDocument::RequestFullScreen(UniquePtr<FullscreenRequest>&& aRequest)
   if ((static_cast<nsGlobalWindow*>(rootWin.get())->FullScreen() &&
        // The iterator being at end at the beginning indicates there is
        // no pending fullscreen request which relates to this document.
-       PendingFullscreenRequestList::Iterator(this).AtEnd()) ||
+       PendingFullscreenRequestList::Iterator(
+         this, PendingFullscreenRequestList::eDocumentsWithSameRoot).AtEnd()) ||
       nsContentUtils::GetRootDocument(this)->IsFullScreenDoc()) {
     ApplyFullscreen(*aRequest);
     return;
@@ -11773,7 +11792,8 @@ nsDocument::RequestFullScreen(UniquePtr<FullscreenRequest>&& aRequest)
 nsIDocument::HandlePendingFullscreenRequests(nsIDocument* aDoc)
 {
   bool handled = false;
-  PendingFullscreenRequestList::Iterator iter(aDoc);
+  PendingFullscreenRequestList::Iterator iter(
+    aDoc, PendingFullscreenRequestList::eDocumentsWithSameRoot);
   while (!iter.AtEnd()) {
     const FullscreenRequest& request = iter.Get();
     if (request.GetDocument()->ApplyFullscreen(request)) {
@@ -11787,7 +11807,8 @@ nsIDocument::HandlePendingFullscreenRequests(nsIDocument* aDoc)
 static void
 ClearPendingFullscreenRequests(nsIDocument* aDoc)
 {
-  PendingFullscreenRequestList::Iterator iter(aDoc);
+  PendingFullscreenRequestList::Iterator iter(
+    aDoc, PendingFullscreenRequestList::eInclusiveDescendants);
   while (!iter.AtEnd()) {
     iter.DeleteAndNext();
   }

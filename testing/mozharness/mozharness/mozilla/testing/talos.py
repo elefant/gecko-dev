@@ -41,12 +41,13 @@ TalosErrorList = PythonErrorList + [
 
 class TalosOutputParser(OutputParser):
     minidump_regex = re.compile(r'''talosError: "error executing: '(\S+) (\S+) (\S+)'"''')
+    RE_TALOSDATA = re.compile(r'.*?TALOSDATA:\s+(\[.*\])')
     worst_tbpl_status = TBPL_SUCCESS
 
     def __init__(self, **kwargs):
         super(TalosOutputParser, self).__init__(**kwargs)
         self.minidump_output = None
-        self.found_talosdata = False
+        self.num_times_found_talosdata = 0
 
     def update_worst_log_and_tbpl_levels(self, log_level, tbpl_level):
         self.worst_log_level = self.worst_level(log_level,
@@ -65,8 +66,8 @@ class TalosOutputParser(OutputParser):
         if m:
             self.minidump_output = (m.group(1), m.group(2), m.group(3))
 
-        if line.startswith('INFO : TALOSDATA: '):
-            self.found_talosdata = True
+        if self.RE_TALOSDATA.match(line):
+            self.num_times_found_talosdata += 1
 
         # now let's check if buildbot should retry
         harness_retry_re = TinderBoxPrintRe['harness_error']['retry_regex']
@@ -167,6 +168,7 @@ class Talos(TestingMixin, MercurialScript, BlobUploadMixin):
 
         self.workdir = self.query_abs_dirs()['abs_work_dir']  # convenience
 
+        self.run_local = self.config.get('run_local')
         self.installer_url = self.config.get("installer_url")
         self.talos_json_url = self.config.get("talos_json_url")
         self.talos_json = self.config.get("talos_json")
@@ -567,6 +569,8 @@ class Talos(TestingMixin, MercurialScript, BlobUploadMixin):
                                    error_list=TalosErrorList)
         env = {}
         env['MOZ_UPLOAD_DIR'] = self.query_abs_dirs()['abs_blob_upload_dir']
+        if not self.run_local:
+            env['MINIDUMP_STACKWALK'] = self.query_minidump_stackwalk()
         env['MINIDUMP_SAVE_PATH'] = self.query_abs_dirs()['abs_blob_upload_dir']
         if not os.path.isdir(env['MOZ_UPLOAD_DIR']):
             self.mkdir_p(env['MOZ_UPLOAD_DIR'])
@@ -590,8 +594,9 @@ class Talos(TestingMixin, MercurialScript, BlobUploadMixin):
             self.info("Looking at the minidump files for debugging purposes...")
             for item in parser.minidump_output:
                 self.run_command(["ls", "-l", item])
-        if not parser.found_talosdata:
-            self.critical("No talos data in output!")
+        if parser.num_times_found_talosdata != 1:
+            self.critical("TALOSDATA was seen %d times, expected 1."
+                          % parser.num_times_found_talosdata)
             parser.update_worst_log_and_tbpl_levels(WARNING, TBPL_WARNING)
 
         if self.return_code not in [0]:

@@ -63,7 +63,7 @@ try {
   runningInParent = Components.classes["@mozilla.org/xre/runtime;1"].
                     getService(Components.interfaces.nsIXULRuntime).processType
                     == Components.interfaces.nsIXULRuntime.PROCESS_TYPE_DEFAULT;
-} 
+}
 catch (e) { }
 
 // Only if building of places is enabled.
@@ -127,7 +127,8 @@ try {
       return this;
     },
     observe : function (msg) {
-      do_print("CONSOLE_MESSAGE: (" + levelNames[msg.logLevel] + ") " + msg.toString());
+      if (typeof do_print === "function")
+        do_print("CONSOLE_MESSAGE: (" + levelNames[msg.logLevel] + ") " + msg.toString());
     }
   };
   Components.classes["@mozilla.org/consoleservice;1"]
@@ -378,7 +379,7 @@ function _setupDebuggerServer(breakpointFiles, callback) {
     prefs.setBoolPref("devtools.debugger.log.verbose", true);
   }
 
-  let { require } = Cu.import("resource://gre/modules/devtools/Loader.jsm", {});
+  let { require } = Components.utils.import("resource://gre/modules/devtools/Loader.jsm", {});
   let { DebuggerServer } = require("devtools/server/main");
   let { OriginalLocation } = require("devtools/server/actors/common");
   DebuggerServer.init();
@@ -504,7 +505,7 @@ function _execute_test() {
     do_test_pending("MAIN run_test");
     // Check if run_test() is defined. If defined, run it.
     // Else, call run_next_test() directly to invoke tests
-    // added by add_test() and add_task().  
+    // added by add_test() and add_task().
     if (typeof run_test === "function") {
       run_test();
     } else {
@@ -1433,7 +1434,7 @@ function run_next_test()
                     "run_next_test() should not be called from inside add_task() " +
                     "under any circumstances!");
   }
- 
+
   function _run_next_test()
   {
     if (_gTestIndex < _gTests.length) {

@@ -58,7 +58,7 @@ PRLogModuleInfo* gMediaStreamGraphLog;
 #endif
 
 /**
- * The singleton graph instance.
+ * A hash table containing the graph instances, one per AudioChannel.
  */
 static nsDataHashtable<nsUint32HashKey, MediaStreamGraphImpl*> gGraphs;
 
@@ -2475,24 +2475,19 @@ SourceMediaStream::ResampleAudioToGraphSampleRate(TrackData* aTrackData, MediaSe
   AudioSegment* segment = static_cast<AudioSegment*>(aSegment);
   int channels = segment->ChannelCount();
 
-  // If this segment is just silence, we delay instanciating the resampler.
-  if (channels) {
-    if (aTrackData->mResampler) {
-      MOZ_ASSERT(aTrackData->mResamplerChannelCount == segment->ChannelCount());
-    } else {
-      SpeexResamplerState* state = speex_resampler_init(channels,
-                                                        aTrackData->mInputRate,
-                                                        GraphImpl()->GraphRate(),
-                                                        SPEEX_RESAMPLER_QUALITY_MIN,
-                                                        nullptr);
-      if (!state) {
-        return;
-      }
-      aTrackData->mResampler.own(state);
-#ifdef DEBUG
-      aTrackData->mResamplerChannelCount = channels;
-#endif
+  // If this segment is just silence, we delay instanciating the resampler. We
+  // also need to recreate the resampler if the channel count changes.
+  if (channels && aTrackData->mResamplerChannelCount != channels) {
+    SpeexResamplerState* state = speex_resampler_init(channels,
+        aTrackData->mInputRate,
+        GraphImpl()->GraphRate(),
+        SPEEX_RESAMPLER_QUALITY_MIN,
+        nullptr);
+    if (!state) {
+      return;
     }
+    aTrackData->mResampler.own(state);
+    aTrackData->mResamplerChannelCount = channels;
   }
   segment->ResampleChunks(aTrackData->mResampler, aTrackData->mInputRate, GraphImpl()->GraphRate());
 }
@@ -2857,9 +2852,8 @@ ProcessedMediaStream::DestroyImpl()
   // SetStreamOrderDirty(), for other reasons.
 }
 
-MediaStreamGraphImpl::MediaStreamGraphImpl(bool aRealtime,
+MediaStreamGraphImpl::MediaStreamGraphImpl(GraphDriverType aDriverRequested,
                                            TrackRate aSampleRate,
-                                           bool aStartWithAudioDriver,
                                            dom::AudioChannel aChannel)
   : MediaStreamGraph(aSampleRate)
   , mPortCount(0)
@@ -2874,7 +2868,7 @@ MediaStreamGraphImpl::MediaStreamGraphImpl(bool aRealtime,
   , mFlushSourcesOnNextIteration(false)
   , mDetectedNotRunning(false)
   , mPostedRunInStableState(false)
-  , mRealtime(aRealtime)
+  , mRealtime(aDriverRequested != OFFLINE_THREAD_DRIVER)
   , mNonRealtimeProcessing(false)
   , mStreamOrderDirty(false)
   , mLatencyLog(AsyncLatencyLogger::Get())
@@ -2895,7 +2889,7 @@ MediaStreamGraphImpl::MediaStreamGraphImpl(bool aRealtime,
   }
 
   if (mRealtime) {
-    if (aStartWithAudioDriver) {
+    if (aDriverRequested == AUDIO_THREAD_DRIVER) {
       AudioCallbackDriver* driver = new AudioCallbackDriver(this, aChannel);
       mDriver = driver;
       mMixer.AddCallback(driver);
@@ -2952,7 +2946,7 @@ MediaStreamGraphShutdownObserver::Observe(nsISupports *aSubject,
 }
 
 MediaStreamGraph*
-MediaStreamGraph::GetInstance(bool aStartWithAudioDriver,
+MediaStreamGraph::GetInstance(MediaStreamGraph::GraphDriverType aGraphDriverRequested,
                               dom::AudioChannel aChannel)
 {
   NS_ASSERTION(NS_IsMainThread(), "Main thread only");
@@ -2968,10 +2962,15 @@ MediaStreamGraph::GetInstance(bool aStartWithAudioDriver,
 
     CubebUtils::InitPreferredSampleRate();
 
-    graph = new MediaStreamGraphImpl(true, CubebUtils::PreferredSampleRate(), aStartWithAudioDriver, aChannel);
+    graph = new MediaStreamGraphImpl(aGraphDriverRequested,
+                                     CubebUtils::PreferredSampleRate(),
+                                     aChannel);
+
     gGraphs.Put(channel, graph);
 
-    STREAM_LOG(LogLevel::Debug, ("Starting up MediaStreamGraph %p", graph));
+    STREAM_LOG(LogLevel::Debug,
+        ("Starting up MediaStreamGraph %p for channel %s",
+         graph, AudioChannelValues::strings[channel]));
   }
 
   return graph;
@@ -2982,7 +2981,10 @@ MediaStreamGraph::CreateNonRealtimeInstance(TrackRate aSampleRate)
 {
   NS_ASSERTION(NS_IsMainThread(), "Main thread only");
 
-  MediaStreamGraphImpl* graph = new MediaStreamGraphImpl(false, aSampleRate);
+  MediaStreamGraphImpl* graph =
+    new MediaStreamGraphImpl(OFFLINE_THREAD_DRIVER,
+                             aSampleRate,
+                             AudioChannel::Normal);
 
   STREAM_LOG(LogLevel::Debug, ("Starting up Offline MediaStreamGraph %p", graph));
 

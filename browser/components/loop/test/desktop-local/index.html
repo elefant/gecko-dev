@@ -55,8 +55,6 @@
   <script src="../../content/shared/js/otSdkDriver.js"></script>
   <script src="../../content/shared/js/store.js"></script>
   <script src="../../content/shared/js/conversationStore.js"></script>
-  <script src="../../content/shared/js/roomStates.js"></script>
-  <script src="../../content/shared/js/fxOSActiveRoomStore.js"></script>
   <script src="../../content/shared/js/activeRoomStore.js"></script>
   <script src="../../content/shared/js/views.js"></script>
   <script src="../../content/shared/js/textChatStore.js"></script>
@@ -95,7 +93,7 @@
 
     describe("Unexpected Warnings Check", function() {
       it("should long only the warnings we expect", function() {
-        chai.expect(caughtWarnings.length).to.eql(27);
+        chai.expect(caughtWarnings.length).to.eql(0);
       });
     });
 

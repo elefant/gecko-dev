@@ -620,8 +620,12 @@ private:
   // the work of the earlier values is also done.
   enum RestyleResult {
 
-    // do not restyle children
+    // we left the old style context on the frame; do not restyle children
     eRestyleResult_Stop = 1,
+
+    // we got a new style context on this frame, but we know that children
+    // do not depend on the changed values; do not restyle children
+    eRestyleResult_StopWithStyleChange,
 
     // continue restyling children
     eRestyleResult_Continue,
@@ -630,12 +634,20 @@ private:
     eRestyleResult_ContinueAndForceDescendants
   };
 
+  struct SwapInstruction
+  {
+    nsRefPtr<nsStyleContext> mOldContext;
+    nsRefPtr<nsStyleContext> mNewContext;
+    uint32_t mStructsToSwap;
+  };
+
   /**
    * First half of Restyle().
    */
   RestyleResult RestyleSelf(nsIFrame* aSelf,
                             nsRestyleHint aRestyleHint,
-                            uint32_t* aSwappedStructs);
+                            uint32_t* aSwappedStructs,
+                            nsTArray<SwapInstruction>& aSwaps);
 
   /**
    * Restyle the children of this frame (and, in turn, their children).
@@ -674,21 +686,32 @@ private:
    */
   void AddLayerChangesForAnimation();
 
+  bool MoveStyleContextsForContentChildren(nsIFrame* aParent,
+                                           nsStyleContext* aOldContext,
+                                           nsTArray<nsStyleContext*>& aContextsToMove);
+  bool MoveStyleContextsForChildren(nsStyleContext* aOldContext);
+
   /**
    * Helpers for RestyleSelf().
    */
   void CaptureChange(nsStyleContext* aOldContext,
                      nsStyleContext* aNewContext,
                      nsChangeHint aChangeToAssume,
-                     uint32_t* aEqualStructs);
-  RestyleResult ComputeRestyleResultFromFrame(nsIFrame* aSelf);
-  RestyleResult ComputeRestyleResultFromNewContext(nsIFrame* aSelf,
-                                                   nsStyleContext* aNewContext);
+                     uint32_t* aEqualStructs,
+                     uint32_t* aSamePointerStructs);
+  void ComputeRestyleResultFromFrame(nsIFrame* aSelf,
+                                     RestyleResult& aRestyleResult,
+                                     bool& aCanStopWithStyleChange);
+  void ComputeRestyleResultFromNewContext(nsIFrame* aSelf,
+                                          nsStyleContext* aNewContext,
+                                          RestyleResult& aRestyleResult,
+                                          bool& aCanStopWithStyleChange);
 
-  /**
-   * Helpers for RestyleChildren().
-   */
+  // Helpers for RestyleChildren().
   void RestyleUndisplayedDescendants(nsRestyleHint aChildRestyleHint);
+  bool MustCheckUndisplayedContent(nsIFrame* aFrame,
+                                   nsIContent*& aUndisplayedParent);
+
   /**
    * In the following two methods, aParentStyleContext is either
    * mFrame->StyleContext() if we have a frame, or a display:contents
@@ -703,15 +726,21 @@ private:
                                nsStyleContext*  aParentStyleContext,
                                const uint8_t    aDisplay);
   void MaybeReframeForBeforePseudo();
-  void MaybeReframeForBeforePseudo(nsIFrame* aGenConParentFrame,
-                                   nsIFrame* aFrame,
-                                   nsIContent* aContent,
-                                   nsStyleContext* aStyleContext);
   void MaybeReframeForAfterPseudo(nsIFrame* aFrame);
-  void MaybeReframeForAfterPseudo(nsIFrame* aGenConParentFrame,
-                                  nsIFrame* aFrame,
-                                  nsIContent* aContent,
-                                  nsStyleContext* aStyleContext);
+  void MaybeReframeForPseudo(nsCSSPseudoElements::Type aPseudoType,
+                             nsIFrame* aGenConParentFrame,
+                             nsIFrame* aFrame,
+                             nsIContent* aContent,
+                             nsStyleContext* aStyleContext);
+#ifdef DEBUG
+  bool MustReframeForBeforePseudo();
+  bool MustReframeForAfterPseudo(nsIFrame* aFrame);
+#endif
+  bool MustReframeForPseudo(nsCSSPseudoElements::Type aPseudoType,
+                            nsIFrame* aGenConParentFrame,
+                            nsIFrame* aFrame,
+                            nsIContent* aContent,
+                            nsStyleContext* aStyleContext);
   void RestyleContentChildren(nsIFrame* aParent,
                               nsRestyleHint aChildRestyleHint);
   void InitializeAccessibilityNotifications(nsStyleContext* aNewContext);
@@ -729,8 +758,27 @@ private:
     eNotifyHidden
   };
 
-  void AddPendingRestylesForDescendantsMatchingSelectors(Element* aElement,
-                                                         Element* aRestyleRoot);
+  // These methods handle the eRestyle_SomeDescendants hint by traversing
+  // down the frame tree (and then when reaching undisplayed content,
+  // the flattened content tree) find elements that match a selector
+  // in mSelectorsForDescendants and call AddPendingRestyle for them.
+  void ConditionallyRestyleChildren();
+  void ConditionallyRestyleChildren(nsIFrame* aFrame,
+                                    Element* aRestyleRoot);
+  void ConditionallyRestyleContentChildren(nsIFrame* aFrame,
+                                           Element* aRestyleRoot);
+  void ConditionallyRestyleUndisplayedDescendants(nsIFrame* aFrame,
+                                                  Element* aRestyleRoot);
+  void DoConditionallyRestyleUndisplayedDescendants(nsIContent* aParent,
+                                                    Element* aRestyleRoot);
+  void ConditionallyRestyleUndisplayedNodes(UndisplayedNode* aUndisplayed,
+                                            nsIContent* aUndisplayedParent,
+                                            const uint8_t aDisplay,
+                                            Element* aRestyleRoot);
+  void ConditionallyRestyleContentDescendants(Element* aElement,
+                                              Element* aRestyleRoot);
+  bool ConditionallyRestyle(nsIFrame* aFrame, Element* aRestyleRoot);
+  bool ConditionallyRestyle(Element* aElement, Element* aRestyleRoot);
 
 #ifdef RESTYLE_LOGGING
   int32_t& LoggingDepth() { return mLoggingDepth; }
@@ -770,6 +818,8 @@ private:
   // stay alive until the end of the restyle.  (See comment in
   // ElementRestyler::Restyle.)
   nsTArray<nsRefPtr<nsStyleContext>>& mSwappedStructOwners;
+  // Whether this is the root of the restyle.
+  bool mIsRootOfRestyle;
 
 #ifdef ACCESSIBILITY
   const DesiredA11yNotifications mDesiredA11yNotifications;

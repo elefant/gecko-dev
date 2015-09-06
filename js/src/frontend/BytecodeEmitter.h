@@ -63,15 +63,28 @@ struct CGTryNoteList {
     void finish(TryNoteArray* array);
 };
 
+struct CGBlockScopeNote : public BlockScopeNote
+{
+    // The end offset. Used to compute the length; may need adjusting first if
+    // in the prologue.
+    uint32_t end;
+
+    // Is the start offset in the prologue?
+    bool startInPrologue;
+
+    // Is the end offset in the prologue?
+    bool endInPrologue;
+};
+
 struct CGBlockScopeList {
-    Vector<BlockScopeNote> list;
+    Vector<CGBlockScopeNote> list;
     explicit CGBlockScopeList(ExclusiveContext* cx) : list(cx) {}
 
-    bool append(uint32_t scopeObject, uint32_t offset, uint32_t parent);
+    bool append(uint32_t scopeObject, uint32_t offset, bool inPrologue, uint32_t parent);
     uint32_t findEnclosingScope(uint32_t index);
-    void recordEnd(uint32_t index, uint32_t offset);
+    void recordEnd(uint32_t index, uint32_t offset, bool inPrologue);
     size_t length() const { return list.length(); }
-    void finish(BlockScopeArray* array);
+    void finish(BlockScopeArray* array, uint32_t prologueLength);
 };
 
 struct CGYieldOffsetList {
@@ -187,6 +200,8 @@ struct BytecodeEmitter
     const bool      insideNonGlobalEval:1;  /* True if this is a direct eval
                                                call in some non-global scope. */
 
+    bool            insideModule:1;     /* True if compiling inside a module. */
+
     enum EmitterMode {
         Normal,
 
@@ -228,6 +243,7 @@ struct BytecodeEmitter
         return parser->blockScopes[blockid];
     }
 
+    bool atBodyLevel() const;
     uint32_t computeHops(ParseNode* pn, BytecodeEmitter** bceOfDefOut);
     bool isAliasedName(BytecodeEmitter* bceOfDef, ParseNode* pn);
     bool computeDefinitionIsAliased(BytecodeEmitter* bceOfDef, Definition* dn, JSOp* op);
@@ -267,6 +283,7 @@ struct BytecodeEmitter
     ptrdiff_t prologueOffset() const { return prologue.code.end() - prologue.code.begin(); }
     void switchToMain() { current = &main; }
     void switchToPrologue() { current = &prologue; }
+    bool inPrologue() const { return current == &prologue; }
 
     SrcNotesVector& notes() const { return current->notes; }
     ptrdiff_t lastNoteOffset() const { return current->lastNoteOffset; }
@@ -465,6 +482,8 @@ struct BytecodeEmitter
     bool emitPropOp(ParseNode* pn, JSOp op);
     bool emitPropIncDec(ParseNode* pn);
 
+    bool emitComputedPropertyName(ParseNode* computedPropName);
+
     // Emit bytecode to put operands for a JSOP_GETELEM/CALLELEM/SETELEM/DELELEM
     // opcode onto the stack in the right order. In the case of SETELEM, the
     // value to be assigned must already be pushed.
@@ -539,9 +558,7 @@ struct BytecodeEmitter
 
     bool emitDeleteName(ParseNode* pn);
     bool emitDeleteProperty(ParseNode* pn);
-    bool emitDeleteSuperProperty(ParseNode* pn);
     bool emitDeleteElement(ParseNode* pn);
-    bool emitDeleteSuperElement(ParseNode* pn);
     bool emitDeleteExpression(ParseNode* pn);
 
     // |op| must be JSOP_TYPEOF or JSOP_TYPEOFEXPR.
@@ -596,11 +613,9 @@ struct BytecodeEmitter
     bool emitClass(ParseNode* pn);
     bool emitSuperPropLHS(bool isCall = false);
     bool emitSuperPropOp(ParseNode* pn, JSOp op, bool isCall = false);
-    bool emitSuperPropIncDec(ParseNode* pn);
     enum SuperElemOptions { SuperElem_Get, SuperElem_Set, SuperElem_Call, SuperElem_IncDec };
     bool emitSuperElemOperands(ParseNode* pn, SuperElemOptions opts = SuperElem_Get);
     bool emitSuperElemOp(ParseNode* pn, JSOp op, bool isCall = false);
-    bool emitSuperElemIncDec(ParseNode* pn);
 };
 
 } /* namespace frontend */

@@ -708,33 +708,6 @@ AST_MATCHER(MemberExpr, isAddRefOrRelease) {
 /// This matcher will select classes which are refcounted.
 AST_MATCHER(QualType, isRefCounted) { return isClassRefCounted(Node); }
 
-#if CLANG_VERSION_FULL < 304
-
-/// The 'equalsBoundeNode' matcher was added in clang 3.4.
-/// Since infra runs clang 3.3, we polyfill it here.
-AST_POLYMORPHIC_MATCHER_P(equalsBoundNode, std::string, ID) {
-  BoundNodesTree bindings = Builder->build();
-  bool haveMatchingResult = false;
-  struct Visitor : public BoundNodesTree::Visitor {
-    const NodeType &Node;
-    std::string ID;
-    bool &haveMatchingResult;
-    Visitor(const NodeType &Node, const std::string &ID,
-            bool &haveMatchingResult)
-        : Node(Node), ID(ID), haveMatchingResult(haveMatchingResult) {}
-    void visitMatch(const BoundNodes &BoundNodesView) override {
-      if (BoundNodesView.getNodeAs<NodeType>(ID) == &Node) {
-        haveMatchingResult = true;
-      }
-    }
-  };
-  Visitor visitor(Node, ID, haveMatchingResult);
-  bindings.visitMatches(&visitor);
-  return haveMatchingResult;
-}
-
-#endif
-
 AST_MATCHER(CXXRecordDecl, hasRefCntMember) {
   return isClassRefCounted(&Node) && getClassRefCntMember(&Node);
 }
@@ -1019,13 +992,7 @@ DiagnosticsMatcher::DiagnosticsMatcher() {
   // lambda, where the declaration they reference is not inside the lambda.
   // This excludes arguments and local variables, leaving only captured
   // variables.
-  astMatcher.addMatcher(
-      lambdaExpr(hasDescendant(
-                     declRefExpr(hasType(pointerType(pointee(isRefCounted()))),
-                                 to(decl().bind("decl")))
-                         .bind("declref")),
-                 unless(hasDescendant(decl(equalsBoundNode("decl"))))),
-      &refCountedInsideLambdaChecker);
+  astMatcher.addMatcher(lambdaExpr().bind("lambda"), &refCountedInsideLambdaChecker);
 
   // Older clang versions such as the ones used on the infra recognize these
   // conversions as 'operator _Bool', but newer clang versions recognize these
@@ -1252,11 +1219,19 @@ void DiagnosticsMatcher::RefCountedInsideLambdaChecker::run(
       "Refcounted variable %0 of type %1 cannot be captured by a lambda");
   unsigned noteID = Diag.getDiagnosticIDs()->getCustomDiagID(
       DiagnosticIDs::Note, "Please consider using a smart pointer");
-  const DeclRefExpr *declref = Result.Nodes.getNodeAs<DeclRefExpr>("declref");
+  const LambdaExpr *Lambda = Result.Nodes.getNodeAs<LambdaExpr>("lambda");
 
-  Diag.Report(declref->getLocStart(), errorID)
-      << declref->getFoundDecl() << declref->getType()->getPointeeType();
-  Diag.Report(declref->getLocStart(), noteID);
+  for (const LambdaCapture Capture : Lambda->captures()) {
+    if (Capture.capturesVariable()) {
+      QualType Pointee = Capture.getCapturedVar()->getType()->getPointeeType();
+
+      if (!Pointee.isNull() && isClassRefCounted(Pointee)) {
+        Diag.Report(Capture.getLocation(), errorID)
+          << Capture.getCapturedVar() << Pointee;
+        Diag.Report(Capture.getLocation(), noteID);
+      }
+    }
+  }
 }
 
 void DiagnosticsMatcher::ExplicitOperatorBoolChecker::run(

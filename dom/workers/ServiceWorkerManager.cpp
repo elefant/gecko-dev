@@ -35,6 +35,7 @@
 #include "mozilla/dom/DOMError.h"
 #include "mozilla/dom/ErrorEvent.h"
 #include "mozilla/dom/Headers.h"
+#include "mozilla/dom/indexedDB/IndexedDatabaseManager.h"
 #include "mozilla/dom/indexedDB/IDBFactory.h"
 #include "mozilla/dom/InternalHeaders.h"
 #include "mozilla/dom/Navigator.h"
@@ -46,6 +47,7 @@
 #include "mozilla/ipc/PBackgroundChild.h"
 #include "mozilla/ipc/PBackgroundSharedTypes.h"
 #include "mozilla/unused.h"
+#include "mozilla/EnumSet.h"
 
 #include "nsContentUtils.h"
 #include "nsGlobalWindow.h"
@@ -92,6 +94,15 @@ static_assert(nsIHttpChannelInternal::CORS_MODE_CORS == static_cast<uint32_t>(Re
               "RequestMode enumeration value should match Necko CORS mode value.");
 static_assert(nsIHttpChannelInternal::CORS_MODE_CORS_WITH_FORCED_PREFLIGHT == static_cast<uint32_t>(RequestMode::Cors_with_forced_preflight),
               "RequestMode enumeration value should match Necko CORS mode value.");
+
+static_assert(nsIHttpChannelInternal::REDIRECT_MODE_FOLLOW == static_cast<uint32_t>(RequestRedirect::Follow),
+              "RequestRedirect enumeration value should make Necko Redirect mode value.");
+static_assert(nsIHttpChannelInternal::REDIRECT_MODE_ERROR == static_cast<uint32_t>(RequestRedirect::Error),
+              "RequestRedirect enumeration value should make Necko Redirect mode value.");
+static_assert(nsIHttpChannelInternal::REDIRECT_MODE_MANUAL == static_cast<uint32_t>(RequestRedirect::Manual),
+              "RequestRedirect enumeration value should make Necko Redirect mode value.");
+static_assert(3 == static_cast<uint32_t>(RequestRedirect::EndGuard_),
+              "RequestRedirect enumeration value should make Necko Redirect mode value.");
 
 static StaticRefPtr<ServiceWorkerManager> gInstance;
 
@@ -3615,7 +3626,9 @@ class FetchEventRunnable : public WorkerRunnable
   nsCString mSpec;
   nsCString mMethod;
   bool mIsReload;
+  DebugOnly<bool> mIsHttpChannel;
   RequestMode mRequestMode;
+  RequestRedirect mRequestRedirect;
   RequestCredentials mRequestCredentials;
   nsContentPolicyType mContentPolicyType;
   nsCOMPtr<nsIInputStream> mUploadStream;
@@ -3631,7 +3644,9 @@ public:
     , mServiceWorker(aServiceWorker)
     , mClientInfo(aClientInfo)
     , mIsReload(aIsReload)
+    , mIsHttpChannel(false)
     , mRequestMode(RequestMode::No_cors)
+    , mRequestRedirect(RequestRedirect::Follow)
     // By default we set it to same-origin since normal HTTP fetches always
     // send credentials to same-origin websites unless explicitly forbidden.
     , mRequestCredentials(RequestCredentials::Same_origin)
@@ -3687,28 +3702,20 @@ public:
 
     nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(channel);
     if (httpChannel) {
+      mIsHttpChannel = true;
+
       rv = httpChannel->GetRequestMethod(mMethod);
       NS_ENSURE_SUCCESS(rv, rv);
 
       nsCOMPtr<nsIHttpChannelInternal> internalChannel = do_QueryInterface(httpChannel);
       NS_ENSURE_TRUE(internalChannel, NS_ERROR_NOT_AVAILABLE);
 
-      uint32_t mode;
-      internalChannel->GetCorsMode(&mode);
-      switch (mode) {
-        case nsIHttpChannelInternal::CORS_MODE_SAME_ORIGIN:
-          mRequestMode = RequestMode::Same_origin;
-          break;
-        case nsIHttpChannelInternal::CORS_MODE_NO_CORS:
-          mRequestMode = RequestMode::No_cors;
-          break;
-        case nsIHttpChannelInternal::CORS_MODE_CORS:
-        case nsIHttpChannelInternal::CORS_MODE_CORS_WITH_FORCED_PREFLIGHT:
-          mRequestMode = RequestMode::Cors;
-          break;
-        default:
-          MOZ_CRASH("Unexpected CORS mode");
-      }
+      mRequestMode = InternalRequest::MapChannelToRequestMode(channel);
+
+      // This is safe due to static_asserts at top of file.
+      uint32_t redirectMode;
+      internalChannel->GetRedirectMode(&redirectMode);
+      mRequestRedirect = static_cast<RequestRedirect>(redirectMode);
 
       if (loadFlags & nsIRequest::LOAD_ANONYMOUS) {
         mRequestCredentials = RequestCredentials::Omit;
@@ -3735,6 +3742,8 @@ public:
       NS_ENSURE_TRUE(jarChannel, NS_ERROR_NOT_AVAILABLE);
 
       mMethod = "GET";
+
+      mRequestMode = InternalRequest::MapChannelToRequestMode(channel);
 
       if (loadFlags & nsIRequest::LOAD_ANONYMOUS) {
         mRequestCredentials = RequestCredentials::Omit;
@@ -3802,6 +3811,7 @@ private:
     reqInit.mHeaders.Value().SetAsHeaders() = headers;
 
     reqInit.mMode.Construct(mRequestMode);
+    reqInit.mRedirect.Construct(mRequestRedirect);
     reqInit.mCredentials.Construct(mRequestCredentials);
 
     ErrorResult result;
@@ -3819,6 +3829,11 @@ private:
     internalReq->SetReferrer(NS_ConvertUTF8toUTF16(mReferrer));
 
     request->SetContentPolicyType(mContentPolicyType);
+
+    // TODO: remove conditional on http here once app protocol support is
+    //       removed from service worker interception
+    MOZ_ASSERT_IF(mIsHttpChannel && internalReq->IsNavigationRequest(),
+                  request->Redirect() == RequestRedirect::Manual);
 
     RootedDictionary<FetchEventInit> init(aCx);
     init.mRequest.Construct();
@@ -4057,6 +4072,9 @@ ServiceWorkerManager::CreateServiceWorker(nsIPrincipal* aPrincipal,
   AssertIsOnMainThread();
   MOZ_ASSERT(aPrincipal);
 
+  // Ensure that the IndexedDatabaseManager is initialized
+  NS_WARN_IF(!indexedDB::IndexedDatabaseManager::GetOrCreate());
+
   WorkerLoadInfo info;
   nsresult rv = NS_NewURI(getter_AddRefs(info.mBaseURI), aInfo->ScriptSpec(),
                           nullptr, nullptr);
@@ -4076,9 +4094,12 @@ ServiceWorkerManager::CreateServiceWorker(nsIPrincipal* aPrincipal,
 
   info.mPrincipal = aPrincipal;
 
-  info.mIndexedDBAllowed =
-    indexedDB::IDBFactory::AllowedForPrincipal(aPrincipal);
-   info.mPrivateBrowsing = false;
+  nsContentUtils::StorageAccess access =
+    nsContentUtils::StorageAllowedForPrincipal(aPrincipal);
+  info.mStorageAllowed =
+    access > nsContentUtils::StorageAccess::ePrivateBrowsing;
+
+  info.mPrivateBrowsing = false;
 
   nsCOMPtr<nsIContentSecurityPolicy> csp;
   rv = aPrincipal->GetCsp(getter_AddRefs(csp));

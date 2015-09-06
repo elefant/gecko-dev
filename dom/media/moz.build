@@ -101,6 +101,7 @@ EXPORTS += [
     'AudioChannelFormat.h',
     'AudioCompactor.h',
     'AudioMixer.h',
+    'AudioPacketizer.h',
     'AudioSampleFormat.h',
     'AudioSegment.h',
     'AudioStream.h',
@@ -277,8 +278,6 @@ EXTRA_JS_MODULES.media += [
     'PeerConnectionIdp.jsm',
     'RTCStatsReport.jsm',
 ]
-
-FAIL_ON_WARNINGS = True
 
 LOCAL_INCLUDES += [
     '/caps',

@@ -42,23 +42,17 @@ static int webmdemux_read(void* aBuffer, size_t aLength, void* aUserData)
   MOZ_ASSERT(aUserData);
   MOZ_ASSERT(aLength < UINT32_MAX);
   WebMDemuxer* demuxer = reinterpret_cast<WebMDemuxer*>(aUserData);
-  int64_t length = demuxer->GetEndDataOffset();
   uint32_t count = aLength;
-  int64_t position = demuxer->GetResource()->Tell();
-  if (position >= length) {
-    // GetLastBlockOffset was calculated after we had read past it.
-    // This condition can only occurs with plain webm, as with MSE,
-    // EnsureUpdateIndex would have been called first.
-    // Continue reading to the end instead.
-    length = demuxer->GetResource()->GetLength();
+  if (demuxer->IsMediaSource()) {
+    int64_t length = demuxer->GetEndDataOffset();
+    int64_t position = demuxer->GetResource()->Tell();
+    MOZ_ASSERT(position <= demuxer->GetResource()->GetLength());
+    MOZ_ASSERT(position <= length);
+    if (length >= 0 && count + position > length) {
+      count = length - position;
+    }
+    MOZ_ASSERT(count <= aLength);
   }
-  MOZ_ASSERT(position <= demuxer->GetResource()->GetLength());
-  MOZ_ASSERT(position <= length);
-  if (length >= 0 && count + position > length) {
-    count = length - position;
-  }
-  MOZ_ASSERT(count <= aLength);
-
   uint32_t bytes = 0;
   nsresult rv =
     demuxer->GetResource()->Read(static_cast<char*>(aBuffer), count, &bytes);
@@ -125,6 +119,11 @@ static void webmdemux_log(nestegg* aContext,
 
 
 WebMDemuxer::WebMDemuxer(MediaResource* aResource)
+  : WebMDemuxer(aResource, false)
+{
+}
+
+WebMDemuxer::WebMDemuxer(MediaResource* aResource, bool aIsMediaSource)
   : mResource(aResource)
   , mBufferedState(nullptr)
   , mInitData(nullptr)
@@ -132,15 +131,13 @@ WebMDemuxer::WebMDemuxer(MediaResource* aResource)
   , mVideoTrack(0)
   , mAudioTrack(0)
   , mSeekPreroll(0)
-  , mLastAudioFrameTime(0)
-  , mLastVideoFrameTime(0)
   , mAudioCodec(-1)
   , mVideoCodec(-1)
   , mHasVideo(false)
   , mHasAudio(false)
   , mNeedReIndex(true)
   , mLastWebMBlockOffset(-1)
-  , mIsExpectingMoreData(true)
+  , mIsMediaSource(aIsMediaSource)
 {
   if (!gNesteggLog) {
     gNesteggLog = PR_NewLogModule("Nestegg");
@@ -454,10 +451,13 @@ WebMDemuxer::EnsureUpToDateIndex()
   if (!mInitData && mBufferedState->GetInitEndOffset() != -1) {
     mInitData = mResource.MediaReadAt(0, mBufferedState->GetInitEndOffset());
   }
-  mLastWebMBlockOffset = mBufferedState->GetLastBlockOffset();
-  mIsExpectingMoreData = mResource.GetResource()->IsExpectingMoreData();
-  MOZ_ASSERT(mLastWebMBlockOffset <= mResource.GetLength());
   mNeedReIndex = false;
+
+  if (!mIsMediaSource) {
+    return;
+  }
+  mLastWebMBlockOffset = mBufferedState->GetLastBlockOffset();
+  MOZ_ASSERT(mLastWebMBlockOffset <= mResource.GetLength());
 }
 
 void
@@ -483,7 +483,9 @@ WebMDemuxer::GetCrypto()
 bool
 WebMDemuxer::GetNextPacket(TrackInfo::TrackType aType, MediaRawDataQueue *aSamples)
 {
-  EnsureUpToDateIndex();
+  if (mIsMediaSource) {
+    EnsureUpToDateIndex();
+  }
 
   nsRefPtr<NesteggPacketHolder> holder(NextPacket(aType));
 
@@ -503,27 +505,37 @@ WebMDemuxer::GetNextPacket(TrackInfo::TrackType aType, MediaRawDataQueue *aSampl
   // the timestamp of the next packet for this track.  If we've reached the
   // end of the resource, use the file's duration as the end time of this
   // video frame.
-  int64_t next_tstamp = 0;
+  int64_t next_tstamp = INT64_MIN;
   if (aType == TrackInfo::kAudioTrack) {
     nsRefPtr<NesteggPacketHolder> next_holder(NextPacket(aType));
     if (next_holder) {
       next_tstamp = next_holder->Timestamp();
       PushAudioPacket(next_holder);
-    } else {
+    } else if (!mIsMediaSource ||
+               (mIsMediaSource && mLastAudioFrameTime.isSome())) {
       next_tstamp = tstamp;
-      next_tstamp += tstamp - mLastAudioFrameTime;
+      next_tstamp += tstamp - mLastAudioFrameTime.refOr(0);
+    } else {
+      PushAudioPacket(holder);
     }
-    mLastAudioFrameTime = tstamp;
+    mLastAudioFrameTime = Some(tstamp);
   } else if (aType == TrackInfo::kVideoTrack) {
     nsRefPtr<NesteggPacketHolder> next_holder(NextPacket(aType));
     if (next_holder) {
       next_tstamp = next_holder->Timestamp();
       PushVideoPacket(next_holder);
-    } else {
+    } else if (!mIsMediaSource ||
+               (mIsMediaSource && mLastVideoFrameTime.isSome())) {
       next_tstamp = tstamp;
-      next_tstamp += tstamp - mLastVideoFrameTime;
+      next_tstamp += tstamp - mLastVideoFrameTime.refOr(0);
+    } else {
+      PushVideoPacket(holder);
     }
-    mLastVideoFrameTime = tstamp;
+    mLastVideoFrameTime = Some(tstamp);
+  }
+
+  if (mIsMediaSource && next_tstamp == INT64_MIN) {
+    return false;
   }
 
   int64_t discardPadding = 0;
@@ -653,7 +665,7 @@ WebMDemuxer::GetNextKeyframeTime()
   EnsureUpToDateIndex();
   uint64_t keyframeTime;
   uint64_t lastFrame =
-    media::TimeUnit::FromMicroseconds(mLastVideoFrameTime).ToNanoseconds();
+    media::TimeUnit::FromMicroseconds(mLastVideoFrameTime.refOr(0)).ToNanoseconds();
   if (!mBufferedState->GetNextKeyframeTime(lastFrame, &keyframeTime) ||
       keyframeTime <= lastFrame) {
     return -1;
@@ -721,8 +733,8 @@ WebMDemuxer::SeekInternal(const media::TimeUnit& aTarget)
     WEBM_DEBUG("got offset from buffered state: %" PRIu64 "", offset);
   }
 
-  mLastAudioFrameTime = 0;
-  mLastVideoFrameTime = 0;
+  mLastAudioFrameTime.reset();
+  mLastVideoFrameTime.reset();
 
   return NS_OK;
 }

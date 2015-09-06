@@ -96,6 +96,7 @@
 #include "nsSHistory.h"
 #include "nsDocShellEditorData.h"
 #include "GeckoProfiler.h"
+#include "timeline/JavascriptTimelineMarker.h"
 
 // Helper Classes
 #include "nsError.h"
@@ -1601,7 +1602,7 @@ nsDocShell::LoadStream(nsIInputStream* aStream, nsIURI* aURI,
     (void)aLoadInfo->GetLoadType(&lt);
     // Get the appropriate LoadType from nsIDocShellLoadInfo type
     loadType = ConvertDocShellLoadInfoToLoadType(lt);
-  
+
     nsCOMPtr<nsISupports> owner;
     aLoadInfo->GetOwner(getter_AddRefs(owner));
     requestingPrincipal = do_QueryInterface(owner);
@@ -4969,6 +4970,7 @@ nsDocShell::DisplayLoadError(nsresult aError, nsIURI* aURI,
       case NS_ERROR_INTERCEPTED_ERROR_RESPONSE:
       case NS_ERROR_INTERCEPTED_USED_RESPONSE:
       case NS_ERROR_CLIENT_REQUEST_OPAQUE_INTERCEPTION:
+      case NS_ERROR_BAD_OPAQUE_REDIRECT_INTERCEPTION:
         // ServiceWorker intercepted request, but something went wrong.
         nsContentUtils::MaybeReportInterceptionErrorToConsole(GetDocument(),
                                                               aError);
@@ -9989,11 +9991,12 @@ nsDocShell::InternalLoad(nsIURI* aURI,
       /* restore previous position of scroller(s), if we're moving
        * back in history (bug 59774)
        */
+      nscoord bx, by;
+      bool needsScrollPosUpdate = false;
       if (mOSHE && (aLoadType == LOAD_HISTORY ||
                     aLoadType == LOAD_RELOAD_NORMAL)) {
-        nscoord bx, by;
+        needsScrollPosUpdate = true;
         mOSHE->GetScrollPosition(&bx, &by);
-        SetCurScrollPosEx(bx, by);
       }
 
       // Dispatch the popstate and hashchange events, as appropriate.
@@ -10007,6 +10010,10 @@ nsDocShell::InternalLoad(nsIURI* aURI,
 
         if (historyNavBetweenSameDoc || doHashchange) {
           win->DispatchSyncPopState();
+        }
+
+        if (needsScrollPosUpdate && win->HasActiveDocument()) {
+          SetCurScrollPosEx(bx, by);
         }
 
         if (doHashchange) {
@@ -10557,6 +10564,8 @@ nsDocShell::DoURILoad(nsIURI* aURI,
     } else {
       httpChannelInternal->SetDocumentURI(aReferrerURI);
     }
+    httpChannelInternal->SetRedirectMode(
+      nsIHttpChannelInternal::REDIRECT_MODE_MANUAL);
   }
 
   nsCOMPtr<nsIWritablePropertyBag2> props(do_QueryInterface(channel));
@@ -13772,51 +13781,6 @@ nsDocShell::GetOpener()
   return opener;
 }
 
-class JavascriptTimelineMarker : public TimelineMarker
-{
-public:
-  JavascriptTimelineMarker(nsDocShell* aDocShell, const char* aName,
-                           const char* aReason,
-                           const char16_t* aFunctionName,
-                           const char16_t* aFileName,
-                           uint32_t aLineNumber)
-    : TimelineMarker(aDocShell, aName, TRACING_INTERVAL_START,
-                     NS_ConvertUTF8toUTF16(aReason),
-                     NO_STACK)
-    , mFunctionName(aFunctionName)
-    , mFileName(aFileName)
-    , mLineNumber(aLineNumber)
-  {
-  }
-
-  void AddDetails(JSContext* aCx, mozilla::dom::ProfileTimelineMarker& aMarker)
-    override
-  {
-    aMarker.mCauseName.Construct(GetCause());
-
-    if (!mFunctionName.IsEmpty() || !mFileName.IsEmpty()) {
-      RootedDictionary<ProfileTimelineStackFrame> stackFrame(aCx);
-      stackFrame.mLine.Construct(mLineNumber);
-      stackFrame.mSource.Construct(mFileName);
-      stackFrame.mFunctionDisplayName.Construct(mFunctionName);
-
-      JS::Rooted<JS::Value> newStack(aCx);
-      if (ToJSValue(aCx, stackFrame, &newStack)) {
-        if (newStack.isObject()) {
-          aMarker.mStack = &newStack.toObject();
-        }
-      } else {
-        JS_ClearPendingException(aCx);
-      }
-    }
-  }
-
-private:
-  nsString mFunctionName;
-  nsString mFileName;
-  uint32_t mLineNumber;
-};
-
 void
 nsDocShell::NotifyJSRunToCompletionStart(const char* aReason,
                                          const char16_t* aFunctionName,
@@ -13827,10 +13791,8 @@ nsDocShell::NotifyJSRunToCompletionStart(const char* aReason,
 
   // If first start, mark interval start.
   if (timelineOn && mJSRunToCompletionDepth == 0) {
-    mozilla::UniquePtr<TimelineMarker> marker =
-      MakeUnique<JavascriptTimelineMarker>(this, "Javascript", aReason,
-                                           aFunctionName, aFilename,
-                                           aLineNumber);
+    UniquePtr<TimelineMarker> marker = MakeUnique<JavascriptTimelineMarker>(
+      aReason, aFunctionName, aFilename, aLineNumber, MarkerTracingType::START);
     TimelineConsumers::AddMarkerForDocShell(this, Move(marker));
   }
   mJSRunToCompletionDepth++;
@@ -13844,7 +13806,7 @@ nsDocShell::NotifyJSRunToCompletionStop()
   // If last stop, mark interval end.
   mJSRunToCompletionDepth--;
   if (timelineOn && mJSRunToCompletionDepth == 0) {
-    TimelineConsumers::AddMarkerForDocShell(this, "Javascript", TRACING_INTERVAL_END);
+    TimelineConsumers::AddMarkerForDocShell(this, "Javascript", MarkerTracingType::END);
   }
 }
 
