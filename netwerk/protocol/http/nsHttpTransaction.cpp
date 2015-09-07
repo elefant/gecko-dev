@@ -1644,7 +1644,7 @@ nsHttpTransaction::HandleContent(char *buf,
 {
     nsresult rv;
 
-    //LOG(("nsHttpTransaction::HandleContent [this=%p count=%u]\n", this, count));
+    LOG(("nsHttpTransaction::HandleContent [this=%p count=%u]\n", this, count));
 
     *contentRead = 0;
     *contentRemaining = 0;

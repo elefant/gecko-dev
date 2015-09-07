@@ -103,12 +103,12 @@ HttpChannelParentListener::OnDataAvailable(nsIRequest *aRequest,
 // HttpChannelParentListener::nsIPackagedAppChannelListener
 //-----------------------------------------------------------------------------
 NS_IMETHODIMP
-HttpChannelParentListener::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
+HttpChannelParentListener::OnStartSignedPackageRequest(const nsACString& aPackageId)
 {
   nsCOMPtr<nsIPackagedAppChannelListener> listener = do_QueryInterface(mNextListener);
   if (listener) {
     NS_WARNING("HttpChannelParentListener: Notifying mNextListener OnStartSignedPackageRequest");
-    listener->OnStartSignedPackageRequest(aNewOrigin);
+    listener->OnStartSignedPackageRequest(aPackageId);
   } else {
     NS_WARNING("HttpChannelParentListener: mNextListener is not nsIPackagedAppChannelListener");
   }

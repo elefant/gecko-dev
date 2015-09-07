@@ -7,5 +7,5 @@
 [scriptable, uuid(27caf7d0-3c0e-11e5-b970-0800200c9a66)]
 interface nsIPackagedAppChannelListener : nsISupports
 {
-  void onStartSignedPackageRequest(in ACString aNewOrigin);
+  void onStartSignedPackageRequest(in ACString aPackageId);
 };

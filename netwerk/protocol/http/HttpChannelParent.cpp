@@ -69,6 +69,7 @@ HttpChannelParent::HttpChannelParent(const PBrowserOrId& iframeEmbedding,
   , mShouldIntercept(false)
   , mShouldSuspendIntercept(false)
   , mNestedFrameId(0)
+  , mIsFromSignedPackage(false)
 {
   LOG(("Creating HttpChannelParent [this=%p]\n", this));
 
@@ -796,8 +797,9 @@ HttpChannelParent::RecvDivertComplete()
 //-----------------------------------------------------------------------------
 
 NS_IMETHODIMP
-HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
+HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aPackageId)
 {
+  mIsFromSignedPackage = true;
   if (mTabParent) {
     mTabParent->OnStartSignedPackageRequest(mChannel);
   }
@@ -880,9 +882,13 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
 
   nsCString packageId;
   if (mLoadContext) {
-    // mChannel has been updated the origin as a signed package content.
-    // It will be updated to the child through SendOnStartRequest.
-    mLoadContext->GetPackageId(packageId);
+    if (mIsFromSignedPackage) {
+      // mChannel has been updated the origin as a signed package content.
+      // It will be updated to the child through SendOnStartRequest.
+      mLoadContext->GetPackageId(packageId);
+    } else {
+      mLoadContext->SetPackageId(packageId);
+    }
   }
 
   LOG(("HttpChannelParent::OnStartRequest: packageId: %s", packageId.get()));

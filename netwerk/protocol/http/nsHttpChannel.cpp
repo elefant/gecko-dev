@@ -5632,12 +5632,12 @@ nsHttpChannel::GetRequestMethod(nsACString& aMethod)
 //-----------------------------------------------------------------------------
 
 NS_IMETHODIMP
-nsHttpChannel::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
+nsHttpChannel::OnStartSignedPackageRequest(const nsACString& aPackageId)
 {
     nsCOMPtr<nsILoadContext> loadContext;
     NS_QueryNotificationCallbacks(this, loadContext);
     if (loadContext) {
-        loadContext->SetPackageId(aNewOrigin);
+        loadContext->SetPackageId(aPackageId);
     }
 
     nsCOMPtr<nsIPackagedAppChannelListener> listener;
@@ -5645,7 +5645,7 @@ nsHttpChannel::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
 
     if (listener) {
         LOG(("nsHttpChannel::OnStartSignedPackageRequest: notifying listener->OnStartSignedPackageRequest"));
-        listener->OnStartSignedPackageRequest(aNewOrigin);
+        listener->OnStartSignedPackageRequest(aPackageId);
     } else {
         LOG(("nsHttpChannel::OnStartSignedPackageRequest: listener %p is not nsIPackagedAppChannelListener", mListener.get()));
     }
