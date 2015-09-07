@@ -40,9 +40,11 @@ using mozilla::OriginAttributes;
 using namespace mozilla::dom;
 using namespace mozilla::ipc;
 
+#undef LOG
 #ifdef MOZ_WIDGET_GONK
-  #undef LOG
   #define LOG(args) printf_stderr args
+#else
+  #define LOG(args) PR_LogPrint args
 #endif
 
 namespace mozilla {
