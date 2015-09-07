@@ -5634,6 +5634,12 @@ nsHttpChannel::GetRequestMethod(nsACString& aMethod)
 NS_IMETHODIMP
 nsHttpChannel::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
 {
+    nsCOMPtr<nsILoadContext> loadContext;
+    NS_QueryNotificationCallbacks(this, loadContext);
+    if (loadContext) {
+        loadContext->SetPackageId(aNewOrigin);
+    }
+
     nsCOMPtr<nsIPackagedAppChannelListener> listener;
     NS_QueryNotificationCallbacks(this, listener);
 

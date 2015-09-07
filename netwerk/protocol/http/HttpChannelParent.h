@@ -88,9 +88,6 @@ public:
     }
   }
 
-  // FIXME: Move this out of necko.
-  bool ShouldSwitchProcess(const nsACString& aNewOrigin);
-
 protected:
   // used to connect redirected-to channel in parent with just created
   // ChildChannel.  Used during redirects.

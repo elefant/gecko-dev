@@ -791,148 +791,16 @@ HttpChannelParent::RecvDivertComplete()
   return true;
 }
 
-bool
-HttpChannelParent::ShouldSwitchProcess(const nsACString& aNewOrigin)
-{
-  nsCOMPtr<nsILoadInfo> loadInfo;
-  mChannel->GetLoadInfo(getter_AddRefs(loadInfo));
-
-  nsCOMPtr<nsIPrincipal> loadingPrincipal;
-  loadInfo->GetLoadingPrincipal(getter_AddRefs(loadingPrincipal));
-
-  nsCOMPtr<nsIPrincipal> triggeringPrincipal;
-  loadInfo->GetTriggeringPrincipal(getter_AddRefs(triggeringPrincipal));
-
-  nsCString loadingOrigin;
-  nsCString loadingOriginNoSuffix;
-
-  nsCString loadingURIString;
-  nsCOMPtr<nsIURI> loadingURI;
-  loadingPrincipal->GetURI(getter_AddRefs(loadingURI));
-  loadingURI->GetAsciiSpec(loadingURIString);
-
-  nsCString triggeringURIString;
-  nsCOMPtr<nsIURI> triggeringURI;
-  triggeringPrincipal->GetURI(getter_AddRefs(triggeringURI));
-  triggeringURI->GetAsciiSpec(triggeringURIString);
-
-  loadingPrincipal->GetOrigin(loadingOrigin);
-  loadingPrincipal->GetOriginNoSuffix(loadingOriginNoSuffix);
-
-  nsCString triggeringOriginNoSuffix;
-  nsCString triggeringOrigin;
-  triggeringPrincipal->GetOriginNoSuffix(triggeringOriginNoSuffix);
-  triggeringPrincipal->GetOrigin(triggeringOrigin);
-
-  nsCOMPtr<nsIURI> uri;
-  mChannel->GetURI(getter_AddRefs(uri));
-  nsCString uriString;
-  uri->GetAsciiSpec(uriString);
-
-  nsLoadFlags loadFlags;
-  mChannel->GetLoadFlags(&loadFlags);
-  nsCOMPtr<nsILoadGroup> loadGroup;
-  mChannel->GetLoadGroup(getter_AddRefs(loadGroup));
-
-  nsContentPolicyType loadingCPT = loadInfo->GetContentPolicyType();
-
-  LOG(("Loading origin: %s, triggering origin %s, package origin: %s (%s), (%d) (%d) (%s), (%d)",
-        loadingOrigin.get(),
-        triggeringOrigin.get(),
-        nsCString(aNewOrigin).get(),
-        uriString.get(),
-        loadFlags,
-        loadingPrincipal->Equals(triggeringPrincipal),
-        triggeringOrigin.get(),
-        loadingCPT));
-
-
-  //LOG(("Loading uri: %s, triggering uri %s (%s)",
-  //      loadingURIString.get(), triggeringURIString.get(), uriString.get()));
-
-  /*
-  bool isNullPrincipal;
-  triggeringPrincipal->GetIsNullPrincipal(&isNullPrincipal);
-  if (!isNullPrincipal) {
-    LOG(("Triggered by with princiapl. No need to switch."));
-    return false;
-  }*/
-
-  nsCOMPtr<nsIPrincipal> resultPrincipal;
-  nsContentUtils::GetSecurityManager()->
-    GetChannelResultPrincipal(mChannel, getter_AddRefs(resultPrincipal));
-
-  nsCString resultPrincipalOrigin;
-  resultPrincipal->GetOrigin(resultPrincipalOrigin);
-  LOG(("Result principal origin: %s", resultPrincipalOrigin.get()));
-
-  if (nsIContentPolicy::TYPE_DOCUMENT != loadInfo->GetContentPolicyType()) {
-    // No need to switch process for subresource.
-    LOG(("Subresource of a document. No need to switch process."));
-    return false;
-  }
-
-  if (loadingOrigin == resultPrincipalOrigin) {
-    LOG(("Loading from the same signed package. No need to switch process."));
-    return false;
-  }
-
-  const char* kWhiteOriginList[] = {
-    "moz-safe-about:",
-  };
-
-  for (uint32_t i = 0; i < mozilla::ArrayLength(kWhiteOriginList); i++) {
-    if (StringBeginsWith(loadingOriginNoSuffix, nsCString(kWhiteOriginList[i]))) {
-      LOG(("Loading from white origin list: %s", kWhiteOriginList[i]));
-      return false;
-    }
-  }
-
-  return true;
-}
-
 //-----------------------------------------------------------------------------
 // HttpChannelParent::nsIPackagedAppChannelListener
 //-----------------------------------------------------------------------------
+
 NS_IMETHODIMP
 HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aNewOrigin)
 {
-  /*
-  nsCOMPtr<nsIURI> uri;
-  mChannel->GetURI(getter_AddRefs(uri));
-  if (uri) {
-    uri->SetPackageId(aNewOrigin);
+  if (mTabParent) {
+    mTabParent->OnStartSignedPackageRequest(mChannel);
   }
-  mChannel->GetOriginalURI(getter_AddRefs(uri));
-  if (uri) {
-    uri->SetPackageId(aNewOrigin);
-  }
-  */
-
-  if (mLoadContext) {
-    // mChannel has been updated the origin as a signed package content.
-    // It will be updated to the child through SendOnStartRequest.
-    mLoadContext->SetPackageId(aNewOrigin);
-  }
-
-  // TODO: Move this check out of necko. (maybe to TabParent)
-  LOG(("HttpChannelParent::OnStartSignedPackageRequest"));
-  if (ShouldSwitchProcess(aNewOrigin)) {
-    nsCOMPtr<nsIURI> uri;
-    mChannel->GetURI(getter_AddRefs(uri));
-
-    nsCString uriString;
-    uri->GetAsciiSpec(uriString);
-
-    // TODO: Use a proper error code.
-    mChannel->Cancel(NS_ERROR_UNKNOWN_HOST);
-
-    LOG(("We decide to switch process. Call TabParent::SwitchProcessAndLoadURIs: %s",
-         uriString.get()));
-
-    mTabParent->SwitchProcessAndLoadURI(uri);
-  }
-
   return NS_OK;
 }
 

@@ -441,7 +441,8 @@ public:
 
     virtual PWebBrowserPersistDocumentParent* AllocPWebBrowserPersistDocumentParent(const uint64_t& aOuterWindowID) override;
     virtual bool DeallocPWebBrowserPersistDocumentParent(PWebBrowserPersistDocumentParent* aActor) override;
-    void SwitchProcessAndLoadURI(nsIURI* aURI);
+
+    void OnStartSignedPackageRequest(nsIChannel* aChannel);
 
 protected:
     bool ReceiveMessage(const nsString& aMessage,
@@ -482,6 +483,8 @@ protected:
                                   BrowserConfiguration& aConfiguration);
 
     void SetHasContentOpener(bool aHasContentOpener);
+	
+	bool ShouldSwitchProcess(nsIChannel* aChannel);
 
     ContentCacheInParent mContentCache;
 
