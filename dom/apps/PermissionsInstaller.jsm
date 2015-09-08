@@ -42,6 +42,7 @@ this.PermissionsInstaller = {
    *        A function called if an error occurs
    * @returns void
    **/
+
   installPermissions: function installPermissions(aApp, aIsReinstall,
                                                   aOnError) {
     try {
@@ -115,13 +116,24 @@ this.PermissionsInstaller = {
         break;
       }
 
-      this._setPermission("indexedDB", "allow", aApp);
+      this._setPermission("indexedDB", "allow",
+                          aApp.origin, aApp.manifestURL, aApp.appId, aApp.isCachedPackage);
 
       // Add the appcache related permissions. We allow it for all kinds of
       // apps.
       if (newManifest.appcache_path) {
-        this._setPermission("offline-app", "allow", aApp);
-        this._setPermission("pin-app", "allow", aApp);
+        this._setPermission("offline-app",
+                            "allow",
+                            aApp.origin,
+                            aApp.manifestURL,
+                            aApp.appId,
+                            aApp.isCachedPackage);
+        this._setPermission("pin-app",
+                            "allow",
+                            aApp.origin,
+                            aApp.manifestURL,
+                            aApp.appId,
+                            aApp.isCachedPackage);
       }
 
       for (let permName in newManifest.permissions) {
@@ -170,7 +182,12 @@ this.PermissionsInstaller = {
             }
           }
 
-          this._setPermission(expandedPermNames[idx], permValue, aApp);
+          this._setPermission(expandedPermNames[idx],
+                              permValue,
+                              aApp.origin,
+                              aApp.appId,
+                              aApp.manifestURL,
+                              aApp.isCachedPackage);
         }
       }
     }
@@ -190,18 +207,26 @@ this.PermissionsInstaller = {
    *        The permission name.
    * @param string aPermValue
    *        The permission value.
-   * @param object aApp
-   *        The just-installed app configuration.
-   *        The properties used are manifestURL and origin.
+   * @param string aOrigin
+   *        The origin of the app being installed.
+   * @param string aManifestURL
+   *        The manifest URL of the app.
    * @returns void
    **/
-  _setPermission: function setPermission(aPermName, aPermValue, aApp) {
+  _setPermission: function setPermission(aPermName,
+                                         aPermValue,
+                                         aOrigin,
+                                         aManifestURL,
+                                         aAppId,
+                                         aIsCachedPackage) {
     PermissionSettingsModule.addPermission({
       type: aPermName,
-      origin: aApp.origin,
-      manifestURL: aApp.manifestURL,
+      origin: aOrigin,
+      manifestURL: aManifestURL,
       value: aPermValue,
-      browserFlag: false
+      browserFlag: false,
+      localId: aAppId,
+      isCachedPackage: aIsCachedPackage,
     });
   }
 };
