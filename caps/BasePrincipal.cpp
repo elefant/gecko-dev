@@ -371,13 +371,6 @@ BasePrincipal::GetUnknownAppId(bool* aUnknownAppId)
   return NS_OK;
 }
 
-NS_IMETHODIMP
-BasePrincipal::GetPackageId(nsACString& aPackageId)
-{
-  aPackageId = PackageId();
-  return NS_OK;
-}
-
 already_AddRefed<BasePrincipal>
 BasePrincipal::CreateCodebasePrincipal(nsIURI* aURI, OriginAttributes& aAttrs)
 {

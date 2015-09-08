@@ -203,11 +203,9 @@ PrincipalToPrincipalInfo(nsIPrincipal* aPrincipal,
     return rv;
   }
 
-  nsCString packageId;
-  rv = aPrincipal->GetPackageId(packageId);
-  if (NS_WARN_IF(NS_FAILED(rv))) {
-    return rv;
-  }
+  const mozilla::OriginAttributes& attr = 
+	mozilla::BasePrincipal::Cast(aPrincipal)->OriginAttributesRef();
+  nsCString packageId = NS_ConvertUTF16toUTF8(attr.mPackageId);
 
   bool isUnknownAppId;
   rv = aPrincipal->GetUnknownAppId(&isUnknownAppId);
