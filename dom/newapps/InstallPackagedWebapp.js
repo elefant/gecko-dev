@@ -45,8 +45,6 @@ InstallPackagedWebapp.prototype = {
     try {
       let isSuccess = true;
       let manifest = JSON.parse(aManifestContent);
-      //TODO: get package identifier from the manifest to build
-      //the signed packaged origin.
 
       PermissionsInstaller.installPermissions({
         manifest: manifest,
@@ -59,7 +57,7 @@ InstallPackagedWebapp.prototype = {
         throw "Error installing permissions in PermissionsInstaller";
       });
 
-      //TODO: register app handlers (system msg)
+      // TODO: register app handlers (system msg)
 
       return isSuccess;
     }
