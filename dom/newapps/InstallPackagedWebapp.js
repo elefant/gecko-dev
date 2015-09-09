@@ -18,11 +18,14 @@ function InstallPackagedWebapp() {
 }
 
 InstallPackagedWebapp.prototype = {
-  classDescription: "InstallPackagedWebapp JavaScript XPCOM Component",
-  classID:          Components.ID("{5cc6554a-5421-4a5e-b8c2-c62e8b7f4f3f}"),
-  contractID:       "@mozilla.org/newapps/installpackagedwebapp;1",
-
   QueryInterface: XPCOMUtils.generateQI([Ci.nsIInstallPackagedWebapp]),
+  classID:          Components.ID("{5cc6554a-5421-4a5e-b8c2-c62e8b7f4f3f}"),
+  classInfo: XPCOMUtils.generateCI({
+    classID:          Components.ID("{5cc6554a-5421-4a5e-b8c2-c62e8b7f4f3f}"),
+    classDescription: "InstallPackagedWebapp JavaScript XPCOM Component",
+    interfaces: [Ci.nsIInstallPackagedWebapp]
+  }),
+
 
   /**
    * Install permissions for signed packaged web content
@@ -67,4 +70,4 @@ InstallPackagedWebapp.prototype = {
   },
 };
 
-var NSGetFactory = XPCOMUtils.generateNSGetFactory([InstallPackagedWebapp]);
+this.NSGetFactory = XPCOMUtils.generateNSGetFactory([InstallPackagedWebapp]);

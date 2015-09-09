@@ -5,7 +5,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 XPIDL_SOURCES += [
-    'nsIInstallPackagedWebapp.idl',
+    'nsIInstallPackagedWebapp.idl'
 ]
 
 XPIDL_MODULE = 'dom_newapps'
