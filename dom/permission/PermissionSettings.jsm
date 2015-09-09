@@ -104,7 +104,7 @@ this.PermissionSettingsModule = {
     }
 
     if (aAllowAllChanges ||
-        this._isChangeAllowed(principal, aData.type, aData.value)) {
+        this._isChangeAllowed(principal, aData.type, aData.value, app.kind)) {
       debug("add: " + aData.origin + " " + app.localId + " " + action);
       Services.perms.addFromPrincipal(principal, aData.type, action);
       return true;
