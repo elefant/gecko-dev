@@ -21,6 +21,13 @@ static const short kResourceHashType = nsICryptoHash::SHA256;
 // be treated signed.
 static bool gDeveloperMode = false;
 
+#undef LOG
+#ifdef MOZ_WIDGET_GONK
+  #define LOG(args) printf_stderr args
+#else
+  #define LOG(args) PR_LogPrint args
+#endif
+
 namespace mozilla {
 namespace net {
 

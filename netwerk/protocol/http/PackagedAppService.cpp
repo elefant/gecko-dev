@@ -28,6 +28,13 @@ static PRLogModuleInfo *gPASLog = nullptr;
 #undef LOG
 #define LOG(args) MOZ_LOG(gPASLog, mozilla::LogLevel::Debug, args)
 
+#undef LOG
+#ifdef MOZ_WIDGET_GONK
+  #define LOG(args) printf_stderr args
+#else
+  #define LOG(args) PR_LogPrint args
+#endif
+
 NS_IMPL_ISUPPORTS(PackagedAppService, nsIPackagedAppService)
 
 NS_IMPL_ISUPPORTS(PackagedAppService::CacheEntryWriter, nsIStreamListener)
