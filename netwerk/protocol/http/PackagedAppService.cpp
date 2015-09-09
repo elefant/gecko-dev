@@ -862,6 +862,7 @@ void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp(const R
   nsCOMPtr<nsIInstallPackagedWebapp> installer = do_GetService("@mozilla.org/newapps/installpackagedwebapp;1");
 
   if (!installer) {
+    LOG(("InstallSignedPackagedApp: fail to get InstallPackagedWebapp service"));
     return OnError(ERROR_GET_INSTALLER_FAILED);
   }
 
@@ -879,6 +880,7 @@ void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp(const R
                                    mAppId,
                                    isSuccess);
   if (!(*isSuccess)) {
+    LOG(("InstallSignedPackagedApp: failed to install permissions"));
     return OnError(ERROR_INSTALL_RESOURCE_FAILED);
   }
 
@@ -1095,7 +1097,7 @@ PackagedAppService::GetResource(nsIChannel *aChannel,
 
   downloader = new PackagedAppDownloader();
   nsCString packageOrigin;
-  principal->GetOriginNoSuffix(packageOrigin);
+  principal->GetOrigin(packageOrigin);
   rv = downloader->Init(loadContextInfo, key, packageOrigin);
   if (NS_WARN_IF(NS_FAILED(rv))) {
     return rv;
