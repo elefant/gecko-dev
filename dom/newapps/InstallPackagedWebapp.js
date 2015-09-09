@@ -40,16 +40,16 @@ InstallPackagedWebapp.prototype = {
    * @returns boolean
    **/
 
-  installPackagedWebapp: function(manifestContent, aOrigin, aManifestURL, aAppId) {
+  installPackagedWebapp: function(aManifestContent, aOrigin, aManifestURL, aAppId) {
 
     try {
-      var isSuccess = true;
-      let aManifest = JSON.parse(manifestContent);
+      let isSuccess = true;
+      let manifest = JSON.parse(aManifestContent);
       //TODO: get package identifier from the manifest to build
       //the signed packaged origin.
 
       PermissionsInstaller.installPermissions({
-        manifest: aManifest,
+        manifest: manifest,
         manifestURL: aManifestURL,
         origin: aOrigin,
         appId: aAppId,
@@ -65,7 +65,7 @@ InstallPackagedWebapp.prototype = {
     }
     catch(ex) {
       Cu.reportError(ex);
-      return !isSuccess;
+      return false;
     }
   },
 };
