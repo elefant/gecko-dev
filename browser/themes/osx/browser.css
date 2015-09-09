@@ -1614,7 +1614,6 @@ toolbarbutton[constrain-size="true"][cui-areatype="toolbar"] > .toolbarbutton-ba
 }
 
 #urlbar {
-  -moz-padding-end: 4px;
   border-radius: @toolbarbuttonCornerRadius@;
 }
 
@@ -1901,11 +1900,13 @@ richlistitem[type~="action"][actiontype="switchtab"][selected="true"] > .ac-url-
   list-style-image: url("chrome://browser/skin/reload-stop-go.png");
   padding: 0 9px;
   margin-inline-start: 2px;
+  border-inline-end-style: none;
   border-inline-start: 1px solid var(--urlbar-separator-color);
   border-image: linear-gradient(transparent 15%,
                                 var(--urlbar-separator-color) 15%,
                                 var(--urlbar-separator-color) 85%,
                                 transparent 85%);
+  border-image-slice: 1;
 }
 
 #urlbar-go-button {

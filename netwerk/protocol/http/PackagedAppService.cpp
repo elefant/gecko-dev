@@ -27,13 +27,6 @@ static PRLogModuleInfo *gPASLog = nullptr;
 #undef LOG
 #define LOG(args) MOZ_LOG(gPASLog, mozilla::LogLevel::Debug, args)
 
-#undef LOG
-#ifdef MOZ_WIDGET_GONK
-  #define LOG(args) printf_stderr args
-#else
-  #define LOG(args) PR_LogPrint args
-#endif
-
 NS_IMPL_ISUPPORTS(PackagedAppService, nsIPackagedAppService)
 
 NS_IMPL_ISUPPORTS(PackagedAppService::CacheEntryWriter, nsIStreamListener)
@@ -569,6 +562,8 @@ PackagedAppService::PackagedAppDownloader::OnError(EErrorType aError)
 {
   // TODO: Handler verification error properly.
   LOG(("PackagedAppDownloader::OnError > %d", aError));
+
+  FinalizeDownload(NS_ERROR_SIGNED_APP_MANIFEST_INVALID);
 }
 
 void
@@ -748,13 +743,8 @@ PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
       // This is the case where a package downloader is still running and we
       // peek data from it.
 
-      if (listener && mVerifier && mVerifier->GetIsPackageSigned()) {
-        listener->OnStartSignedPackageRequest(mVerifier->GetPackageOrigin());
-        // Clear the requester so that it will not be added to mRequesters
-        // and will not be called back subsequently.
-        aRequester = nullptr;
-      }
-
+      // TODO: Bug 1186290 to notify that the signed packaged content is ready
+      //       to load.
       mCacheStorage->AsyncOpenURI(aURI, EmptyCString(),
                                   nsICacheStorage::OPEN_READONLY, aCallback);
     } else {

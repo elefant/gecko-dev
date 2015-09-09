@@ -139,7 +139,7 @@ function test_no_signature(aDeveloperMode) {
     [kOrigin + '/5.css',    Cr.NS_OK,    true],
   ];
 
-  let isPackageSigned = aDeveloperMode; // Package is always considered as signed in developer mode.
+  let isPackageSigned = false;
 
   // We only require the package URL to be different in each test case.
   let packageUriString = kOrigin + '/pak' + (aDeveloperMode ? '-dev' : '');

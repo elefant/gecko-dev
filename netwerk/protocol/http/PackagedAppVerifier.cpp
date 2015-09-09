@@ -23,7 +23,6 @@
 #endif
 
 static const short kResourceHashType = nsICryptoHash::SHA256;
-static const char* kTestingSignature = "THIS.IS.TESTING.SIGNATURE";
 
 // If it's true, all the verification will be skipped and the package will
 // be treated signed.
@@ -74,11 +73,6 @@ NS_IMETHODIMP PackagedAppVerifier::Init(nsIPackagedAppVerifierListener* aListene
   mSignature = aSignature;
   mIsPackageSigned = false;
   mPackageCacheEntry = aPackageCacheEntry;
-
-  if (gDeveloperMode && mSignature.IsEmpty()) {
-    LOG(("No signature but in developer mode ==> Assign a testing signature."));
-    mSignature.Assign(kTestingSignature);
-  }
 
   return NS_OK;
 }
@@ -131,7 +125,6 @@ PackagedAppVerifier::OnStopRequest(nsIRequest* aRequest,
                                     nsISupports* aContext,
                                     nsresult aStatusCode)
 {
-  MOZ_ASSERT(!mHashingResourceURI.IsEmpty(), "MUST call BeginResourceHash first.");
   NS_ENSURE_TRUE(mHasher, NS_ERROR_FAILURE);
 
   nsresult rv = mHasher->Finish(true, mLastComputedResourceHash);
@@ -148,7 +141,7 @@ PackagedAppVerifier::OnStopRequest(nsIRequest* aRequest,
 void
 PackagedAppVerifier::ProcessResourceCache(const ResourceCacheInfo* aInfo)
 {
-  MOZ_RELEASE_ASSERT(NS_IsMainThread(), "OnResourceCached must be on main thread");
+  MOZ_RELEASE_ASSERT(NS_IsMainThread(), "ProcessResourceCache must be on main thread");
 
   switch (mState) {
   case STATE_UNKNOWN:
@@ -225,13 +218,12 @@ PackagedAppVerifier::OnManifestVerified(const ResourceCacheInfo* aInfo, bool aSu
 
   // Only when the manifest verified and package has signature would we
   // regard this package is signed.
-  mIsPackageSigned = (aSuccess && !mSignature.IsEmpty());
+  mIsPackageSigned = aSuccess && !mSignature.IsEmpty();
 
   mState = aSuccess ? STATE_MANIFEST_VERIFIED_OK
                     : STATE_MANIFEST_VERIFIED_FAILED;
 
   // TODO: Update mPackageOrigin.
-  mPackageOrigin = nsCString("1bd8af93-09f1-446c-96bf-7798fd0bff9a");
 
   // If the package is signed, add related info to the package cache.
   if (mIsPackageSigned && mPackageCacheEntry) {
@@ -292,12 +284,11 @@ PackagedAppVerifier::CreateResourceCacheInfo(nsIURI* aUri,
                                              bool aIsLastPart,
                                              nsISupports** aReturn)
 {
-  RefPtr<ResourceCacheInfo> info =
+  nsCOMPtr<nsISupports> info =
     new ResourceCacheInfo(aUri, aCacheEntry, aStatusCode, aIsLastPart);
 
-  *aReturn = info;
+  info.forget(aReturn);
 
-  NS_IF_ADDREF(*aReturn);
   return NS_OK;
 }
 
