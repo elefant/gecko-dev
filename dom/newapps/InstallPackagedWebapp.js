@@ -53,9 +53,7 @@ InstallPackagedWebapp.prototype = {
         localId: aAppId,
         isPreinstalled: false,
         isCachedPackage: true
-      }, false, function() {
-        throw "Error installing permissions in PermissionsInstaller";
-      });
+      }, false);
 
       // TODO: register app handlers (system msg)
 
