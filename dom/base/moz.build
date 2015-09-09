@@ -409,12 +409,10 @@ EXTRA_JS_MODULES += [
     'IndexedDBHelper.jsm',
 ]
 
-FAIL_ON_WARNINGS = True
-
 LOCAL_INCLUDES += [
     '../battery',
-    '../bluetooth',
-    '../bluetooth/bluetooth2',
+    '../bluetooth/common',
+    '../bluetooth/common/webapi',
     '../events',
     '../media',
     '../network',

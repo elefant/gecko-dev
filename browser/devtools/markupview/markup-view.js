@@ -259,16 +259,33 @@ MarkupView.prototype = {
   },
 
   _onMouseUp: function() {
-    if (this._lastDropTarget) {
-      this.indicateDropTarget(null);
-    }
-    if (this._lastDragTarget) {
-      this.indicateDragTarget(null);
-    }
+    this.indicateDropTarget(null);
+    this.indicateDragTarget(null);
     if (this._scrollInterval) {
       clearInterval(this._scrollInterval);
     }
   },
+
+  cancelDragging: function() {
+    if (!this.isDragging) {
+      return;
+    }
+
+    for (let [, container] of this._containers) {
+      if (container.isDragging) {
+        container.cancelDragging();
+        break;
+      }
+    }
+
+    this.indicateDropTarget(null);
+    this.indicateDragTarget(null);
+    if (this._scrollInterval) {
+      clearInterval(this._scrollInterval);
+    }
+  },
+
+
 
   _hoveredNode: null,
 
@@ -632,6 +649,12 @@ MarkupView.prototype = {
         this.beginEditingOuterHTML(this._selectedContainer.node);
         break;
       }
+      case Ci.nsIDOMKeyEvent.DOM_VK_ESCAPE: {
+        if (this.isDragging) {
+          this.cancelDragging();
+          break;
+        }
+      }
       default:
         handled = false;
     }
@@ -810,6 +833,8 @@ MarkupView.prototype = {
         container.childrenDirty = true;
         // Update the children to take care of changes in the markup view DOM.
         this._updateChildren(container, {flash: true});
+      } else if (type === "pseudoClassLock") {
+        container.update();
       }
     }
 
@@ -1817,12 +1842,19 @@ MarkupContainer.prototype = {
     return this._hasChildren && !this.node.singleTextChild;
   },
 
+  /**
+   * True if this is the root <html> element and can't be collapsed
+   */
+  get mustExpand() {
+    return this.node._parent === this.markup.walker.rootNode;
+  },
+
   updateExpander: function() {
     if (!this.expander) {
       return;
     }
 
-    if (this.canExpand) {
+    if (this.canExpand && !this.mustExpand) {
       this.expander.style.visibility = "visible";
     } else {
       this.expander.style.visibility = "hidden";
@@ -1855,6 +1887,9 @@ MarkupContainer.prototype = {
 
     if (!this.canExpand) {
       aValue = false;
+    }
+    if (this.mustExpand) {
+      aValue = true;
     }
 
     if (aValue && this.elt.classList.contains("collapsed")) {
@@ -1915,6 +1950,18 @@ MarkupContainer.prototype = {
     return this._isDragging;
   },
 
+  /**
+   * Check if element is draggable
+   */
+  isDraggable: function(target) {
+    return this._isMouseDown &&
+           this.markup._dragStartEl === target &&
+           !this.node.isPseudoElement &&
+           !this.node.isAnonymous &&
+           this.win.getSelection().isCollapsed &&
+           this.node.parentNode().tagName !== null;
+  },
+
   _onMouseDown: function(event) {
     let target = event.target;
 
@@ -1952,9 +1999,7 @@ MarkupContainer.prototype = {
     this.markup._dragStartEl = target;
     setTimeout(() => {
       // Make sure the mouse is still down and on target.
-      if (!this._isMouseDown || this.markup._dragStartEl !== target ||
-          this.node.isPseudoElement || this.node.isAnonymous ||
-          !this.win.getSelection().isCollapsed) {
+      if (!this.isDraggable(target)) {
         return;
       }
       this.isDragging = true;
@@ -1978,8 +2023,7 @@ MarkupContainer.prototype = {
       return;
     }
 
-    this.isDragging = false;
-    this.elt.style.removeProperty("top");
+    this.cancelDragging();
 
     let dropTargetNodes = this.markup.dropTargetNodes;
 
@@ -2007,6 +2051,16 @@ MarkupContainer.prototype = {
                                               event.pageY - this.win.scrollY);
 
     this.markup.indicateDropTarget(el);
+  },
+
+  cancelDragging: function() {
+    if (!this.isDragging) {
+      return;
+    }
+
+    this._isMouseDown = false;
+    this.isDragging = false;
+    this.elt.style.removeProperty("top");
   },
 
   /**
@@ -2087,6 +2141,12 @@ MarkupContainer.prototype = {
    * viewed node.
    */
   update: function() {
+    if (this.node.pseudoClassLocks.length) {
+      this.elt.classList.add("pseudoclass-locked");
+    } else {
+      this.elt.classList.remove("pseudoclass-locked");
+    }
+
     if (this.editor.update) {
       this.editor.update();
     }

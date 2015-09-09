@@ -123,6 +123,7 @@ class nsLayoutUtils
   typedef mozilla::gfx::Float Float;
   typedef mozilla::gfx::Point Point;
   typedef mozilla::gfx::Rect Rect;
+  typedef mozilla::gfx::RectDouble RectDouble;
   typedef mozilla::gfx::Matrix4x4 Matrix4x4;
   typedef mozilla::gfx::RectCornerRadii RectCornerRadii;
   typedef mozilla::gfx::StrokeOptions StrokeOptions;
@@ -1313,7 +1314,8 @@ public:
    */
   enum IntrinsicISizeType { MIN_ISIZE, PREF_ISIZE };
   enum {
-    IGNORE_PADDING = 0x01
+    IGNORE_PADDING = 0x01,
+    BAIL_IF_REFLOW_NEEDED = 0x02, // returns NS_INTRINSIC_WIDTH_UNKNOWN if so
   };
   static nscoord IntrinsicForAxis(mozilla::PhysicalAxis aAxis,
                                   nsRenderingContext*   aRenderingContext,
@@ -1327,6 +1329,38 @@ public:
                                        nsIFrame*           aFrame,
                                        IntrinsicISizeType  aType,
                                        uint32_t            aFlags = 0);
+
+  /**
+   * Get the contribution of aFrame for the given physical axis.
+   * This considers the child's 'min-width' property (or 'min-height' if the
+   * given axis is vertical), and its padding, border, and margin in the
+   * corresponding dimension.
+   */
+  static nscoord MinSizeContributionForAxis(mozilla::PhysicalAxis aAxis,
+                                            nsRenderingContext*   aRC,
+                                            nsIFrame*             aFrame,
+                                            IntrinsicISizeType    aType,
+                                            uint32_t              aFlags = 0);
+
+  /**
+   * This function increases an initial intrinsic size, 'aCurrent', according
+   * to the given 'aPercent', such that the size-increase makes up exactly
+   * 'aPercent' percent of the returned value.  If 'aPercent' is less than
+   * or equal to zero the original 'aCurrent' value is returned. If 'aPercent'
+   * is greater than or equal to 1.0 the value nscoord_MAX is returned.
+   * (We don't increase the size if MIN_ISIZE is passed in, though.)
+   */
+  static nscoord AddPercents(IntrinsicISizeType aType, nscoord aCurrent,
+                             float aPercent)
+  {
+    if (aPercent > 0.0f && aType == nsLayoutUtils::PREF_ISIZE) {
+      // XXX Should we also consider percentages for min widths, up to a
+      // limit?
+      return MOZ_UNLIKELY(aPercent >= 1.0f) ? nscoord_MAX
+        : NSToCoordRound(float(aCurrent) / (1.0f - aPercent));
+    }
+    return aCurrent;
+  }
 
   /*
    * Convert nsStyleCoord to nscoord when percentages depend on the
@@ -2680,12 +2714,6 @@ public:
   static void SetScrollPositionClampingScrollPortSize(nsIPresShell* aPresShell,
                                                       CSSSize aSize);
 
-  /**
-   * Set the CSS viewport to the given size
-   * (see nsIDOMWindowUtils.setCSSViewport).
-   */
-  static void SetCSSViewport(nsIPresShell* aPresShell, CSSSize aSize);
-
   static FrameMetrics ComputeFrameMetrics(nsIFrame* aForFrame,
                                           nsIFrame* aScrollFrame,
                                           nsIContent* aContent,
@@ -2718,6 +2746,26 @@ public:
 
   static bool ShouldUseNoScriptSheet(nsIDocument* aDocument);
   static bool ShouldUseNoFramesSheet(nsIDocument* aDocument);
+
+  /**
+   * Get the text content inside the frame. This methods traverse the
+   * frame tree and collect the content from text frames. Note that this
+   * method is similiar to nsContentUtils::GetNodeTextContent, but it at
+   * least differs from that method in the following things:
+   * 1. it skips text content inside nodes like style, script, textarea
+   *    which don't generate an in-tree text frame for the text;
+   * 2. it skips elements with display property set to none;
+   * 3. it skips out-of-flow elements;
+   * 4. it includes content inside pseudo elements;
+   * 5. it may include part of text content of a node if a text frame
+   *    inside is split to different continuations.
+   */
+  static void GetFrameTextContent(nsIFrame* aFrame, nsAString& aResult);
+
+  /**
+   * Same as GetFrameTextContent but appends the result rather than sets it.
+   */
+  static void AppendFrameTextContent(nsIFrame* aFrame, nsAString& aResult);
 
 private:
   static uint32_t sFontSizeInflationEmPerLine;

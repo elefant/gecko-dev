@@ -189,6 +189,7 @@ Toolbox.prototype = {
   },
 
   currentToolId: null,
+  lastUsedToolId: null,
 
   /**
    * Returns a *copy* of the _toolPanels collection.
@@ -457,10 +458,20 @@ Toolbox.prototype = {
   },
 
   _buildOptions: function() {
+    let selectOptions = () => {
+      // Flip back to the last used panel if we are already
+      // on the options panel.
+      if (this.currentToolId === "options" &&
+          gDevTools.getToolDefinition(this.lastUsedToolId)) {
+        this.selectTool(this.lastUsedToolId);
+      } else {
+        this.selectTool("options");
+      }
+    };
     let key = this.doc.getElementById("toolbox-options-key");
-    key.addEventListener("command", () => {
-      this.selectTool("options");
-    }, true);
+    key.addEventListener("command", selectOptions, true);
+    let key2 = this.doc.getElementById("toolbox-options-key2");
+    key2.addEventListener("command", selectOptions, true);
   },
 
   _splitConsoleOnKeypress: function(e) {
@@ -561,11 +572,20 @@ Toolbox.prototype = {
     let inKey2 = this.doc.getElementById("toolbox-zoom-in-key2");
     inKey2.addEventListener("command", this.zoomIn.bind(this), true);
 
+    let inKey3 = this.doc.getElementById("toolbox-zoom-in-key3");
+    inKey3.addEventListener("command", this.zoomIn.bind(this), true);
+
     let outKey = this.doc.getElementById("toolbox-zoom-out-key");
     outKey.addEventListener("command", this.zoomOut.bind(this), true);
 
+    let outKey2 = this.doc.getElementById("toolbox-zoom-out-key2");
+    outKey2.addEventListener("command", this.zoomOut.bind(this), true);
+
     let resetKey = this.doc.getElementById("toolbox-zoom-reset-key");
     resetKey.addEventListener("command", this.zoomReset.bind(this), true);
+
+    let resetKey2 = this.doc.getElementById("toolbox-zoom-reset-key2");
+    resetKey2.addEventListener("command", this.zoomReset.bind(this), true);
   },
 
   _disableZoomKeys: function() {
@@ -575,11 +595,20 @@ Toolbox.prototype = {
     let inKey2 = this.doc.getElementById("toolbox-zoom-in-key2");
     inKey2.setAttribute("disabled", "true");
 
+    let inKey3 = this.doc.getElementById("toolbox-zoom-in-key3");
+    inKey3.setAttribute("disabled", "true");
+
     let outKey = this.doc.getElementById("toolbox-zoom-out-key");
     outKey.setAttribute("disabled", "true");
 
+    let outKey2 = this.doc.getElementById("toolbox-zoom-out-key2");
+    outKey2.setAttribute("disabled", "true");
+
     let resetKey = this.doc.getElementById("toolbox-zoom-reset-key");
     resetKey.setAttribute("disabled", "true");
+
+    let resetKey2 = this.doc.getElementById("toolbox-zoom-reset-key2");
+    resetKey2.setAttribute("disabled", "true");
   },
 
   /**
@@ -1282,6 +1311,7 @@ Toolbox.prototype = {
     let panel = this.doc.getElementById("toolbox-panel-" + id);
     deck.selectedPanel = panel;
 
+    this.lastUsedToolId = this.currentToolId;
     this.currentToolId = id;
     this._refreshConsoleDisplay();
     if (id != "options") {

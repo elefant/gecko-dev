@@ -155,7 +155,7 @@ public:
    */
   bool IsLeftClickEvent() const
   {
-    return mMessage == NS_MOUSE_CLICK && button == eLeftButton;
+    return mMessage == eMouseClick && button == eLeftButton;
   }
 };
 
@@ -204,8 +204,8 @@ protected:
     , clickCount(0)
   {
     switch (aMessage) {
-      case NS_MOUSEENTER:
-      case NS_MOUSELEAVE:
+      case eMouseEnter:
+      case eMouseLeave:
         mFlags.mBubbles = false;
         mFlags.mCancelable = false;
         break;
@@ -224,12 +224,12 @@ public:
     reason(aReason), context(aContext), exit(eChild), clickCount(0)
   {
     switch (aMessage) {
-      case NS_MOUSEENTER:
-      case NS_MOUSELEAVE:
+      case eMouseEnter:
+      case eMouseLeave:
         mFlags.mBubbles = false;
         mFlags.mCancelable = false;
         break;
-      case NS_CONTEXTMENU:
+      case eContextMenu:
         button = (context == eNormal) ? eRightButton : eLeftButton;
         break;
       default:
@@ -240,10 +240,10 @@ public:
 #ifdef DEBUG
   virtual ~WidgetMouseEvent()
   {
-    NS_WARN_IF_FALSE(mMessage != NS_CONTEXTMENU ||
+    NS_WARN_IF_FALSE(mMessage != eContextMenu ||
                      button ==
                        ((context == eNormal) ? eRightButton : eLeftButton),
-                     "Wrong button set to NS_CONTEXTMENU event?");
+                     "Wrong button set to eContextMenu event?");
   }
 #endif
 
@@ -287,7 +287,7 @@ public:
    */
   bool IsContextMenuKeyEvent() const
   {
-    return mMessage == NS_CONTEXTMENU && context == eContextMenuKey;
+    return mMessage == eContextMenu && context == eContextMenuKey;
   }
 
   /**
@@ -322,9 +322,7 @@ public:
     , mDefaultPreventedOnContent(false)
   {
     mFlags.mCancelable =
-      (aMessage != NS_DRAGDROP_EXIT &&
-       aMessage != NS_DRAGDROP_LEAVE &&
-       aMessage != NS_DRAGDROP_END);
+      (aMessage != eDragExit && aMessage != eDragLeave && aMessage != eDragEnd);
   }
 
   virtual WidgetEvent* Duplicate() const override
@@ -454,6 +452,7 @@ public:
     , overflowDeltaX(0.0)
     , overflowDeltaY(0.0)
     , mViewPortIsOverscrolled(false)
+    , mCanTriggerSwipe(false)
   {
   }
 
@@ -466,6 +465,16 @@ public:
     result->AssignWheelEventData(*this, true);
     result->mFlags = mFlags;
     return result;
+  }
+
+  // On OS X, scroll gestures that start at the edge of the scrollable range
+  // can result in a swipe gesture. For the first wheel event of such a
+  // gesture, call TriggersSwipe() after the event has been processed
+  // in order to find out whether a swipe should be started.
+  bool TriggersSwipe() const
+  {
+    return mCanTriggerSwipe && mViewPortIsOverscrolled &&
+           this->overflowDeltaX != 0.0;
   }
 
   // NOTE: deltaX, deltaY and deltaZ may be customized by
@@ -551,6 +560,10 @@ public:
   // overscrolled.
   bool mViewPortIsOverscrolled;
 
+  // The wheel event can trigger a swipe to start if it's overscrolling the
+  // viewport.
+  bool mCanTriggerSwipe;
+
   void AssignWheelEventData(const WidgetWheelEvent& aEvent, bool aCopyTargets)
   {
     AssignMouseEventBaseData(aEvent, aCopyTargets);
@@ -568,6 +581,7 @@ public:
     overflowDeltaX = aEvent.overflowDeltaX;
     overflowDeltaY = aEvent.overflowDeltaY;
     mViewPortIsOverscrolled = aEvent.mViewPortIsOverscrolled;
+    mCanTriggerSwipe = aEvent.mCanTriggerSwipe;
   }
 };
 
@@ -609,14 +623,14 @@ public:
   void UpdateFlags()
   {
     switch (mMessage) {
-      case NS_POINTER_ENTER:
-      case NS_POINTER_LEAVE:
+      case ePointerEnter:
+      case ePointerLeave:
         mFlags.mBubbles = false;
         mFlags.mCancelable = false;
         break;
-      case NS_POINTER_CANCEL:
-      case NS_POINTER_GOT_CAPTURE:
-      case NS_POINTER_LOST_CAPTURE:
+      case ePointerCancel:
+      case ePointerGotCapture:
+      case ePointerLostCapture:
         mFlags.mCancelable = false;
         break;
       default:

@@ -416,10 +416,6 @@ nsHttpChannel::Connect()
         return NS_ERROR_DOCUMENT_NOT_CACHED;
     }
 
-    if (!gHttpHandler->UseCache()) {
-        return ContinueConnect();
-    }
-
     // open a cache entry for this channel...
     rv = OpenCacheEntry(isHttps);
 
@@ -2936,8 +2932,11 @@ nsHttpChannel::OpenCacheEntry(bool isHttps)
         rv = cacheStorageService->AppCacheStorage(info,
             mApplicationCache,
             getter_AddRefs(cacheStorage));
-    }
-    else if (PossiblyIntercepted() || mLoadFlags & INHIBIT_PERSISTENT_CACHING) {
+    } else if (PossiblyIntercepted()) {
+        // The synthesized cache has less restrictions on file size and so on.
+        rv = cacheStorageService->SynthesizedCacheStorage(info,
+            getter_AddRefs(cacheStorage));
+    } else if (mLoadFlags & INHIBIT_PERSISTENT_CACHING) {
         rv = cacheStorageService->MemoryCacheStorage(info, // ? choose app cache as well...
             getter_AddRefs(cacheStorage));
     }
@@ -4986,7 +4985,7 @@ nsHttpChannel::AsyncOpen(nsIStreamListener *listener, nsISupports *context)
 
     if (ShouldIntercept()) {
         mInterceptCache = MAYBE_INTERCEPT;
-        mResponseCouldBeSynthesized = true;
+        SetCouldBeSynthesized();
     }
 
     // Remember the cookie header that was set, if any
@@ -6964,6 +6963,12 @@ nsHttpChannel::OnPush(const nsACString &url, Http2PushedStream *pushedStream)
     channel->SetPushedStream(pushedStream);
     rv = pushListener->OnPush(this, pushHttpChannel);
     return rv;
+}
+
+void
+nsHttpChannel::SetCouldBeSynthesized()
+{
+  mResponseCouldBeSynthesized = true;
 }
 
 } // namespace net

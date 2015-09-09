@@ -1019,7 +1019,33 @@ js::GCMarker::eagerlyMarkChildren(JSRope* rope)
     // types.
     ptrdiff_t savedPos = stack.position();
     JS_DIAGNOSTICS_ASSERT(rope->getTraceKind() == JS::TraceKind::String);
+#ifdef JS_DEBUG
+    static const size_t DEEP_ROPE_THRESHOLD = 100000;
+    static const size_t ROPE_CYCLE_HISTORY = 100;
+    DebugOnly<size_t> ropeDepth = 0;
+    JSRope* history[ROPE_CYCLE_HISTORY];
+#endif
     while (true) {
+#ifdef JS_DEBUG
+        if (++ropeDepth >= DEEP_ROPE_THRESHOLD) {
+            // Bug 1011786 comment 294 - detect cyclic ropes. There are some
+            // legitimate deep ropes, at least in tests. So if we hit a deep
+            // rope, start recording the nodes we visit and check whether we
+            // repeat. But do it on a finite window size W so that we're not
+            // scanning the full history for every node. And only check every
+            // Wth push, to add only constant overhead per node. This will only
+            // catch cycles of size up to W (but it seems most likely that any
+            // cycles will be size 1 or maybe 2.)
+            if ((ropeDepth > DEEP_ROPE_THRESHOLD + ROPE_CYCLE_HISTORY) &&
+                (ropeDepth % ROPE_CYCLE_HISTORY) == 0)
+            {
+                for (size_t i = 0; i < ROPE_CYCLE_HISTORY; i++)
+                    MOZ_ASSERT(history[i] != rope, "cycle detected in rope");
+            }
+            history[ropeDepth % ROPE_CYCLE_HISTORY] = rope;
+        }
+#endif
+
         JS_DIAGNOSTICS_ASSERT(rope->getTraceKind() == JS::TraceKind::String);
         JS_DIAGNOSTICS_ASSERT(rope->JSString::isRope());
         AssertZoneIsMarking(rope);
@@ -1155,13 +1181,6 @@ CallTraceHook(Functor f, JSTracer* trc, JSObject* obj, CheckGeneration check, Ar
 
     if (!clasp->trace)
         return &obj->as<NativeObject>();
-
-    // Global objects all have the same trace hook. That hook is safe without barriers
-    // if the global has no custom trace hook of its own, or has been moved to a different
-    // compartment, and so can't have one.
-    MOZ_ASSERT_IF(!(clasp->trace == JS_GlobalObjectTraceHook &&
-                    (!obj->compartment()->options().getTrace() || !obj->isOwnGlobal())),
-                  clasp->flags & JSCLASS_IMPLEMENTS_BARRIERS);
 
     if (clasp->trace == InlineTypedObject::obj_trace) {
         Shape** pshape = obj->as<InlineTypedObject>().addressOfShapeFromGC();
@@ -1775,7 +1794,7 @@ GCMarker::markDelayedChildren(ArenaHeader* aheader)
             TenuredCell* t = i.getCell();
             if (always || t->isMarked()) {
                 t->markIfUnmarked();
-                JS_TraceChildren(this, t, MapAllocToTraceKind(aheader->getAllocKind()));
+                js::TraceChildren(this, t, MapAllocToTraceKind(aheader->getAllocKind()));
             }
         }
     } else {
@@ -2572,40 +2591,51 @@ UnmarkGrayTracer::onChild(const JS::GCCellPtr& thing)
 
     do {
         MOZ_ASSERT(!shape->isMarked(js::gc::GRAY));
-        TraceChildren(&childTracer, shape, JS::TraceKind::Shape);
+        shape->traceChildren(&childTracer);
         shape = childTracer.previousShape;
         childTracer.previousShape = nullptr;
     } while (shape);
     unmarkedAny |= childTracer.unmarkedAny;
 }
 
-bool
-js::UnmarkGrayCellRecursively(gc::Cell* cell, JS::TraceKind kind)
+template <typename T>
+static bool
+TypedUnmarkGrayCellRecursively(T* t)
 {
-    MOZ_ASSERT(cell);
+    MOZ_ASSERT(t);
 
-    JSRuntime* rt = cell->runtimeFromMainThread();
+    JSRuntime* rt = t->runtimeFromMainThread();
     MOZ_ASSERT(!rt->isHeapBusy());
 
     bool unmarkedArg = false;
-    if (cell->isTenured()) {
-        if (!cell->asTenured().isMarked(GRAY))
+    if (t->isTenured()) {
+        if (!t->asTenured().isMarked(GRAY))
             return false;
 
-        cell->asTenured().unmark(GRAY);
+        t->asTenured().unmark(GRAY);
         unmarkedArg = true;
     }
 
     UnmarkGrayTracer trc(rt);
-    TraceChildren(&trc, cell, kind);
+    t->traceChildren(&trc);
 
     return unmarkedArg || trc.unmarkedAny;
+}
+
+struct UnmarkGrayCellRecursivelyFunctor {
+    template <typename T> bool operator()(T* t) { return TypedUnmarkGrayCellRecursively(t); }
+};
+
+bool
+js::UnmarkGrayCellRecursively(Cell* cell, JS::TraceKind kind)
+{
+    return DispatchTraceKindTyped(UnmarkGrayCellRecursivelyFunctor(), cell, kind);
 }
 
 bool
 js::UnmarkGrayShapeRecursively(Shape* shape)
 {
-    return js::UnmarkGrayCellRecursively(shape, JS::TraceKind::Shape);
+    return TypedUnmarkGrayCellRecursively(shape);
 }
 
 JS_FRIEND_API(bool)

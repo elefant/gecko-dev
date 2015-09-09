@@ -272,8 +272,11 @@ static EventRegions
 GetEventRegions(const LayerMetricsWrapper& aLayer)
 {
   if (aLayer.IsScrollInfoLayer()) {
-    return EventRegions(nsIntRegion(ParentLayerIntRect::ToUntyped(
-      RoundedToInt(aLayer.Metrics().GetCompositionBounds()))));
+    ParentLayerIntRect compositionBounds(RoundedToInt(aLayer.Metrics().GetCompositionBounds()));
+    nsIntRegion hitRegion(ParentLayerIntRect::ToUntyped(compositionBounds));
+    EventRegions eventRegions(hitRegion);
+    eventRegions.mDispatchToContentHitRegion = eventRegions.mHitRegion;
+    return eventRegions;
   }
   return aLayer.GetEventRegions();
 }
@@ -874,8 +877,8 @@ APZCTreeManager::UpdateWheelTransaction(WidgetInputEvent& aEvent)
   }
 
   switch (aEvent.mMessage) {
-   case NS_MOUSE_MOVE:
-   case NS_DRAGDROP_OVER: {
+   case eMouseMove:
+   case eDragOver: {
      WidgetMouseEvent* mouseEvent = aEvent.AsMouseEvent();
      if (!mouseEvent->IsReal()) {
        return;
@@ -886,15 +889,15 @@ APZCTreeManager::UpdateWheelTransaction(WidgetInputEvent& aEvent)
      txn->OnMouseMove(point);
      return;
    }
-   case NS_KEY_PRESS:
-   case NS_KEY_UP:
-   case NS_KEY_DOWN:
-   case NS_MOUSE_BUTTON_UP:
-   case NS_MOUSE_BUTTON_DOWN:
-   case NS_MOUSE_DOUBLECLICK:
-   case NS_MOUSE_CLICK:
-   case NS_CONTEXTMENU:
-   case NS_DRAGDROP_DROP:
+   case eKeyPress:
+   case eKeyUp:
+   case eKeyDown:
+   case eMouseUp:
+   case eMouseDown:
+   case eMouseDoubleClick:
+   case eMouseClick:
+   case eContextMenu:
+   case eDrop:
      txn->EndTransaction();
      return;
    default:
@@ -1548,17 +1551,13 @@ APZCTreeManager::FindRootApzcForLayersId(uint64_t aLayersId) const
 {
   mTreeLock.AssertCurrentThreadOwns();
 
-  struct RootForLayersIdMatcher {
-    uint64_t mLayersId;
-    bool operator()(const HitTestingTreeNode* aNode) const {
-      AsyncPanZoomController* apzc = aNode->GetApzc();
-      return apzc
-          && apzc->GetLayersId() == mLayersId
-          && apzc->IsRootForLayersId();
-    }
-  };
   const HitTestingTreeNode* resultNode = BreadthFirstSearch(mRootNode.get(),
-      RootForLayersIdMatcher{aLayersId});
+      [aLayersId](const HitTestingTreeNode* aNode) {
+        AsyncPanZoomController* apzc = aNode->GetApzc();
+        return apzc
+            && apzc->GetLayersId() == aLayersId
+            && apzc->IsRootForLayersId();
+      });
   return resultNode ? resultNode->GetApzc() : nullptr;
 }
 
@@ -1567,17 +1566,13 @@ APZCTreeManager::FindRootContentApzcForLayersId(uint64_t aLayersId) const
 {
   mTreeLock.AssertCurrentThreadOwns();
 
-  struct RootContentForLayersIdMatcher {
-    uint64_t mLayersId;
-    bool operator()(const HitTestingTreeNode* aNode) const {
-      AsyncPanZoomController* apzc = aNode->GetApzc();
-      return apzc
-          && apzc->GetLayersId() == mLayersId
-          && apzc->IsRootContent();
-    }
-  };
   const HitTestingTreeNode* resultNode = BreadthFirstSearch(mRootNode.get(),
-      RootContentForLayersIdMatcher{aLayersId});
+      [aLayersId](const HitTestingTreeNode* aNode) {
+        AsyncPanZoomController* apzc = aNode->GetApzc();
+        return apzc
+            && apzc->GetLayersId() == aLayersId
+            && apzc->IsRootContent();
+      });
   return resultNode ? resultNode->GetApzc() : nullptr;
 }
 

@@ -471,7 +471,7 @@ function checkActiveAddon(data){
     hasBinaryComponents: "boolean",
     installDay: "number",
     updateDay: "number",
-    signedState: "number",
+    signedState: mozinfo.addon_signing ? "number" : "undefined",
   };
 
   for (let f in EXPECTED_ADDON_FIELDS_TYPES) {
@@ -896,7 +896,7 @@ add_task(function* test_addonsAndPlugins() {
     hasBinaryComponents: false,
     installDay: ADDON_INSTALL_DATE,
     updateDay: ADDON_INSTALL_DATE,
-    signedState: AddonManager.SIGNEDSTATE_MISSING,
+    signedState: mozinfo.addon_signing ? AddonManager.SIGNEDSTATE_MISSING : AddonManager.SIGNEDSTATE_NOT_REQUIRED,
   };
 
   const EXPECTED_PLUGIN_DATA = {
@@ -960,7 +960,7 @@ add_task(function* test_signedAddon() {
     hasBinaryComponents: false,
     installDay: ADDON_INSTALL_DATE,
     updateDay: ADDON_INSTALL_DATE,
-    signedState: AddonManager.SIGNEDSTATE_SIGNED,
+    signedState: mozinfo.addon_signing ? AddonManager.SIGNEDSTATE_SIGNED : AddonManager.SIGNEDSTATE_NOT_REQUIRED,
   };
 
   // Set the clock in the future so our changes don't get throttled.
@@ -1036,9 +1036,11 @@ add_task(function* test_defaultSearchEngine() {
 
   // Load the engines definitions from a custom JAR file: that's needed so that
   // the search provider reports an engine identifier.
-  let defaultBranch = Services.prefs.getDefaultBranch(null);
-  defaultBranch.setCharPref("browser.search.jarURIs", "chrome://testsearchplugin/locale/searchplugins/");
-  defaultBranch.setBoolPref("browser.search.loadFromJars", true);
+  let url = "chrome://testsearchplugin/locale/searchplugins/";
+  let resProt = Services.io.getProtocolHandler("resource")
+                        .QueryInterface(Ci.nsIResProtocolHandler);
+  resProt.setSubstitution("search-plugins",
+                          Services.io.newURI(url, null, null));
 
   // Initialize the search service.
   yield new Promise(resolve => Services.search.init(resolve));

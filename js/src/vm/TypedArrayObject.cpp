@@ -663,8 +663,8 @@ template<typename T>
 TypedArrayObjectTemplate<T>::fromArray(JSContext* cx, HandleObject other)
 {
     uint32_t len;
-    if (other->is<TypedArrayObject>()) {
-        len = other->as<TypedArrayObject>().length();
+    if (IsAnyTypedArray(other)) {
+        len = AnyTypedArrayLength(other);
     } else if (!GetLengthProperty(cx, other, &len)) {
         return nullptr;
     }
@@ -738,7 +738,7 @@ TypedArray_byteOffsetGetter(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-BufferGetterImpl(JSContext* cx, CallArgs args)
+BufferGetterImpl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(TypedArrayObject::is(args.thisv()));
     Rooted<TypedArrayObject*> tarray(cx, &args.thisv().toObject().as<TypedArrayObject>());
@@ -849,7 +849,7 @@ TypedArrayObject::sharedTypedArrayPrototypeClass = {
 
 template<typename T>
 bool
-ArrayBufferObject::createTypedArrayFromBufferImpl(JSContext* cx, CallArgs args)
+ArrayBufferObject::createTypedArrayFromBufferImpl(JSContext* cx, const CallArgs& args)
 {
     typedef TypedArrayObjectTemplate<T> ArrayType;
     MOZ_ASSERT(IsArrayBuffer(args.thisv()));
@@ -1202,7 +1202,7 @@ struct DataViewIO
 template<typename NativeType>
 /* static */ bool
 DataViewObject::read(JSContext* cx, Handle<DataViewObject*> obj,
-                     CallArgs& args, NativeType* val, const char* method)
+                     const CallArgs& args, NativeType* val, const char* method)
 {
     if (args.length() < 1) {
         JS_ReportErrorNumber(cx, GetErrorMessage, nullptr,
@@ -1259,7 +1259,7 @@ WebIDLCast<double>(JSContext* cx, HandleValue value, double* out)
 template<typename NativeType>
 /* static */ bool
 DataViewObject::write(JSContext* cx, Handle<DataViewObject*> obj,
-                      CallArgs& args, const char* method)
+                      const CallArgs& args, const char* method)
 {
     if (args.length() < 2) {
         JS_ReportErrorNumber(cx, GetErrorMessage, nullptr,
@@ -1286,7 +1286,7 @@ DataViewObject::write(JSContext* cx, Handle<DataViewObject*> obj,
 }
 
 bool
-DataViewObject::getInt8Impl(JSContext* cx, CallArgs args)
+DataViewObject::getInt8Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1307,7 +1307,7 @@ DataViewObject::fun_getInt8(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::getUint8Impl(JSContext* cx, CallArgs args)
+DataViewObject::getUint8Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1328,7 +1328,7 @@ DataViewObject::fun_getUint8(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::getInt16Impl(JSContext* cx, CallArgs args)
+DataViewObject::getInt16Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1349,7 +1349,7 @@ DataViewObject::fun_getInt16(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::getUint16Impl(JSContext* cx, CallArgs args)
+DataViewObject::getUint16Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1370,7 +1370,7 @@ DataViewObject::fun_getUint16(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::getInt32Impl(JSContext* cx, CallArgs args)
+DataViewObject::getInt32Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1391,7 +1391,7 @@ DataViewObject::fun_getInt32(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::getUint32Impl(JSContext* cx, CallArgs args)
+DataViewObject::getUint32Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1412,7 +1412,7 @@ DataViewObject::fun_getUint32(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::getFloat32Impl(JSContext* cx, CallArgs args)
+DataViewObject::getFloat32Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1434,7 +1434,7 @@ DataViewObject::fun_getFloat32(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::getFloat64Impl(JSContext* cx, CallArgs args)
+DataViewObject::getFloat64Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1456,7 +1456,7 @@ DataViewObject::fun_getFloat64(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::setInt8Impl(JSContext* cx, CallArgs args)
+DataViewObject::setInt8Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1476,7 +1476,7 @@ DataViewObject::fun_setInt8(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::setUint8Impl(JSContext* cx, CallArgs args)
+DataViewObject::setUint8Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1496,7 +1496,7 @@ DataViewObject::fun_setUint8(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::setInt16Impl(JSContext* cx, CallArgs args)
+DataViewObject::setInt16Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1516,7 +1516,7 @@ DataViewObject::fun_setInt16(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::setUint16Impl(JSContext* cx, CallArgs args)
+DataViewObject::setUint16Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1536,7 +1536,7 @@ DataViewObject::fun_setUint16(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::setInt32Impl(JSContext* cx, CallArgs args)
+DataViewObject::setInt32Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1556,7 +1556,7 @@ DataViewObject::fun_setInt32(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::setUint32Impl(JSContext* cx, CallArgs args)
+DataViewObject::setUint32Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1576,7 +1576,7 @@ DataViewObject::fun_setUint32(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::setFloat32Impl(JSContext* cx, CallArgs args)
+DataViewObject::setFloat32Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1596,7 +1596,7 @@ DataViewObject::fun_setFloat32(JSContext* cx, unsigned argc, Value* vp)
 }
 
 bool
-DataViewObject::setFloat64Impl(JSContext* cx, CallArgs args)
+DataViewObject::setFloat64Impl(JSContext* cx, const CallArgs& args)
 {
     MOZ_ASSERT(is(args.thisv()));
 
@@ -1786,7 +1786,7 @@ IMPL_TYPED_ARRAY_COMBINED_UNWRAPPERS(Float64, double, double)
 {                                                                              \
     #_typedArray,                                                              \
     JSCLASS_HAS_RESERVED_SLOTS(TypedArrayLayout::RESERVED_SLOTS) |             \
-    JSCLASS_HAS_PRIVATE | JSCLASS_IMPLEMENTS_BARRIERS |                        \
+    JSCLASS_HAS_PRIVATE |                                                      \
     JSCLASS_HAS_CACHED_PROTO(JSProto_##_typedArray) |                          \
     JSCLASS_DELAY_METADATA_CALLBACK,                                           \
     nullptr,                 /* addProperty */                                 \
@@ -1888,7 +1888,6 @@ const Class DataViewObject::protoClass = {
 const Class DataViewObject::class_ = {
     "DataView",
     JSCLASS_HAS_PRIVATE |
-    JSCLASS_IMPLEMENTS_BARRIERS |
     JSCLASS_HAS_RESERVED_SLOTS(TypedArrayLayout::RESERVED_SLOTS) |
     JSCLASS_HAS_CACHED_PROTO(JSProto_DataView),
     nullptr, /* addProperty */
@@ -1928,7 +1927,7 @@ const JSFunctionSpec DataViewObject::jsfuncs[] = {
 
 template<Value ValueGetter(DataViewObject* view)>
 bool
-DataViewObject::getterImpl(JSContext* cx, CallArgs args)
+DataViewObject::getterImpl(JSContext* cx, const CallArgs& args)
 {
     args.rval().set(ValueGetter(&args.thisv().toObject().as<DataViewObject>()));
     return true;

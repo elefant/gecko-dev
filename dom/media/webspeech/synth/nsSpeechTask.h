@@ -48,11 +48,12 @@ public:
 
   void SetSpeechSynthesis(SpeechSynthesis* aSpeechSynthesis);
 
-  void Init(ProcessedMediaStream* aStream);
+  void InitDirectAudio();
+  void InitIndirectAudio();
 
   void SetChosenVoiceURI(const nsAString& aUri);
 
-  virtual void SetAudioOutputVolume(uint32_t aVolume);
+  virtual void SetAudioOutputVolume(float aVolume);
 
   bool IsPreCanceled()
   {

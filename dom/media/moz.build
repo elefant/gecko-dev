@@ -101,12 +101,12 @@ EXPORTS += [
     'AudioChannelFormat.h',
     'AudioCompactor.h',
     'AudioMixer.h',
+    'AudioPacketizer.h',
     'AudioSampleFormat.h',
     'AudioSegment.h',
     'AudioStream.h',
     'BufferMediaResource.h',
     'CubebUtils.h',
-    'DecodedStream.h',
     'DecoderTraits.h',
     'DOMMediaStream.h',
     'EncodedBufferCache.h',
@@ -201,7 +201,6 @@ UNIFIED_SOURCES += [
     'AudioTrackList.cpp',
     'CanvasCaptureMediaStream.cpp',
     'CubebUtils.cpp',
-    'DecodedStream.cpp',
     'DOMMediaStream.cpp',
     'EncodedBufferCache.cpp',
     'FileBlockCache.cpp',
@@ -277,8 +276,6 @@ EXTRA_JS_MODULES.media += [
     'PeerConnectionIdp.jsm',
     'RTCStatsReport.jsm',
 ]
-
-FAIL_ON_WARNINGS = True
 
 LOCAL_INCLUDES += [
     '/caps',

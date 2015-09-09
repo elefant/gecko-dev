@@ -23,54 +23,52 @@ XPCOMUtils.defineLazyModuleGetter(this, "ctypes",
 const EDGE_COOKIE_PATH_OPTIONS = ["", "#!001\\", "#!002\\"];
 const EDGE_COOKIES_SUFFIX = "MicrosoftEdge\\Cookies";
 const EDGE_FAVORITES = "AC\\MicrosoftEdge\\User\\Default\\Favorites";
+const EDGE_READINGLIST = "AC\\MicrosoftEdge\\User\\Default\\DataStore\\Data\\";
 
 Cu.importGlobalProperties(["File"]);
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Helpers.
 
-let CtypesHelpers = {
-  _structs: {},
-  _functions: {},
-  _libs: {},
+function CtypesHelpers() {
+  this._structs = {};
+  this._functions = {};
+  this._libs = {};
 
-  /**
-   * Must be invoked once before first use of any of the provided helpers.
-   */
-  initialize() {
-    const WORD = ctypes.uint16_t;
-    const DWORD = ctypes.uint32_t;
-    const BOOL = ctypes.int;
+  const WORD = ctypes.uint16_t;
+  const DWORD = ctypes.uint32_t;
+  const BOOL = ctypes.int;
 
-    this._structs.SYSTEMTIME = new ctypes.StructType('SYSTEMTIME', [
-      {wYear: WORD},
-      {wMonth: WORD},
-      {wDayOfWeek: WORD},
-      {wDay: WORD},
-      {wHour: WORD},
-      {wMinute: WORD},
-      {wSecond: WORD},
-      {wMilliseconds: WORD}
-    ]);
+  this._structs.SYSTEMTIME = new ctypes.StructType('SYSTEMTIME', [
+    {wYear: WORD},
+    {wMonth: WORD},
+    {wDayOfWeek: WORD},
+    {wDay: WORD},
+    {wHour: WORD},
+    {wMinute: WORD},
+    {wSecond: WORD},
+    {wMilliseconds: WORD}
+  ]);
 
-    this._structs.FILETIME = new ctypes.StructType('FILETIME', [
-      {dwLowDateTime: DWORD},
-      {dwHighDateTime: DWORD}
-    ]);
+  this._structs.FILETIME = new ctypes.StructType('FILETIME', [
+    {dwLowDateTime: DWORD},
+    {dwHighDateTime: DWORD}
+  ]);
 
-    try {
-      this._libs.kernel32 = ctypes.open("Kernel32");
-      this._functions.FileTimeToSystemTime =
-        this._libs.kernel32.declare("FileTimeToSystemTime",
-                                    ctypes.default_abi,
-                                    BOOL,
-                                    this._structs.FILETIME.ptr,
-                                    this._structs.SYSTEMTIME.ptr);
-    } catch (ex) {
-      this.finalize();
-    }
-  },
+  try {
+    this._libs.kernel32 = ctypes.open("Kernel32");
+    this._functions.FileTimeToSystemTime =
+      this._libs.kernel32.declare("FileTimeToSystemTime",
+                                  ctypes.default_abi,
+                                  BOOL,
+                                  this._structs.FILETIME.ptr,
+                                  this._structs.SYSTEMTIME.ptr);
+  } catch (ex) {
+    this.finalize();
+  }
+}
 
+CtypesHelpers.prototype = {
   /**
    * Must be invoked once after last use of any of the provided helpers.
    */
@@ -226,6 +224,10 @@ Bookmarks.prototype = {
           yield MigrationUtils.createImportedBookmarksFolder(this.importedAppLabel, folderGuid);
       }
       yield this._migrateFolder(this._favoritesFolder, folderGuid);
+
+      if (this._migrationType == MSMigrationUtils.MIGRATION_TYPE_EDGE) {
+        yield this._migrateEdgeReadingList(PlacesUtils.bookmarks.menuGuid);
+      }
     }.bind(this)).then(() => aCallback(true),
                         e => { Cu.reportError(e); aCallback(false) });
   },
@@ -287,7 +289,80 @@ Bookmarks.prototype = {
         Components.utils.reportError("Unable to import " + this.importedAppLabel + " favorite (" + entry.leafName + "): " + ex);
       }
     }
-  })
+  }),
+
+  _migrateEdgeReadingList: Task.async(function*(parentGuid) {
+    let edgeDir = getEdgeLocalDataFolder();
+    if (!edgeDir) {
+      return;
+    }
+
+    this._readingListExtractor = Cc["@mozilla.org/profile/migrator/edgereadinglistextractor;1"].
+                                 createInstance(Ci.nsIEdgeReadingListExtractor);
+    edgeDir.appendRelativePath(EDGE_READINGLIST);
+    if (edgeDir.exists() && edgeDir.isReadable() && edgeDir.isDirectory()) {
+      let expectedDir = edgeDir.clone();
+      expectedDir.appendRelativePath("nouser1\\120712-0049");
+      if (expectedDir.exists() && expectedDir.isReadable() && expectedDir.isDirectory()) {
+        yield this._migrateEdgeReadingListDB(expectedDir, parentGuid);
+      } else {
+        let getSubdirs = someDir => {
+          let subdirs = someDir.directoryEntries;
+          let rv = [];
+          while (subdirs.hasMoreElements()) {
+            let subdir = subdirs.getNext().QueryInterface(Ci.nsIFile);
+            if (subdir.isDirectory() && subdir.isReadable()) {
+              rv.push(subdir);
+            }
+          }
+          return rv;
+        };
+        let dirs = getSubdirs(edgeDir).map(getSubdirs);
+        for (let dir of dirs) {
+          yield this._migrateEdgeReadingListDB(dir, parentGuid);
+        }
+      }
+    }
+  }),
+  _migrateEdgeReadingListDB: Task.async(function*(dbFile, parentGuid) {
+    dbFile.appendRelativePath("DBStore\\spartan.edb");
+    if (!dbFile.exists() || !dbFile.isReadable() || !dbFile.isFile()) {
+      return;
+    }
+    let readingListItems;
+    try {
+      readingListItems = this._readingListExtractor.extract(dbFile.path);
+    } catch (ex) {
+      Cu.reportError("Failed to extract Edge reading list information from " +
+                     "the database at " + dbPath + " due to the following error: " + ex);
+      return;
+    }
+    if (!readingListItems.length) {
+      return;
+    }
+    let destFolderGuid = yield this._ensureEdgeReadingListFolder(parentGuid);
+    for (let i = 0; i < readingListItems.length; i++) {
+      let readingListItem = readingListItems.queryElementAt(i, Ci.nsIPropertyBag2);
+      let url = readingListItem.get("uri");
+      let title = readingListItem.get("title");
+      let time = readingListItem.get("time");
+      // time is a PRTime, which is microseconds (since unix epoch), or null.
+      // We need milliseconds for the date constructor, so divide by 1000:
+      let dateAdded = time ? new Date(time / 1000) : new Date();
+      yield PlacesUtils.bookmarks.insert({
+        parentGuid: destFolderGuid, url: url, title, dateAdded
+      });
+    }
+  }),
+
+  _ensureEdgeReadingListFolder: Task.async(function*(parentGuid) {
+    if (!this.__edgeReadingListFolderGuid) {
+      let folderTitle = MigrationUtils.getLocalizedString("importedEdgeReadingList");
+      let folderSpec = {type: PlacesUtils.bookmarks.TYPE_FOLDER, parentGuid, title: folderTitle};
+      this.__edgeReadingListFolderGuid = (yield PlacesUtils.bookmarks.insert(folderSpec)).guid;
+    }
+    return this.__edgeReadingListFolderGuid;
+  }),
 };
 
 function Cookies(migrationType) {
@@ -355,7 +430,7 @@ Cookies.prototype = {
   },
 
   migrate(aCallback) {
-    CtypesHelpers.initialize();
+    this.ctypesHelpers = new CtypesHelpers();
 
     let cookiesGenerator = (function genCookie() {
       let success = false;
@@ -382,7 +457,7 @@ Cookies.prototype = {
         }
       }
 
-      CtypesHelpers.finalize();
+      this.ctypesHelpers.finalize();
 
       aCallback(success);
     }).apply(this);
@@ -458,8 +533,8 @@ Cookies.prototype = {
           host = "." + host;
       }
 
-      let expireTime = CtypesHelpers.fileTimeToSecondsSinceEpoch(Number(expireTimeHi),
-                                                                 Number(expireTimeLo));
+      let expireTime = this.ctypesHelpers.fileTimeToSecondsSinceEpoch(Number(expireTimeHi),
+                                                                      Number(expireTimeLo));
       Services.cookies.add(host,
                            path,
                            name,
@@ -476,6 +551,7 @@ Cookies.prototype = {
 let MSMigrationUtils = {
   MIGRATION_TYPE_IE: 1,
   MIGRATION_TYPE_EDGE: 2,
+  CtypesHelpers: CtypesHelpers,
   getBookmarksMigrator(migrationType = this.MIGRATION_TYPE_IE) {
     return new Bookmarks(migrationType);
   },

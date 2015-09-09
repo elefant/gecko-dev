@@ -67,7 +67,7 @@ assertEq(next.value.hello, 2);
 assertEq(next.value.world, 3);
 
 // prototype property
-assertEq(b.g.hasOwnProperty("prototype"), false);
+assertEq(b.g.hasOwnProperty("prototype"), true);
 
 // Strict mode
 a = {*b(c){"use strict";yield c;}};

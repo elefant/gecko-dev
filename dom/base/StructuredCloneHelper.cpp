@@ -167,7 +167,13 @@ StructuredCloneHelperInternal::Write(JSContext* aCx,
   MOZ_ASSERT(!mShutdownCalled, "This method cannot be called after Shutdown.");
 
   mBuffer = new JSAutoStructuredCloneBuffer(&gCallbacks, this);
-  return mBuffer->write(aCx, aValue, aTransfer, &gCallbacks, this);
+
+  if (!mBuffer->write(aCx, aValue, aTransfer, &gCallbacks, this)) {
+    mBuffer = nullptr;
+    return false;
+  }
+
+  return true;
 }
 
 bool
@@ -217,10 +223,15 @@ StructuredCloneHelperInternal::FreeTransferCallback(uint32_t aTag,
 // StructuredCloneHelper class
 
 StructuredCloneHelper::StructuredCloneHelper(CloningSupport aSupportsCloning,
-                                             TransferringSupport aSupportsTransferring)
+                                             TransferringSupport aSupportsTransferring,
+                                             ContextSupport aContext)
   : mSupportsCloning(aSupportsCloning == CloningSupported)
   , mSupportsTransferring(aSupportsTransferring == TransferringSupported)
+  , mContext(aContext)
   , mParent(nullptr)
+#ifdef DEBUG
+  , mCreationThread(NS_GetCurrentThread())
+#endif
 {}
 
 StructuredCloneHelper::~StructuredCloneHelper()
@@ -232,25 +243,26 @@ StructuredCloneHelper::~StructuredCloneHelper()
 void
 StructuredCloneHelper::Write(JSContext* aCx,
                              JS::Handle<JS::Value> aValue,
-                             bool aMaybeToDifferentThread,
                              ErrorResult& aRv)
 {
-  Write(aCx, aValue, JS::UndefinedHandleValue, aMaybeToDifferentThread, aRv);
+  Write(aCx, aValue, JS::UndefinedHandleValue, aRv);
 }
 
 void
 StructuredCloneHelper::Write(JSContext* aCx,
                              JS::Handle<JS::Value> aValue,
                              JS::Handle<JS::Value> aTransfer,
-                             bool aMaybeToDifferentThread,
                              ErrorResult& aRv)
 {
+  MOZ_ASSERT_IF(mContext == SameProcessSameThread,
+                mCreationThread == NS_GetCurrentThread());
+
   if (!StructuredCloneHelperInternal::Write(aCx, aValue, aTransfer)) {
     aRv.Throw(NS_ERROR_DOM_DATA_CLONE_ERR);
     return;
   }
 
-  if (aMaybeToDifferentThread) {
+  if (mContext != SameProcessSameThread) {
     for (uint32_t i = 0, len = mBlobImplArray.Length(); i < len; ++i) {
       if (!mBlobImplArray[i]->MayBeClonedToOtherThreads()) {
         aRv.Throw(NS_ERROR_DOM_DATA_CLONE_ERR);
@@ -266,6 +278,9 @@ StructuredCloneHelper::Read(nsISupports* aParent,
                             JS::MutableHandle<JS::Value> aValue,
                             ErrorResult& aRv)
 {
+  MOZ_ASSERT_IF(mContext == SameProcessSameThread,
+                mCreationThread == NS_GetCurrentThread());
+
   mozilla::AutoRestore<nsISupports*> guard(mParent);
   mParent = aParent;
 
@@ -277,6 +292,7 @@ StructuredCloneHelper::Read(nsISupports* aParent,
   // If we are tranferring something, we cannot call 'Read()' more than once.
   if (mSupportsTransferring) {
     mBlobImplArray.Clear();
+    mClonedImages.Clear();
     Shutdown();
   }
 }
@@ -302,6 +318,9 @@ StructuredCloneHelper::ReadFromBuffer(nsISupports* aParent,
                                       JS::MutableHandle<JS::Value> aValue,
                                       ErrorResult& aRv)
 {
+  MOZ_ASSERT_IF(mContext == SameProcessSameThread,
+                mCreationThread == NS_GetCurrentThread());
+
   MOZ_ASSERT(!mBuffer, "ReadFromBuffer() must be called without a Write().");
   MOZ_ASSERT(aBuffer);
 
@@ -319,6 +338,9 @@ void
 StructuredCloneHelper::MoveBufferDataToArray(FallibleTArray<uint8_t>& aArray,
                                              ErrorResult& aRv)
 {
+  MOZ_ASSERT_IF(mContext == SameProcessSameThread,
+                mCreationThread == NS_GetCurrentThread());
+
   MOZ_ASSERT(mBuffer, "MoveBuffer() cannot be called without a Write().");
 
   if (NS_WARN_IF(!aArray.SetLength(BufferSize(), mozilla::fallible))) {
@@ -433,7 +455,7 @@ ReadBlob(JSContext* aCx,
 {
   MOZ_ASSERT(aHelper);
   MOZ_ASSERT(aIndex < aHelper->BlobImpls().Length());
-  nsRefPtr<BlobImpl> blobImpl =  aHelper->BlobImpls()[aIndex];
+  nsRefPtr<BlobImpl> blobImpl = aHelper->BlobImpls()[aIndex];
 
   blobImpl = EnsureBlobForBackgroundManager(blobImpl);
   MOZ_ASSERT(blobImpl);
@@ -507,6 +529,9 @@ ReadFileList(JSContext* aCx,
       nsRefPtr<BlobImpl> blobImpl = aHelper->BlobImpls()[index];
       MOZ_ASSERT(blobImpl->IsFile());
 
+      blobImpl = EnsureBlobForBackgroundManager(blobImpl);
+      MOZ_ASSERT(blobImpl);
+
       nsRefPtr<File> file = File::Create(aHelper->ParentDuringRead(), blobImpl);
       if (!fileList->Append(file)) {
         return nullptr;
@@ -544,7 +569,11 @@ WriteFileList(JSStructuredCloneWriter* aWriter,
   }
 
   for (uint32_t i = 0; i < aFileList->Length(); ++i) {
-    aHelper->BlobImpls().AppendElement(aFileList->Item(i)->Impl());
+    nsRefPtr<BlobImpl> blobImpl =
+      EnsureBlobForBackgroundManager(aFileList->Item(i)->Impl());
+    MOZ_ASSERT(blobImpl);
+
+    aHelper->BlobImpls().AppendElement(blobImpl);
   }
 
   return true;
@@ -711,6 +740,9 @@ StructuredCloneHelper::ReadCallback(JSContext* aCx,
   }
 
   if (aTag == SCTAG_DOM_IMAGEBITMAP) {
+    MOZ_ASSERT(mContext == SameProcessSameThread ||
+               mContext == SameProcessDifferentThread);
+
      // Get the current global object.
      // This can be null.
      nsCOMPtr<nsIGlobalObject> parent = do_QueryInterface(mParent);
@@ -764,7 +796,8 @@ StructuredCloneHelper::WriteCallback(JSContext* aCx,
   }
 
   // See if this is an ImageBitmap object.
-  {
+  if (mContext == SameProcessSameThread ||
+      mContext == SameProcessDifferentThread) {
     ImageBitmap* imageBitmap = nullptr;
     if (NS_SUCCEEDED(UNWRAP_OBJECT(ImageBitmap, aObj, imageBitmap))) {
       return ImageBitmap::WriteStructuredClone(aWriter,

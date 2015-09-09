@@ -88,7 +88,7 @@ private:
   // 1) PackagedAppVerifierListener::OnManifestVerified:
   //    ------------------------------------------------------------------------
   //    If the resource is the first one in the package, it will be called
-  //    back in OnManifestVerified no matter this package has signature or not.
+  //    back in OnManifestVerified no matter this package has a signature or not.
   //
   // 2) PackagedAppVerifierListener::OnResourceVerified.
   //    ------------------------------------------------------------------------

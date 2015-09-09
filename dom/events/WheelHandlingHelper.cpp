@@ -184,8 +184,8 @@ WheelTransaction::OnEvent(WidgetEvent* aEvent)
         EndTransaction();
       }
       return;
-    case NS_MOUSE_MOVE:
-    case NS_DRAGDROP_OVER: {
+    case eMouseMove:
+    case eDragOver: {
       WidgetMouseEvent* mouseEvent = aEvent->AsMouseEvent();
       if (mouseEvent->IsReal()) {
         // If the cursor is moving to be outside the frame,
@@ -207,15 +207,15 @@ WheelTransaction::OnEvent(WidgetEvent* aEvent)
       }
       return;
     }
-    case NS_KEY_PRESS:
-    case NS_KEY_UP:
-    case NS_KEY_DOWN:
-    case NS_MOUSE_BUTTON_UP:
-    case NS_MOUSE_BUTTON_DOWN:
-    case NS_MOUSE_DOUBLECLICK:
-    case NS_MOUSE_CLICK:
-    case NS_CONTEXTMENU:
-    case NS_DRAGDROP_DROP:
+    case eKeyPress:
+    case eKeyUp:
+    case eKeyDown:
+    case eMouseUp:
+    case eMouseDown:
+    case eMouseDoubleClick:
+    case eMouseClick:
+    case eContextMenu:
+    case eDrop:
       EndTransaction();
       return;
     default:

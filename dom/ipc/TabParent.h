@@ -67,7 +67,7 @@ class ClonedMessageData;
 class nsIContentParent;
 class Element;
 class DataTransfer;
-struct StructuredCloneData;
+class StructuredCloneIPCHelper;
 
 class TabParent final : public PBrowserParent
                       , public nsIDOMEventListener
@@ -122,6 +122,8 @@ public:
     nsIXULBrowserWindow* GetXULBrowserWindow();
 
     void Destroy();
+    void Detach();
+    void Attach(nsFrameLoader* aFrameLoader);
 
     void RemoveWindowListeners();
     void AddWindowListeners();
@@ -229,6 +231,8 @@ public:
     virtual bool RecvUpdateZoomConstraints(const uint32_t& aPresShellId,
                                            const ViewID& aViewId,
                                            const MaybeZoomConstraints& aConstraints) override;
+    virtual bool RecvRespondStartSwipeEvent(const uint64_t& aInputBlockId,
+                                            const bool& aStartSwipe) override;
     virtual bool RecvContentReceivedInputBlock(const ScrollableLayerGuid& aGuid,
                                                const uint64_t& aInputBlockId,
                                                const bool& aPreventDefault) override;
@@ -441,7 +445,7 @@ public:
 protected:
     bool ReceiveMessage(const nsString& aMessage,
                         bool aSync,
-                        const StructuredCloneData* aCloneData,
+                        StructuredCloneIPCHelper* aHelper,
                         mozilla::jsipc::CpowHolder* aCpows,
                         nsIPrincipal* aPrincipal,
                         nsTArray<OwningSerializedStructuredCloneBuffer>* aJSONRetVal = nullptr);
@@ -489,6 +493,7 @@ protected:
     LayoutDeviceIntPoint mChromeOffset;
 
 private:
+    void DestroyInternal();
     already_AddRefed<nsFrameLoader> GetFrameLoader(bool aUseCachedFrameLoaderAfterDestroy = false) const;
     nsRefPtr<nsIContentParent> mManager;
     void TryCacheDPIAndScale();
@@ -498,6 +503,9 @@ private:
     CSSPoint AdjustTapToChildWidget(const CSSPoint& aPoint);
 
     bool AsyncPanZoomEnabled() const;
+
+    // Cached value indicating the docshell active state of the remote browser.
+    bool mDocShellIsActive;
 
     // Update state prior to routing an APZ-aware event to the child process.
     // |aOutTargetGuid| will contain the identifier
@@ -513,6 +521,8 @@ private:
     bool mMarkedDestroying;
     // When true, the TabParent is invalid and we should not send IPC messages anymore.
     bool mIsDestroyed;
+    // When true, the TabParent is detached from the frame loader.
+    bool mIsDetached;
     // Whether we have already sent a FileDescriptor for the app package.
     bool mAppPackageFileDescriptorSent;
 

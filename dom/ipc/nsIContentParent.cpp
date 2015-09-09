@@ -10,9 +10,10 @@
 #include "mozilla/Preferences.h"
 #include "mozilla/dom/File.h"
 #include "mozilla/dom/ContentParent.h"
+#include "mozilla/dom/ContentBridgeParent.h"
 #include "mozilla/dom/PTabContext.h"
 #include "mozilla/dom/PermissionMessageUtils.h"
-#include "mozilla/dom/StructuredCloneUtils.h"
+#include "mozilla/dom/StructuredCloneIPCHelper.h"
 #include "mozilla/dom/TabParent.h"
 #include "mozilla/dom/ipc/BlobParent.h"
 #include "mozilla/jsipc/CrossProcessObjectWrappers.h"
@@ -44,6 +45,13 @@ nsIContentParent::AsContentParent()
 {
   MOZ_ASSERT(IsContentParent());
   return static_cast<ContentParent*>(this);
+}
+
+ContentBridgeParent*
+nsIContentParent::AsContentBridgeParent()
+{
+  MOZ_ASSERT(IsContentBridgeParent());
+  return static_cast<ContentBridgeParent*>(this);
 }
 
 PJavaScriptParent*
@@ -193,10 +201,12 @@ nsIContentParent::RecvSyncMessage(const nsString& aMsg,
 
   nsRefPtr<nsFrameMessageManager> ppm = mMessageManager;
   if (ppm) {
-    StructuredCloneData cloneData = ipc::UnpackClonedMessageDataForParent(aData);
+    StructuredCloneIPCHelper helper;
+    ipc::UnpackClonedMessageDataForParent(aData, helper);
+
     CrossProcessCpowHolder cpows(this, aCpows);
     ppm->ReceiveMessage(static_cast<nsIContentFrameMessageManager*>(ppm.get()), nullptr,
-                        aMsg, true, &cloneData, &cpows, aPrincipal, aRetvals);
+                        aMsg, true, &helper, &cpows, aPrincipal, aRetvals);
   }
   return true;
 }
@@ -220,10 +230,12 @@ nsIContentParent::RecvRpcMessage(const nsString& aMsg,
 
   nsRefPtr<nsFrameMessageManager> ppm = mMessageManager;
   if (ppm) {
-    StructuredCloneData cloneData = ipc::UnpackClonedMessageDataForParent(aData);
+    StructuredCloneIPCHelper helper;
+    ipc::UnpackClonedMessageDataForParent(aData, helper);
+
     CrossProcessCpowHolder cpows(this, aCpows);
     ppm->ReceiveMessage(static_cast<nsIContentFrameMessageManager*>(ppm.get()), nullptr,
-                        aMsg, true, &cloneData, &cpows, aPrincipal, aRetvals);
+                        aMsg, true, &helper, &cpows, aPrincipal, aRetvals);
   }
   return true;
 }
@@ -246,10 +258,12 @@ nsIContentParent::RecvAsyncMessage(const nsString& aMsg,
 
   nsRefPtr<nsFrameMessageManager> ppm = mMessageManager;
   if (ppm) {
-    StructuredCloneData cloneData = ipc::UnpackClonedMessageDataForParent(aData);
+    StructuredCloneIPCHelper helper;
+    ipc::UnpackClonedMessageDataForParent(aData, helper);
+
     CrossProcessCpowHolder cpows(this, aCpows);
     ppm->ReceiveMessage(static_cast<nsIContentFrameMessageManager*>(ppm.get()), nullptr,
-                        aMsg, false, &cloneData, &cpows, aPrincipal, nullptr);
+                        aMsg, false, &helper, &cpows, aPrincipal, nullptr);
   }
   return true;
 }

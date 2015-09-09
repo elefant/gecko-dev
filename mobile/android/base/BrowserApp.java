@@ -10,6 +10,7 @@ import org.mozilla.gecko.AppConstants.Versions;
 import org.mozilla.gecko.DynamicToolbar.PinReason;
 import org.mozilla.gecko.DynamicToolbar.VisibilityTransition;
 import org.mozilla.gecko.GeckoProfileDirectories.NoMozillaDirectoryException;
+import org.mozilla.gecko.PrintHelper;
 import org.mozilla.gecko.Tabs.TabEvents;
 import org.mozilla.gecko.animation.PropertyAnimator;
 import org.mozilla.gecko.animation.TransitionsTracker;
@@ -140,6 +141,8 @@ import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 import android.widget.ViewFlipper;
+import com.keepsafe.switchboard.AsyncConfigLoader;
+import com.keepsafe.switchboard.SwitchBoard;
 import com.nineoldandroids.animation.Animator;
 import com.nineoldandroids.animation.ObjectAnimator;
 import org.json.JSONException;
@@ -446,8 +449,6 @@ public class BrowserApp extends GeckoApp
         final View view;
         if (BrowserToolbar.class.getName().equals(name)) {
             view = BrowserToolbar.create(context, attrs);
-        } else if (TabsPanel.TabsLayout.class.getName().equals(name)) {
-            view = TabsPanel.createTabsLayout(context, attrs);
         } else {
             view = super.onCreateView(name, context, attrs);
         }
@@ -739,6 +740,21 @@ public class BrowserApp extends GeckoApp
         super.onCreate(savedInstanceState);
 
         final Context appContext = getApplicationContext();
+
+        if (AppConstants.MOZ_SWITCHBOARD) {
+            // Initializes the default URLs the first time.
+            Log.d(LOGTAG, "init Server Urls");
+            SwitchBoard.initDefaultServerUrls("https://mozilla-switchboard.herokuapp.com/SwitchboardURLs.php", "https://mozilla-switchboard.herokuapp.com/SwitchboardDriver.php", true);
+
+            // Looks at the server if there are changes in the server URL that should be used in the future
+            Log.d(LOGTAG, "update server urls from remote");
+            new AsyncConfigLoader(this, AsyncConfigLoader.UPDATE_SERVER).execute();
+
+            // Loads the actual config. This can be done on app start or on app onResume() depending
+            // how often you want to update the config.
+            Log.d(LOGTAG, "update app config");
+            new AsyncConfigLoader(this, AsyncConfigLoader.CONFIG_SERVER).execute();
+        }
 
         mBrowserChrome = (ViewGroup) findViewById(R.id.browser_chrome);
         mActionBarFlipper = (ViewFlipper) findViewById(R.id.browser_actionbar);
@@ -1230,7 +1246,7 @@ public class BrowserApp extends GeckoApp
                 ViewHelper.setTranslationY(mBrowserChrome, 0);
             }
             if (mLayerView != null) {
-                ViewHelper.setTranslationY(mLayerView, 0);
+                mLayerView.setSurfaceTranslation(0);
             }
         }
 
@@ -1542,11 +1558,10 @@ public class BrowserApp extends GeckoApp
         }
 
         final View browserChrome = mBrowserChrome;
-        final View layerView = mLayerView;
         final ToolbarProgressView progressView = mProgressView;
 
         ViewHelper.setTranslationY(browserChrome, -aToolbarTranslation);
-        ViewHelper.setTranslationY(layerView, mToolbarHeight - aLayerViewTranslation);
+        mLayerView.setSurfaceTranslation(mToolbarHeight - aLayerViewTranslation);
 
         // Stop the progressView from moving all the way up so that we can still see a good chunk of it
         // when the chrome is offscreen.
@@ -1620,7 +1635,7 @@ public class BrowserApp extends GeckoApp
 
         if (mLayerView != null && height != mToolbarHeight) {
             mToolbarHeight = height;
-            mLayerView.getDynamicToolbarAnimator().setMaxTranslation(height);
+            mLayerView.setMaxTranslation(height);
             mDynamicToolbar.setVisible(true, VisibilityTransition.IMMEDIATE);
         }
     }
@@ -3151,6 +3166,7 @@ public class BrowserApp extends GeckoApp
         final MenuItem share = aMenu.findItem(R.id.share);
         final MenuItem quickShare = aMenu.findItem(R.id.quickshare);
         final MenuItem saveAsPDF = aMenu.findItem(R.id.save_as_pdf);
+        final MenuItem print = aMenu.findItem(R.id.print);
         final MenuItem charEncoding = aMenu.findItem(R.id.char_encoding);
         final MenuItem findInPage = aMenu.findItem(R.id.find_in_page);
         final MenuItem desktopMode = aMenu.findItem(R.id.desktop_mode);
@@ -3167,7 +3183,6 @@ public class BrowserApp extends GeckoApp
                                                         ClearOnShutdownPref.PREF,
                                                         new HashSet<String>()).isEmpty();
         aMenu.findItem(R.id.quit).setVisible(visible);
-        aMenu.findItem(R.id.logins).setVisible(visible);
 
         if (tab == null || tab.getURL() == null) {
             bookmark.setEnabled(false);
@@ -3177,6 +3192,7 @@ public class BrowserApp extends GeckoApp
             share.setEnabled(false);
             quickShare.setEnabled(false);
             saveAsPDF.setEnabled(false);
+            print.setEnabled(false);
             findInPage.setEnabled(false);
 
             // NOTE: Use MenuUtils.safeSetEnabled because some actions might
@@ -3329,10 +3345,13 @@ public class BrowserApp extends GeckoApp
         final boolean privateTabVisible = RestrictedProfiles.isAllowed(this, Restriction.DISALLOW_PRIVATE_BROWSING);
         MenuUtils.safeSetVisible(aMenu, R.id.new_private_tab, privateTabVisible);
 
-        // Disable save as PDF for about:home and xul pages.
-        saveAsPDF.setEnabled(!(isAboutHome(tab) ||
+        // Disable PDF generation (save and print) for about:home and xul pages.
+        boolean allowPDF = (!(isAboutHome(tab) ||
                                tab.getContentType().equals("application/vnd.mozilla.xul+xml") ||
                                tab.getContentType().startsWith("video/")));
+        saveAsPDF.setEnabled(allowPDF);
+        print.setEnabled(allowPDF);
+        print.setVisible(Versions.feature19Plus && AppConstants.NIGHTLY_BUILD);
 
         // Disable find in page for about:home, since it won't work on Java content.
         findInPage.setEnabled(!isAboutHome(tab));
@@ -3453,6 +3472,11 @@ public class BrowserApp extends GeckoApp
 
         if (itemId == R.id.save_as_pdf) {
             GeckoAppShell.sendEventToGecko(GeckoEvent.createBroadcastEvent("SaveAs:PDF", null));
+            return true;
+        }
+
+        if (itemId == R.id.print) {
+            PrintHelper.printPDF(this);
             return true;
         }
 

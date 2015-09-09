@@ -140,15 +140,19 @@ nsSpeechTask::~nsSpeechTask()
 }
 
 void
-nsSpeechTask::Init(ProcessedMediaStream* aStream)
+nsSpeechTask::InitDirectAudio()
 {
-  if (aStream) {
-    mStream = MediaStreamGraph::GetInstance()->CreateSourceStream(nullptr);
-    mPort = aStream->AllocateInputPort(mStream, 0);
-    mIndirectAudio = false;
-  } else {
-    mIndirectAudio = true;
-  }
+  mStream = MediaStreamGraph::GetInstance(MediaStreamGraph::AUDIO_THREAD_DRIVER,
+                                          AudioChannel::Normal)->
+    CreateSourceStream(nullptr);
+  mIndirectAudio = false;
+  mInited = true;
+}
+
+void
+nsSpeechTask::InitIndirectAudio()
+{
+  mIndirectAudio = true;
   mInited = true;
 }
 
@@ -667,6 +671,10 @@ nsSpeechTask::CreateAudioChannelAgent()
   mAudioChannelAgent->InitWithWeakCallback(mUtterance->GetOwner(),
                                            static_cast<int32_t>(AudioChannelService::GetDefaultAudioChannel()),
                                            this);
+  float volume = 0.0f;
+  bool muted = true;
+  mAudioChannelAgent->NotifyStartedPlaying(nsIAudioChannelAgent::AUDIO_AGENT_NOTIFY, &volume, &muted);
+  WindowVolumeChanged(volume, muted);
 }
 
 void
@@ -681,7 +689,7 @@ nsSpeechTask::DestroyAudioChannelAgent()
 NS_IMETHODIMP
 nsSpeechTask::WindowVolumeChanged(float aVolume, bool aMuted)
 {
-  SetAudioOutputVolume(mVolume * aVolume * aMuted);
+  SetAudioOutputVolume(aMuted ? 0.0 : mVolume * aVolume);
   return NS_OK;
 }
 
@@ -693,10 +701,13 @@ nsSpeechTask::WindowAudioCaptureChanged()
 }
 
 void
-nsSpeechTask::SetAudioOutputVolume(uint32_t aVolume)
+nsSpeechTask::SetAudioOutputVolume(float aVolume)
 {
   if (mStream) {
     mStream->SetAudioOutputVolume(this, aVolume);
+  }
+  if (mIndirectAudio) {
+    mCallback->OnVolumeChanged(aVolume);
   }
 }
 

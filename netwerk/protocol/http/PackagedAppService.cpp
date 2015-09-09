@@ -16,6 +16,7 @@
 #include "mozilla/Logging.h"
 #include "mozilla/DebugOnly.h"
 #include "nsIHttpHeaderVisitor.h"
+#include "mozilla/LoadContext.h"
 #include "nsIInstallPackagedWebapp.h"
 
 namespace mozilla {
@@ -564,6 +565,8 @@ PackagedAppService::PackagedAppDownloader::OnError(EErrorType aError)
 {
   // TODO: Handler verification error properly.
   LOG(("PackagedAppDownloader::OnError > %d", aError));
+
+  FinalizeDownload(NS_ERROR_SIGNED_APP_MANIFEST_INVALID);
 }
 
 void
@@ -1120,6 +1123,12 @@ PackagedAppService::GetResource(nsIChannel *aChannel,
 
   nsRefPtr<PackagedAppChannelListener> listener =
     new PackagedAppChannelListener(downloader, mimeConverter);
+
+  nsCOMPtr<nsIInterfaceRequestor> loadContext;
+  aChannel->GetNotificationCallbacks(getter_AddRefs(loadContext));
+  if (loadContext) {
+    channel->SetNotificationCallbacks(loadContext);
+  }
 
   if (loadInfo && loadInfo->GetEnforceSecurity()) {
     return channel->AsyncOpen2(listener);

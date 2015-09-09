@@ -131,6 +131,7 @@ static JS::PersistentRootedValue gInterruptFunc;
 static bool gLastWarningEnabled = false;
 static JS::PersistentRootedValue gLastWarning;
 
+static bool enableCodeCoverage = false;
 static bool enableDisassemblyDumps = false;
 static bool offthreadCompilation = false;
 static bool enableBaseline = false;
@@ -1973,8 +1974,8 @@ DisassembleScript(JSContext* cx, HandleScript script, HandleFunction fun, bool l
         Sprint(sp, "flags:");
         if (fun->isLambda())
             Sprint(sp, " LAMBDA");
-        if (fun->isHeavyweight())
-            Sprint(sp, " HEAVYWEIGHT");
+        if (fun->needsCallObject())
+            Sprint(sp, " NEEDS_CALLOBJECT");
         if (fun->isConstructor())
             Sprint(sp, " CONSTRUCTOR");
         if (fun->isExprBody())
@@ -5216,7 +5217,7 @@ dom_doFoo(JSContext* cx, HandleObject obj, void* self, const JSJitMethodCallArgs
 
 static const JSJitInfo dom_x_getterinfo = {
     { (JSJitGetterOp)dom_get_x },
-    0,        /* protoID */
+    { 0 },    /* protoID */
     0,        /* depth */
     JSJitInfo::AliasNone, /* aliasSet */
     JSJitInfo::Getter,
@@ -5232,7 +5233,7 @@ static const JSJitInfo dom_x_getterinfo = {
 
 static const JSJitInfo dom_x_setterinfo = {
     { (JSJitGetterOp)dom_set_x },
-    0,        /* protoID */
+    { 0 },    /* protoID */
     0,        /* depth */
     JSJitInfo::Setter,
     JSJitInfo::AliasEverything, /* aliasSet */
@@ -5248,7 +5249,7 @@ static const JSJitInfo dom_x_setterinfo = {
 
 static const JSJitInfo doFoo_methodinfo = {
     { (JSJitGetterOp)dom_doFoo },
-    0,        /* protoID */
+    { 0 },    /* protoID */
     0,        /* depth */
     JSJitInfo::Method,
     JSJitInfo::AliasEverything, /* aliasSet */
@@ -6041,7 +6042,9 @@ SetRuntimeOptions(JSRuntime* rt, const OptionParser& op)
     reportWarnings = op.getBoolOption('w');
     compileOnly = op.getBoolOption('c');
     printTiming = op.getBoolOption('b');
-    rt->profilingScripts = enableDisassemblyDumps = op.getBoolOption('D');
+    enableCodeCoverage = op.getBoolOption("code-coverage");
+    enableDisassemblyDumps = op.getBoolOption('D');
+    rt->profilingScripts = enableCodeCoverage || enableDisassemblyDumps;
 
     jsCacheDir = op.getStringOption("js-cache");
     if (jsCacheDir) {
@@ -6080,7 +6083,7 @@ SetWorkerRuntimeOptions(JSRuntime* rt)
                              .setNativeRegExp(enableNativeRegExp)
                              .setUnboxedArrays(enableUnboxedArrays);
     rt->setOffthreadIonCompilationEnabled(offthreadCompilation);
-    rt->profilingScripts = enableDisassemblyDumps;
+    rt->profilingScripts = enableCodeCoverage || enableDisassemblyDumps;
 
 #ifdef JS_GC_ZEAL
     if (*gZealStr)
@@ -6221,6 +6224,7 @@ main(int argc, char** argv, char** envp)
                                "specified by --js-cache. This cache directory will be removed"
                                "when the js shell exits. This is useful for running tests in"
                                "parallel.")
+        || !op.addBoolOption('\0', "code-coverage", "Enable code coverage instrumentation.")
 #ifdef DEBUG
         || !op.addBoolOption('O', "print-alloc", "Print the number of allocations at exit")
 #endif

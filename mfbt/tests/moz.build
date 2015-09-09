@@ -22,6 +22,7 @@ CppUnitTests([
     'TestJSONWriter',
     'TestMacroArgs',
     'TestMacroForEach',
+    'TestMathAlgorithms',
     'TestMaybe',
     'TestPair',
     'TestRefPtr',
@@ -55,8 +56,6 @@ if CONFIG['_MSC_VER']:
     '-wd4275', # non dll-interface class used as base for dll-interface class
     '-wd4530', # C++ exception handler used, but unwind semantics are not enabled
   ]
-
-FAIL_ON_WARNINGS = True
 
 USE_LIBS += [
     'mfbt',

@@ -162,6 +162,17 @@ JitRuntime::generateEnterJIT(JSContext* cx, EnterJitType type)
     Loop over argv vector, push arguments onto stack in reverse order
     ***************************************************************/
 
+    // if we are constructing, that also needs to include newTarget
+    {
+        Label noNewTarget;
+        masm.branchTest32(Assembler::Zero, s2, Imm32(CalleeToken_FunctionConstructing),
+                          &noNewTarget);
+
+        masm.add32(Imm32(1), reg_argc);
+
+        masm.bind(&noNewTarget);
+    }
+
     masm.as_sll(s0, reg_argc, 3); // s0 = argc * 8
     masm.addPtr(reg_argv, s0); // s0 = argv + argc * 8
 
@@ -241,7 +252,7 @@ JitRuntime::generateEnterJIT(JSContext* cx, EnterJitType type)
         masm.storePtr(zero, Address(StackPointer, 0)); // fake return address
 
         // No GC things to mark, push a bare token.
-        masm.enterFakeExitFrame(ExitFrameLayout::BareToken());
+        masm.enterFakeExitFrame(ExitFrameLayoutBareToken);
 
         masm.reserveStack(2 * sizeof(uintptr_t));
         masm.storePtr(framePtr, Address(StackPointer, sizeof(uintptr_t))); // BaselineFrame
@@ -303,7 +314,7 @@ JitRuntime::generateEnterJIT(JSContext* cx, EnterJitType type)
     masm.assertStackAlignment(JitStackAlignment, sizeof(uintptr_t));
 
     // Call the function with pushing return address to stack.
-    masm.ma_callJitHalfPush(reg_code);
+    masm.callJitNoProfiler(reg_code);
 
     if (type == EnterJitBaseline) {
         // Baseline OSR will return here.
@@ -314,7 +325,7 @@ JitRuntime::generateEnterJIT(JSContext* cx, EnterJitType type)
     // Pop arguments off the stack.
     // s0 <- 8*argc (size of all arguments we pushed on the stack)
     masm.pop(s0);
-    masm.rshiftPtr(Imm32(4), s0);
+    masm.rshiftPtr(Imm32(FRAMESIZE_SHIFT), s0);
     masm.addPtr(s0, StackPointer);
 
     // Store the returned value into the slotVp
@@ -432,11 +443,33 @@ JitRuntime::generateArgumentsRectifier(JSContext* cx, void** returnAddrOut)
 
     masm.ma_subu(t1, numArgsReg, s3);
 
-    masm.moveValue(UndefinedValue(), ValueOperand(t3, t4));
+    // Get the topmost argument.
+    masm.ma_sll(t0, s3, Imm32(3)); // t0 <- nargs * 8
+    masm.as_addu(t2, sp, t0); // t2 <- sp + nargs * 8
+    masm.addPtr(Imm32(sizeof(RectifierFrameLayout)), t2);
 
-    masm.movePtr(StackPointer, t2); // Save %sp.
+    {
+        Label notConstructing;
+
+        masm.branchTest32(Assembler::Zero, calleeTokenReg, Imm32(CalleeToken_FunctionConstructing),
+                          &notConstructing);
+
+        // Add sizeof(Value) to overcome |this|
+        masm.subPtr(Imm32(sizeof(Value)), StackPointer);
+        masm.load32(Address(t2, NUNBOX32_TYPE_OFFSET + sizeof(Value)), t0);
+        masm.store32(t0, Address(StackPointer, NUNBOX32_TYPE_OFFSET));
+        masm.load32(Address(t2, NUNBOX32_PAYLOAD_OFFSET + sizeof(Value)), t0);
+        masm.store32(t0, Address(StackPointer, NUNBOX32_PAYLOAD_OFFSET));
+
+        // Include the newly pushed newTarget value in the frame size
+        // calculated below.
+        masm.add32(Imm32(1), numArgsReg);
+
+        masm.bind(&notConstructing);
+    }
 
     // Push undefined.
+    masm.moveValue(UndefinedValue(), ValueOperand(t3, t4));
     {
         Label undefLoopTop;
         masm.bind(&undefLoopTop);
@@ -447,11 +480,6 @@ JitRuntime::generateArgumentsRectifier(JSContext* cx, void** returnAddrOut)
 
         masm.ma_b(t1, t1, &undefLoopTop, Assembler::NonZero, ShortJump);
     }
-
-    // Get the topmost argument.
-    masm.ma_sll(t0, s3, Imm32(3)); // t0 <- nargs * 8
-    masm.addPtr(t0, t2); // t2 <- t2(saved sp) + nargs * 8
-    masm.addPtr(Imm32(sizeof(RectifierFrameLayout)), t2);
 
     // Push arguments, |nargs| + 1 times (to include |this|).
     {
@@ -497,9 +525,7 @@ JitRuntime::generateArgumentsRectifier(JSContext* cx, void** returnAddrOut)
     masm.andPtr(Imm32(CalleeTokenMask), calleeTokenReg);
     masm.loadPtr(Address(calleeTokenReg, JSFunction::offsetOfNativeOrScript()), t1);
     masm.loadBaselineOrIonRaw(t1, t1, nullptr);
-    masm.ma_callJitHalfPush(t1);
-
-    uint32_t returnOffset = masm.currentOffset();
+    uint32_t returnOffset = masm.callJitNoProfiler(t1);
 
     // arg1
     //  ...
@@ -1120,7 +1146,7 @@ JitRuntime::generateProfilerExitFrameTailStub(JSContext* cx)
     // Going into the conditionals, we will have:
     //      FrameDescriptor.size in scratch1
     //      FrameDescriptor.type in scratch2
-    masm.ma_and(scratch2, scratch1, Imm32((1 << FRAMESIZE_SHIFT) - 1));
+    masm.ma_and(scratch2, scratch1, Imm32((1 << FRAMETYPE_BITS) - 1));
     masm.rshiftPtr(Imm32(FRAMESIZE_SHIFT), scratch1);
 
     // Handling of each case is dependent on FrameDescriptor.type

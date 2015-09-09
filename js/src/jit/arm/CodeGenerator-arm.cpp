@@ -194,9 +194,10 @@ CodeGeneratorARM::bailout(LSnapshot* snapshot)
 void
 CodeGeneratorARM::visitOutOfLineBailout(OutOfLineBailout* ool)
 {
-    masm.ma_mov(Imm32(ool->snapshot()->snapshotOffset()), ScratchRegister);
-    masm.ma_push(ScratchRegister); // BailoutStack::padding_
-    masm.ma_push(ScratchRegister); // BailoutStack::snapshotOffset_
+    ScratchRegisterScope scratch(masm);
+    masm.ma_mov(Imm32(ool->snapshot()->snapshotOffset()), scratch);
+    masm.ma_push(scratch); // BailoutStack::padding_
+    masm.ma_push(scratch); // BailoutStack::snapshotOffset_
     masm.ma_b(&deoptLabel_);
 }
 
@@ -546,11 +547,12 @@ CodeGeneratorARM::visitDivI(LDivI* ins)
     if (mir->canTruncateRemainder()) {
         masm.ma_sdiv(lhs, rhs, output);
     } else {
-        masm.ma_sdiv(lhs, rhs, ScratchRegister);
-        masm.ma_mul(ScratchRegister, rhs, temp);
+        ScratchRegisterScope scratch(masm);
+        masm.ma_sdiv(lhs, rhs, scratch);
+        masm.ma_mul(scratch, rhs, temp);
         masm.ma_cmp(lhs, temp);
         bailoutIf(Assembler::NotEqual, ins->snapshot());
-        masm.ma_mov(ScratchRegister, output);
+        masm.ma_mov(scratch, output);
     }
 
     masm.bind(&done);
@@ -594,38 +596,47 @@ CodeGeneratorARM::visitSoftDivI(LSoftDivI* ins)
 void
 CodeGeneratorARM::visitDivPowTwoI(LDivPowTwoI* ins)
 {
+    MDiv* mir = ins->mir();
     Register lhs = ToRegister(ins->numerator());
     Register output = ToRegister(ins->output());
     int32_t shift = ins->shift();
 
-    if (shift != 0) {
-        MDiv* mir = ins->mir();
-        if (!mir->isTruncated()) {
-            // If the remainder is != 0, bailout since this must be a double.
-            masm.as_mov(ScratchRegister, lsl(lhs, 32 - shift), SetCC);
-            bailoutIf(Assembler::NonZero, ins->snapshot());
-        }
-
-        if (!mir->canBeNegativeDividend()) {
-            // Numerator is unsigned, so needs no adjusting. Do the shift.
-            masm.as_mov(output, asr(lhs, shift));
-            return;
-        }
-
-        // Adjust the value so that shifting produces a correctly rounded result
-        // when the numerator is negative. See 10-1 "Signed Division by a Known
-        // Power of 2" in Henry S. Warren, Jr.'s Hacker's Delight.
-        if (shift > 1) {
-            masm.as_mov(ScratchRegister, asr(lhs, 31));
-            masm.as_add(ScratchRegister, lhs, lsr(ScratchRegister, 32 - shift));
-        } else
-            masm.as_add(ScratchRegister, lhs, lsr(lhs, 32 - shift));
-
-        // Do the shift.
-        masm.as_mov(output, asr(ScratchRegister, shift));
-    } else {
+    if (shift == 0) {
         masm.ma_mov(lhs, output);
+        return;
     }
+
+    if (!mir->isTruncated()) {
+        // If the remainder is != 0, bailout since this must be a double.
+        {
+            // The bailout code also needs the scratch register.
+            // Here it is only used as a dummy target to set CC flags.
+            ScratchRegisterScope scratch(masm);
+            masm.as_mov(scratch, lsl(lhs, 32 - shift), SetCC);
+        }
+        bailoutIf(Assembler::NonZero, ins->snapshot());
+    }
+
+    if (!mir->canBeNegativeDividend()) {
+        // Numerator is unsigned, so needs no adjusting. Do the shift.
+        masm.as_mov(output, asr(lhs, shift));
+        return;
+    }
+
+    // Adjust the value so that shifting produces a correctly rounded result
+    // when the numerator is negative. See 10-1 "Signed Division by a Known
+    // Power of 2" in Henry S. Warren, Jr.'s Hacker's Delight.
+    ScratchRegisterScope scratch(masm);
+
+    if (shift > 1) {
+        masm.as_mov(scratch, asr(lhs, 31));
+        masm.as_add(scratch, lhs, lsr(scratch, 32 - shift));
+    } else {
+        masm.as_add(scratch, lhs, lsr(lhs, 32 - shift));
+    }
+
+    // Do the shift.
+    masm.as_mov(output, asr(scratch, shift));
 }
 
 void
@@ -946,19 +957,20 @@ CodeGeneratorARM::visitPowHalfD(LPowHalfD* ins)
 {
     FloatRegister input = ToFloatRegister(ins->input());
     FloatRegister output = ToFloatRegister(ins->output());
+    ScratchDoubleScope scratch(masm);
 
     Label done;
 
     // Masm.pow(-Infinity, 0.5) == Infinity.
-    masm.ma_vimm(NegativeInfinity<double>(), ScratchDoubleReg);
-    masm.compareDouble(input, ScratchDoubleReg);
-    masm.ma_vneg(ScratchDoubleReg, output, Assembler::Equal);
+    masm.ma_vimm(NegativeInfinity<double>(), scratch);
+    masm.compareDouble(input, scratch);
+    masm.ma_vneg(scratch, output, Assembler::Equal);
     masm.ma_b(&done, Assembler::Equal);
 
     // Math.pow(-0, 0.5) == 0 == Math.pow(0, 0.5).
     // Adding 0 converts any -0 to 0.
-    masm.ma_vimm(0.0, ScratchDoubleReg);
-    masm.ma_vadd(ScratchDoubleReg, input, output);
+    masm.ma_vimm(0.0, scratch);
+    masm.ma_vadd(scratch, input, output);
     masm.ma_vsqrt(output, output);
 
     masm.bind(&done);
@@ -1196,8 +1208,10 @@ CodeGeneratorARM::visitRoundF(LRoundF* lir)
 void
 CodeGeneratorARM::emitRoundDouble(FloatRegister src, Register dest, Label* fail)
 {
-    masm.ma_vcvt_F64_I32(src, ScratchDoubleReg);
-    masm.ma_vxfer(ScratchDoubleReg, dest);
+    ScratchDoubleScope scratch(masm);
+
+    masm.ma_vcvt_F64_I32(src, scratch);
+    masm.ma_vxfer(scratch, dest);
     masm.ma_cmp(dest, Imm32(0x7fffffff));
     masm.ma_cmp(dest, Imm32(0x80000000), Assembler::NotEqual);
     masm.ma_b(fail, Assembler::Equal);
@@ -1294,16 +1308,15 @@ CodeGeneratorARM::visitBoxFloatingPoint(LBoxFloatingPoint* box)
     const LDefinition* payload = box->getDef(PAYLOAD_INDEX);
     const LDefinition* type = box->getDef(TYPE_INDEX);
     const LAllocation* in = box->getOperand(0);
-
     FloatRegister reg = ToFloatRegister(in);
-    if (box->type() == MIRType_Float32) {
-        masm.convertFloat32ToDouble(reg, ScratchFloat32Reg);
-        reg = ScratchFloat32Reg;
-    }
 
-    //masm.as_vxfer(ToRegister(payload), ToRegister(type),
-    //              VFPRegister(ToFloatRegister(in)), Assembler::FloatToCore);
-    masm.ma_vxfer(VFPRegister(reg), ToRegister(payload), ToRegister(type));
+    if (box->type() == MIRType_Float32) {
+        ScratchFloat32Scope scratch(masm);
+        masm.convertFloat32ToDouble(reg, scratch);
+        masm.ma_vxfer(VFPRegister(scratch), ToRegister(payload), ToRegister(type));
+    } else {
+        masm.ma_vxfer(VFPRegister(reg), ToRegister(payload), ToRegister(type));
+    }
 }
 
 void
@@ -1792,7 +1805,10 @@ CodeGeneratorARM::visitAsmJSLoadHeap(LAsmJSLoadHeap* ins)
         }
     } else {
         Register d = ToRegister(ins->output());
-        masm.ma_mov(Imm32(0), d, LeaveCC, Assembler::AboveOrEqual);
+        if (mir->isAtomicAccess())
+            masm.ma_b(gen->outOfBoundsLabel(), Assembler::AboveOrEqual);
+        else
+            masm.ma_mov(Imm32(0), d, LeaveCC, Assembler::AboveOrEqual);
         masm.ma_dataTransferN(IsLoad, size, isSigned, HeapReg, ptrReg, d, Offset, Assembler::Below);
     }
     memoryBarrier(mir->barrierAfter());
@@ -1863,6 +1879,8 @@ CodeGeneratorARM::visitAsmJSStoreHeap(LAsmJSStoreHeap* ins)
         else
             masm.ma_vstr(vd, HeapReg, ptrReg, 0, 0, Assembler::Below);
     } else {
+        if (mir->isAtomicAccess())
+            masm.ma_b(gen->outOfBoundsLabel(), Assembler::AboveOrEqual);
         masm.ma_dataTransferN(IsStore, size, isSigned, HeapReg, ptrReg,
                               ToRegister(ins->value()), Offset, Assembler::Below);
     }
@@ -1883,26 +1901,17 @@ CodeGeneratorARM::visitAsmJSCompareExchangeHeap(LAsmJSCompareExchangeHeap* ins)
     Register oldval = ToRegister(ins->oldValue());
     Register newval = ToRegister(ins->newValue());
 
-    Label rejoin;
     uint32_t maybeCmpOffset = 0;
     if (mir->needsBoundsCheck()) {
-        Label goahead;
         BufferOffset bo = masm.ma_BoundsCheck(ptrReg);
-        Register out = ToRegister(ins->output());
         maybeCmpOffset = bo.getOffset();
-        masm.ma_b(&goahead, Assembler::Below);
-        memoryBarrier(MembarFull);
-        masm.as_eor(out, out, O2Reg(out));
-        masm.ma_b(&rejoin, Assembler::Always);
-        masm.bind(&goahead);
+        masm.ma_b(gen->outOfBoundsLabel(), Assembler::AboveOrEqual);
     }
     masm.compareExchangeToTypedIntArray(vt == Scalar::Uint32 ? Scalar::Int32 : vt,
                                         srcAddr, oldval, newval, InvalidReg,
                                         ToAnyRegister(ins->output()));
-    if (rejoin.used()) {
-        masm.bind(&rejoin);
+    if (mir->needsBoundsCheck())
         masm.append(AsmJSHeapAccess(maybeCmpOffset));
-    }
 }
 
 void
@@ -1917,12 +1926,14 @@ CodeGeneratorARM::visitAsmJSCompareExchangeCallout(LAsmJSCompareExchangeCallout*
     MOZ_ASSERT(ToRegister(ins->output()) == ReturnReg);
 
     masm.setupAlignedABICall();
-    masm.ma_mov(Imm32(viewType), ScratchRegister);
-    masm.passABIArg(ScratchRegister);
-    masm.passABIArg(ptr);
-    masm.passABIArg(oldval);
-    masm.passABIArg(newval);
-
+    {
+        ScratchRegisterScope scratch(masm);
+        masm.ma_mov(Imm32(viewType), scratch);
+        masm.passABIArg(scratch);
+        masm.passABIArg(ptr);
+        masm.passABIArg(oldval);
+        masm.passABIArg(newval);
+    }
     masm.callWithABI(AsmJSImm_AtomicCmpXchg);
 }
 
@@ -1931,32 +1942,23 @@ CodeGeneratorARM::visitAsmJSAtomicExchangeHeap(LAsmJSAtomicExchangeHeap* ins)
 {
     MAsmJSAtomicExchangeHeap* mir = ins->mir();
     Scalar::Type vt = mir->accessType();
-    const LAllocation* ptr = ins->ptr();
-    Register ptrReg = ToRegister(ptr);
+    Register ptrReg = ToRegister(ins->ptr());
+    Register value = ToRegister(ins->value());
     BaseIndex srcAddr(HeapReg, ptrReg, TimesOne);
     MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
-    Register value = ToRegister(ins->value());
-
-    Label rejoin;
     uint32_t maybeCmpOffset = 0;
     if (mir->needsBoundsCheck()) {
-        Label goahead;
         BufferOffset bo = masm.ma_BoundsCheck(ptrReg);
-        Register out = ToRegister(ins->output());
         maybeCmpOffset = bo.getOffset();
-        masm.ma_b(&goahead, Assembler::Below);
-        memoryBarrier(MembarFull);
-        masm.as_eor(out, out, O2Reg(out));
-        masm.ma_b(&rejoin, Assembler::Always);
-        masm.bind(&goahead);
+        masm.ma_b(gen->outOfBoundsLabel(), Assembler::AboveOrEqual);
     }
+
     masm.atomicExchangeToTypedIntArray(vt == Scalar::Uint32 ? Scalar::Int32 : vt,
                                        srcAddr, value, InvalidReg, ToAnyRegister(ins->output()));
-    if (rejoin.used()) {
-        masm.bind(&rejoin);
+
+    if (mir->needsBoundsCheck())
         masm.append(AsmJSHeapAccess(maybeCmpOffset));
-    }
 }
 
 void
@@ -1970,8 +1972,11 @@ CodeGeneratorARM::visitAsmJSAtomicExchangeCallout(LAsmJSAtomicExchangeCallout* i
     MOZ_ASSERT(ToRegister(ins->output()) == ReturnReg);
 
     masm.setupAlignedABICall();
-    masm.ma_mov(Imm32(viewType), ScratchRegister);
-    masm.passABIArg(ScratchRegister);
+    {
+        ScratchRegisterScope scratch(masm);
+        masm.ma_mov(Imm32(viewType), scratch);
+        masm.passABIArg(scratch);
+    }
     masm.passABIArg(ptr);
     masm.passABIArg(value);
 
@@ -1993,19 +1998,13 @@ CodeGeneratorARM::visitAsmJSAtomicBinopHeap(LAsmJSAtomicBinopHeap* ins)
 
     BaseIndex srcAddr(HeapReg, ptrReg, TimesOne);
 
-    Label rejoin;
     uint32_t maybeCmpOffset = 0;
     if (mir->needsBoundsCheck()) {
-        Label goahead;
         BufferOffset bo = masm.ma_BoundsCheck(ptrReg);
-        Register out = ToRegister(ins->output());
         maybeCmpOffset = bo.getOffset();
-        masm.ma_b(&goahead, Assembler::Below);
-        memoryBarrier(MembarFull);
-        masm.as_eor(out, out, O2Reg(out));
-        masm.ma_b(&rejoin, Assembler::Always);
-        masm.bind(&goahead);
+        masm.ma_b(gen->outOfBoundsLabel(), Assembler::AboveOrEqual);
     }
+
     if (value->isConstant())
         masm.atomicBinopToTypedIntArray(op, vt == Scalar::Uint32 ? Scalar::Int32 : vt,
                                         Imm32(ToInt32(value)), srcAddr, temp, InvalidReg,
@@ -2014,10 +2013,9 @@ CodeGeneratorARM::visitAsmJSAtomicBinopHeap(LAsmJSAtomicBinopHeap* ins)
         masm.atomicBinopToTypedIntArray(op, vt == Scalar::Uint32 ? Scalar::Int32 : vt,
                                         ToRegister(value), srcAddr, temp, InvalidReg,
                                         ToAnyRegister(ins->output()));
-    if (rejoin.used()) {
-        masm.bind(&rejoin);
+
+    if (mir->needsBoundsCheck())
         masm.append(AsmJSHeapAccess(maybeCmpOffset));
-    }
 }
 
 void
@@ -2035,16 +2033,11 @@ CodeGeneratorARM::visitAsmJSAtomicBinopHeapForEffect(LAsmJSAtomicBinopHeapForEff
 
     BaseIndex srcAddr(HeapReg, ptrReg, TimesOne);
 
-    Label rejoin;
     uint32_t maybeCmpOffset = 0;
     if (mir->needsBoundsCheck()) {
-        Label goahead;
         BufferOffset bo = masm.ma_BoundsCheck(ptrReg);
         maybeCmpOffset = bo.getOffset();
-        masm.ma_b(&goahead, Assembler::Below);
-        memoryBarrier(MembarFull);
-        masm.ma_b(&rejoin, Assembler::Always);
-        masm.bind(&goahead);
+        masm.ma_b(gen->outOfBoundsLabel(), Assembler::AboveOrEqual);
     }
 
     if (value->isConstant())
@@ -2052,10 +2045,8 @@ CodeGeneratorARM::visitAsmJSAtomicBinopHeapForEffect(LAsmJSAtomicBinopHeapForEff
     else
         masm.atomicBinopToTypedIntArray(op, vt, ToRegister(value), srcAddr);
 
-    if (rejoin.used()) {
-        masm.bind(&rejoin);
+    if (mir->needsBoundsCheck())
         masm.append(AsmJSHeapAccess(maybeCmpOffset));
-    }
 }
 
 void
@@ -2067,8 +2058,11 @@ CodeGeneratorARM::visitAsmJSAtomicBinopCallout(LAsmJSAtomicBinopCallout* ins)
     Register value = ToRegister(ins->value());
 
     masm.setupAlignedABICall();
-    masm.ma_mov(Imm32(viewType), ScratchRegister);
-    masm.passABIArg(ScratchRegister);
+    {
+        ScratchRegisterScope scratch(masm);
+        masm.move32(Imm32(viewType), scratch);
+        masm.passABIArg(scratch);
+    }
     masm.passABIArg(ptr);
     masm.passABIArg(value);
 

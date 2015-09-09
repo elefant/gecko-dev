@@ -125,7 +125,9 @@ out:
   DWORD written;
   WriteFile(reinterpret_cast<HANDLE>(aFd), buf, b - buf, &written, nullptr);
 #else
-  write(aFd, buf, b - buf);
+  // Using mozilla::unused is tricky in logalloc, so just use (void) instead.
+  int unused = write(aFd, buf, b - buf);
+  (void) unused;
 #endif
   va_end(ap);
 }

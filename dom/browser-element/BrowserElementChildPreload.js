@@ -64,6 +64,7 @@ const COMMAND_MAP = {
   'cut': 'cmd_cut',
   'copy': 'cmd_copyAndCollapseToEnd',
   'copyImage': 'cmd_copyImage',
+  'copyLink': 'cmd_copyLink',
   'paste': 'cmd_paste',
   'selectall': 'cmd_selectAll'
 };
@@ -569,33 +570,42 @@ BrowserElementChild.prototype = {
       return;
     }
 
-    if (!e.target.name) {
+    var name = e.target.name;
+    var property = e.target.getAttributeNS(null, "property");
+
+    if (!name && !property) {
       return;
     }
 
-    debug('Got metaChanged: (' + e.target.name + ') ' + e.target.content);
+    debug('Got metaChanged: (' + (name || property) + ') ' +
+          e.target.content);
 
     let handlers = {
-      'viewmode': this._genericMetaHandler.bind(null, 'viewmode'),
-      'theme-color': this._genericMetaHandler.bind(null, 'theme-color'),
-      'theme-group': this._genericMetaHandler.bind(null, 'theme-group'),
+      'viewmode': this._genericMetaHandler,
+      'theme-color': this._genericMetaHandler,
+      'theme-group': this._genericMetaHandler,
       'application-name': this._applicationNameChangedHandler
     };
+    let handler = handlers[name];
 
-    let handler = handlers[e.target.name];
+    if ((property || name).match(/^og:/)) {
+      name = property || name;
+      handler = this._genericMetaHandler;
+    }
+
     if (handler) {
-      handler(e.type, e.target);
+      handler(name, e.type, e.target);
     }
   },
 
-  _applicationNameChangedHandler: function(eventType, target) {
+  _applicationNameChangedHandler: function(name, eventType, target) {
     if (eventType !== 'DOMMetaAdded') {
       // Bug 1037448 - Decide what to do when <meta name="application-name">
       // changes
       return;
     }
 
-    let meta = { name: 'application-name',
+    let meta = { name: name,
                  content: target.content };
 
     let lang;
@@ -856,7 +866,13 @@ BrowserElementChild.prototype = {
     var elem = e.target;
     var menuData = {systemTargets: [], contextmenu: null};
     var ctxMenuId = null;
-    var hasImgElement = false;
+    var copyableElements = {
+      image: false,
+      link: false,
+      hasElements: function() {
+        return this.image || this.link;
+      }
+    };
 
     // Set the event target as the copy image command needs it to
     // determine what was context-clicked on.
@@ -875,20 +891,22 @@ BrowserElementChild.prototype = {
         ctxMenuId = elem.getAttribute('contextmenu');
       }
 
-      // Enable copy image option
+      // Enable copy image/link option
       if (elem.nodeName == 'IMG') {
-        hasImgElement = true;
+        copyableElements.image = true;
+      } else if (elem.nodeName == 'A') {
+        copyableElements.link = true;
       }
 
       elem = elem.parentNode;
     }
 
-    if (ctxMenuId || hasImgElement) {
+    if (ctxMenuId || copyableElements.hasElements()) {
       var menu = null;
       if (ctxMenuId) {
         menu = e.target.ownerDocument.getElementById(ctxMenuId);
       }
-      menuData.contextmenu = this._buildMenuObj(menu, '', hasImgElement);
+      menuData.contextmenu = this._buildMenuObj(menu, '', copyableElements);
     }
 
     // Pass along the position where the context menu should be located
@@ -1226,6 +1244,10 @@ BrowserElementChild.prototype = {
       // Set command
       data.json.command = 'copyImage';
       this._recvDoCommand(data);
+    } else if (data.json.menuitem == 'copy-link') {
+      // Set command
+      data.json.command = 'copyLink';
+      this._recvDoCommand(data);
     } else if (data.json.menuitem in this._ctxHandlers) {
       this._ctxHandlers[data.json.menuitem].click();
       this._ctxHandlers = {};
@@ -1235,7 +1257,7 @@ BrowserElementChild.prototype = {
     }
   },
 
-  _buildMenuObj: function(menu, idPrefix, hasImgElement) {
+  _buildMenuObj: function(menu, idPrefix, copyableElements) {
     var menuObj = {type: 'menu', items: []};
     // Customized context menu
     if (menu) {
@@ -1254,8 +1276,14 @@ BrowserElementChild.prototype = {
         }
       }
     }
+    // Note: Display "Copy Link" first in order to make sure "Copy Image" is
+    //       put together with other image options if elem is an image link.
+    // "Copy Link" menu item
+    if (copyableElements.link) {
+      menuObj.items.push({id: 'copy-link'});
+    }
     // "Copy Image" menu item
-    if (hasImgElement) {
+    if (copyableElements.image) {
       menuObj.items.push({id: 'copy-image'});
     }
 
@@ -1757,4 +1785,13 @@ BrowserElementChild.prototype = {
   }
 };
 
-var api = new BrowserElementChild();
+var api = null;
+if ('DoPreloadPostfork' in this && typeof this.DoPreloadPostfork === 'function') {
+  // If we are preloaded, instantiate BrowserElementChild after a content
+  // process is forked.
+  this.DoPreloadPostfork(function() {
+    api = new BrowserElementChild();
+  });
+} else {
+  api = new BrowserElementChild();
+}

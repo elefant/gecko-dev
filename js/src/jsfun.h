@@ -87,6 +87,7 @@ class JSFunction : public js::NativeObject
         INTERPRETED_SETTER = INTERPRETED | SETTER_KIND,
         INTERPRETED_LAMBDA = INTERPRETED | LAMBDA | CONSTRUCTOR,
         INTERPRETED_LAMBDA_ARROW = INTERPRETED | LAMBDA | ARROW_KIND,
+        INTERPRETED_LAMBDA_GENERATOR = INTERPRETED | LAMBDA,
         INTERPRETED_NORMAL = INTERPRETED | CONSTRUCTOR,
         INTERPRETED_GENERATOR = INTERPRETED,
         NO_XDR_FLAGS = RESOLVED_LENGTH | RESOLVED_NAME,
@@ -142,15 +143,15 @@ class JSFunction : public js::NativeObject
 
   public:
 
-    /* Call objects must be created for each invocation of a heavyweight function. */
-    bool isHeavyweight() const {
+    /* Call objects must be created for each invocation of this function. */
+    bool needsCallObject() const {
         MOZ_ASSERT(!isInterpretedLazy());
         MOZ_ASSERT(!isBeingParsed());
 
         if (isNative())
             return false;
 
-        // Note: this should be kept in sync with FunctionBox::isHeavyweight().
+        // Note: this should be kept in sync with FunctionBox::needsCallObject().
         return nonLazyScript()->hasAnyAliasedBindings() ||
                nonLazyScript()->funHasExtensibleScope() ||
                nonLazyScript()->funNeedsDeclEnvObject() ||

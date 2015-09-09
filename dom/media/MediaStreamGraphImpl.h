@@ -93,16 +93,16 @@ public:
   NS_DECL_NSIMEMORYREPORTER
 
   /**
-   * Set aRealtime to true in order to create a MediaStreamGraph which provides
-   * support for real-time audio and video.  Set it to false in order to create
-   * a non-realtime instance which just churns through its inputs and produces
-   * output.  Those objects currently only support audio, and are used to
-   * implement OfflineAudioContext.  They do not support MediaStream inputs.
+   * Use aGraphDriverRequested with SYSTEM_THREAD_DRIVER or AUDIO_THREAD_DRIVER
+   * to create a MediaStreamGraph which provides support for real-time audio
+   * and/or video.  Set it to false in order to create a non-realtime instance
+   * which just churns through its inputs and produces output.  Those objects
+   * currently only support audio, and are used to implement
+   * OfflineAudioContext.  They do not support MediaStream inputs.
    */
-  explicit MediaStreamGraphImpl(bool aRealtime,
+  explicit MediaStreamGraphImpl(GraphDriverType aGraphDriverRequested,
                                 TrackRate aSampleRate,
-                                bool aStartWithAudioDriver = false,
-                                dom::AudioChannel aChannel = dom::AudioChannel::Normal);
+                                dom::AudioChannel aChannel);
 
   /**
    * Unregisters memory reporting and deletes this instance. This should be
@@ -527,6 +527,56 @@ public:
   void UnregisterCaptureStreamForWindow(uint64_t aWindowId);
   already_AddRefed<MediaInputPort>
   ConnectToCaptureStream(uint64_t aWindowId, MediaStream* aMediaStream);
+
+  class StreamSet {
+  public:
+    class iterator {
+    public:
+      explicit iterator(MediaStreamGraphImpl& aGraph)
+        : mGraph(&aGraph), mArrayNum(-1), mArrayIndex(0)
+      {
+        ++(*this);
+      }
+      iterator() : mGraph(nullptr), mArrayNum(2), mArrayIndex(0) {}
+      MediaStream* operator*()
+      {
+        return Array()->ElementAt(mArrayIndex);
+      }
+      iterator operator++()
+      {
+        ++mArrayIndex;
+        while (mArrayNum < 2 &&
+          (mArrayNum < 0 || mArrayIndex >= Array()->Length())) {
+          ++mArrayNum;
+          mArrayIndex = 0;
+        }
+        return *this;
+      }
+      bool operator==(const iterator& aOther) const
+      {
+        return mArrayNum == aOther.mArrayNum && mArrayIndex == aOther.mArrayIndex;
+      }
+      bool operator!=(const iterator& aOther) const
+      {
+        return !(*this == aOther);
+      }
+    private:
+      nsTArray<MediaStream*>* Array()
+      {
+        return mArrayNum == 0 ? &mGraph->mStreams : &mGraph->mSuspendedStreams;
+      }
+      MediaStreamGraphImpl* mGraph;
+      int mArrayNum;
+      uint32_t mArrayIndex;
+    };
+
+    explicit StreamSet(MediaStreamGraphImpl& aGraph) : mGraph(aGraph) {}
+    iterator begin() { return iterator(mGraph); }
+    iterator end() { return iterator(); }
+  private:
+    MediaStreamGraphImpl& mGraph;
+  };
+  StreamSet AllStreams() { return StreamSet(*this); }
 
   // Data members
   //
