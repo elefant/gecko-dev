@@ -50,7 +50,7 @@ InstallPackagedWebapp.prototype = {
         manifest: manifest,
         manifestURL: aManifestURL,
         origin: aOrigin,
-        appId: aAppId,
+        localId: aAppId,
         isPreinstalled: false,
         isCachedPackage: true
       }, false, function() {

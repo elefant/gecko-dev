@@ -171,6 +171,7 @@ this.PermissionsInstaller = {
           }
 
           this._setPermission(expandedPermNames[idx], permValue, aApp);
+        }
       }
     }
     catch (ex) {
@@ -201,7 +202,7 @@ this.PermissionsInstaller = {
       manifestURL: aApp.manifestURL,
       value: aPermValue,
       browserFlag: false,
-      localId: aApp.appId,
+      localId: aApp.localId,
       isCachedPackage: aApp.isCachedPackage,
     });
   }
