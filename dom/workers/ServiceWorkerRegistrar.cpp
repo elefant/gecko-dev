@@ -331,8 +331,9 @@ ServiceWorkerRegistrar::ReadData()
     }
 
     GET_LINE(line);
+    nsCString packageId = NS_ConvertUTF16toUTF8(attrs.mPackageId);
     entry->principal() =
-      mozilla::ipc::ContentPrincipalInfo(attrs.mAppId, attrs.mInBrowser, line);
+      mozilla::ipc::ContentPrincipalInfo(attrs.mAppId, attrs.mInBrowser, line, packageId);
 
     GET_LINE(entry->scope());
     GET_LINE(entry->scriptSpec());

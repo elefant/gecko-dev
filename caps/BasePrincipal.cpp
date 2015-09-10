@@ -62,6 +62,10 @@ OriginAttributes::CreateSuffix(nsACString& aStr) const
     params->Set(NS_LITERAL_STRING("userContextId"), value);
   }
 
+  if (!mPackageId.IsEmpty()) {
+    params->Set(NS_LITERAL_STRING("packageId"), mPackageId);
+  }
+
   aStr.Truncate();
 
   params->Serialize(value);
@@ -129,6 +133,12 @@ public:
         return false;
       }
 
+      return true;
+    }
+
+    if (aName.EqualsLiteral("packageId")) {
+      MOZ_RELEASE_ASSERT(mOriginAttributes->mPackageId.IsEmpty());
+      mOriginAttributes->mPackageId.Assign(aValue);
       return true;
     }
 

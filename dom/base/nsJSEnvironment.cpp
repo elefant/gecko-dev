@@ -2545,7 +2545,7 @@ NS_DOMReadStructuredClone(JSContext* cx,
         return nullptr;
       }
 
-      info = mozilla::ipc::ContentPrincipalInfo(appId, isInBrowserElement, spec);
+      info = mozilla::ipc::ContentPrincipalInfo(appId, isInBrowserElement, spec, EmptyCString());
     }
 
     nsresult rv;
