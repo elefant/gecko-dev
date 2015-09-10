@@ -3440,6 +3440,7 @@ public:
   NS_IMETHOD GetOriginAttributes(JS::MutableHandleValue) NO_IMPL
   NS_IMETHOD GetUseRemoteTabs(bool*) NO_IMPL
   NS_IMETHOD SetRemoteTabs(bool) NO_IMPL
+  NS_IMETHOD SetPackageId(const nsACString&) NO_IMPL
 #undef NO_IMPL
 
 protected:

@@ -23,7 +23,7 @@ interface nsIDOMElement;
  * can be queried for various information about where the load is
  * happening.
  */
-[scriptable, uuid(1220e340-b337-4c35-aaa1-f51362763621)]
+[scriptable, uuid(ccba2b1d-1527-4f31-b62c-fc352b5b1e9b)]
 interface nsILoadContext : nsISupports
 {
   /**
@@ -128,6 +128,11 @@ interface nsILoadContext : nsISupports
    * nsIScriptSecurityManager::NO_APP_ID if the load is not part of an app.
    */
   readonly attribute unsigned long appId;
+
+  /**
+   * Set the packaged identifier, meant to be used internally.
+   */
+  [noscript] void SetPackageId(in AUTF8String aPackageId);
 
   /**
    * A dictionary of the non-default origin attributes associated with this
