@@ -148,6 +148,7 @@ NS_IMPL_ISUPPORTS(HttpChannelParent,
                   nsIProgressEventSink,
                   nsIRequestObserver,
                   nsIStreamListener,
+                  nsIPackagedAppChannelListener,
                   nsIParentChannel,
                   nsIAuthPromptProvider,
                   nsIParentRedirectingChannel,
@@ -916,6 +917,19 @@ HttpChannelParent::DivertComplete()
   }
 
   mParentListener = nullptr;
+}
+
+//-----------------------------------------------------------------------------
+// HttpChannelParent::nsIPackagedAppChannelListener
+//-----------------------------------------------------------------------------
+
+NS_IMETHODIMP
+HttpChannelParent::OnStartSignedPackageRequest(const nsACString& aPackageId)
+{
+  if (mTabParent) {
+    mTabParent->OnStartSignedPackageRequest(mChannel);
+  }
+  return NS_OK;
 }
 
 //-----------------------------------------------------------------------------
