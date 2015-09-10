@@ -3419,6 +3419,8 @@ public:
   NS_IMETHOD GetAppId(uint32_t*) NO_IMPL
   NS_IMETHOD GetUseRemoteTabs(bool*) NO_IMPL
   NS_IMETHOD SetRemoteTabs(bool) NO_IMPL
+  NS_IMETHOD GetPackageId(nsACString&) NO_IMPL
+  NS_IMETHOD SetPackageId(const nsACString&) NO_IMPL
 #undef NO_IMPL
 
 protected:

@@ -53,6 +53,7 @@ private:
 
     bool     mIsInBrowserElement;
     uint32_t mAppId;
+    nsCString mPackageId;
 };
 
 } // namespace docshell

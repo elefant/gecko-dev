@@ -53,6 +53,7 @@ public:
 #ifdef DEBUG
     , mIsNotNull(aToCopy.mIsNotNull)
 #endif
+    , mPackageId(aToCopy.mPackageId)
   {
   }
 
@@ -71,6 +72,7 @@ public:
 #ifdef DEBUG
     , mIsNotNull(aToCopy.mIsNotNull)
 #endif
+    , mPackageId(aToCopy.mPackageId)
   {
   }
 
@@ -126,6 +128,7 @@ private:
 #ifdef DEBUG
   bool mIsNotNull;
 #endif
+  nsCString mPackageId;
 };
 
 } // namespace mozilla

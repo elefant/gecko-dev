@@ -265,5 +265,19 @@ OfflineCacheUpdateParent::GetAppId(uint32_t *aAppId)
     return NS_OK;
 }
 
+NS_IMETHODIMP
+OfflineCacheUpdateParent::GetPackageId(nsACString& aPackageId)
+{
+  aPackageId = mPackageId;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+OfflineCacheUpdateParent::SetPackageId(const nsACString& aPackageId)
+{
+  mPackageId = aPackageId;
+  return NS_OK;
+}
+
 } // namespace docshell
 } // namespace mozilla

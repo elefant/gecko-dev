@@ -120,7 +120,8 @@ protected:
                           const NetAddr& selfAddr,
                           const NetAddr& peerAddr,
                           const int16_t& redirectCount,
-                          const uint32_t& cacheKey) override;
+                          const uint32_t& cacheKey,
+                          const nsCString& packageIdentifier) override;
   bool RecvOnTransportAndData(const nsresult& channelStatus,
                               const nsresult& status,
                               const uint64_t& progress,
@@ -224,7 +225,8 @@ private:
                       const nsCString& securityInfoSerialization,
                       const NetAddr& selfAddr,
                       const NetAddr& peerAddr,
-                      const uint32_t& cacheKey);
+                      const uint32_t& cacheKey,
+                      const nsCString& packageIdentifier);
   void OnTransportAndData(const nsresult& channelStatus,
                           const nsresult& status,
                           const uint64_t progress,

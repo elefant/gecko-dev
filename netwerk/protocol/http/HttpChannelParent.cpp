@@ -1006,6 +1006,15 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
     }
   }
 
+  nsCString packageId;
+  if (mLoadContext) {
+      // mChannel has been updated the origin as a signed package content.
+      // It will be updated to the child through SendOnStartRequest.
+      mLoadContext->GetPackageId(packageId);
+  }
+
+  LOG(("HttpChannelParent::OnStartRequest: packageId: %s", packageId.get()));
+
   if (mIPCClosed ||
       !SendOnStartRequest(channelStatus,
                           responseHead ? *responseHead : nsHttpResponseHead(),
@@ -1016,7 +1025,8 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
                           expirationTime, cachedCharset, secInfoSerialization,
                           mChannel->GetSelfAddr(), mChannel->GetPeerAddr(),
                           redirectCount,
-                          cacheKeyValue))
+                          cacheKeyValue,
+                          packageId))
   {
     return NS_ERROR_UNEXPECTED;
   }

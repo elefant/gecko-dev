@@ -64,6 +64,7 @@ SerializedLoadContext::Init(nsILoadContext* aLoadContext)
     aLoadContext->GetUseRemoteTabs(&mUseRemoteTabs);
     aLoadContext->GetAppId(&mAppId);
     aLoadContext->GetIsInBrowserElement(&mIsInBrowserElement);
+    aLoadContext->GetPackageId(mPackageId);
   } else {
     mIsNotNull = false;
     mIsPrivateBitValid = false;
