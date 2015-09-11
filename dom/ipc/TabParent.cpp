@@ -108,6 +108,13 @@ using namespace mozilla::services;
 using namespace mozilla::widget;
 using namespace mozilla::jsipc;
 
+#undef LOG
+#ifdef MOZ_WIDGET_GONK
+  #define LOG(args) printf_stderr args
+#else
+  #define LOG(args) PR_LogPrint args
+#endif
+
 // The flags passed by the webProgress notifications are 16 bits shifted
 // from the ones registered by webProgressListeners.
 #define NOTIFY_FLAG_SHIFT 16

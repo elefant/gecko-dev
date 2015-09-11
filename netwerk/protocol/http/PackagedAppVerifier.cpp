@@ -15,6 +15,13 @@
 #include "nsIPackagedAppVerifier.h"
 #include "mozilla/Preferences.h"
 
+#undef LOG
+#ifdef MOZ_WIDGET_GONK
+  #define LOG(args) printf_stderr args
+#else
+  #define LOG(args) PR_LogPrint args
+#endif
+
 static const short kResourceHashType = nsICryptoHash::SHA256;
 
 // If it's true, all the verification will be skipped and the package will

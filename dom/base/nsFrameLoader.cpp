@@ -2650,9 +2650,9 @@ nsFrameLoader::SwapRemoteBrowser(nsITabParent* aTabParent)
     NS_WARNING("Switching from in-process to out-of-process is not supported.");
     return NS_ERROR_NOT_IMPLEMENTED;
   }
-  if (!OwnerIsBrowserOrAppFrame()) {
+  if (OwnerIsBrowserOrAppFrame()) {
     NS_WARNING("Switching process for non-mozbrowser/app frame is not supported.");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    //return NS_ERROR_NOT_IMPLEMENTED;
   }
   if (newParent == mRemoteBrowser) {
     return NS_OK;
