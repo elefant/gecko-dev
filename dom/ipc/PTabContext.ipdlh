@@ -37,6 +37,10 @@ struct AppFrameIPCTabContext
 
   // The ID of the app containing this frame.  May be NO_APP_ID.
   uint32_t appFrameOwnerAppId;
+
+  // The origin of the owning app. A non-empty ownAppOrigin means this
+  // frame contains a packaged web content.
+  nsCString ownAppOrigin;
 };
 
 // An IPCTabContext which corresponds to a browser frame.

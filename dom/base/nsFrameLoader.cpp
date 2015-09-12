@@ -94,6 +94,7 @@
 
 #include "mozilla/dom/StructuredCloneIPCHelper.h"
 #include "mozilla/WebBrowserPersistLocalDocument.h"
+#include "nsIPackagedAppService.h"
 
 #ifdef MOZ_XUL
 #include "nsXULPopupManager.h"
@@ -2266,8 +2267,31 @@ nsFrameLoader::TryRemoteBrowser()
   nsCOMPtr<mozIApplication> containingApp = GetContainingApp();
 
   bool rv = true;
+
+  // Following is exact the same logic that we determine if a resource
+  // is a packaged web content in nsHttpChannel.
+  nsCString path;
+  nsCOMPtr<nsIURL> url(do_QueryInterface(mURIToLoad));
+  if (url) {
+    url->GetFilePath(path);
+  }
+  bool isPackagedAppResource = path.Find(PACKAGED_APP_TOKEN) != kNotFound;
+
   if (ownApp) {
     rv = context.SetTabContextForAppFrame(ownApp, containingApp);
+  } else if (isPackagedAppResource) {
+    // We are about to load a packaged app resource. Since it will not be found
+    // in the app registry, we need to use origin-based approach to pass around
+    // this app-like content. The origin is based on the its containing app's id
+    // and its own URL.
+    uint32_t containingAppId;
+    containingApp->GetLocalId(&containingAppId);
+    OriginAttributes attrs(containingAppId, true);
+    nsCOMPtr<nsIPrincipal> principal =
+      BasePrincipal::CreateCodebasePrincipal(mURIToLoad, attrs);
+    nsCString ownAppOrigin;
+    principal->GetOrigin(ownAppOrigin);
+    rv = context.SetTabContextForAppFrame(ownAppOrigin, containingApp);
   } else if (OwnerIsBrowserFrame()) {
     // The |else| above is unnecessary; OwnerIsBrowserFrame() implies !ownApp.
     rv = context.SetTabContextForBrowserFrame(containingApp);

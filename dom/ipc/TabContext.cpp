@@ -11,11 +11,103 @@
 #include "nsIAppsService.h"
 #include "nsIScriptSecurityManager.h"
 #include "nsServiceManagerUtils.h"
+#include "nsIPermissionManager.h"
 
 #define NO_APP_ID (nsIScriptSecurityManager::NO_APP_ID)
 
+#define LOG printf_stderr
+
 using namespace mozilla::dom::ipc;
 using namespace mozilla::layout;
+
+namespace { // anon
+
+class PackagedWebApp : public mozIApplication
+{
+public:
+  NS_DECL_ISUPPORTS
+
+  PackagedWebApp(const nsACString& aOrigin)
+  {
+    LOG("Creating PackagedWebApp: %s", nsCString(aOrigin).get());
+
+    nsIScriptSecurityManager *securityManager =
+      nsContentUtils::GetSecurityManager();
+
+    securityManager->CreateCodebasePrincipalFromOrigin(aOrigin,
+                                                       getter_AddRefs(mPrincipal));
+  }
+
+  //-----------------------------------------------------------------
+  // Following are the methods that will be never called.
+  //-----------------------------------------------------------------
+  NS_METHOD HasWidgetPage(const nsAString & pageURL, bool *_retval) { MOZ_CRASH(); }
+  NS_METHOD GetAppStatus(uint16_t *aAppStatus) { MOZ_CRASH(); }
+  NS_METHOD GetId(nsAString & aId) { MOZ_CRASH(); }
+  NS_METHOD GetBasePath(nsAString & aBasePath) { MOZ_CRASH(); }
+  NS_METHOD GetCsp(nsAString & aCsp) { MOZ_CRASH(); }
+  NS_METHOD GetStoreID(nsAString & aStoreID) { MOZ_CRASH(); }
+  NS_METHOD GetStoreVersion(uint32_t *aStoreVersion) { MOZ_CRASH(); }
+  NS_METHOD GetRole(nsAString & aRole) { MOZ_CRASH(); }
+  NS_METHOD GetKind(nsAString & aKind) { MOZ_CRASH(); }
+  NS_METHOD GetPrincipal(nsIPrincipal * *aPrincipal) { MOZ_CRASH(); }
+
+  //------------------------------------------------------------------
+  // Followings are the methods that may be called.
+  //------------------------------------------------------------------
+  NS_METHOD GetName(nsAString & aName)
+  {
+    // TODO: Returns a good name.
+    return NS_OK;
+  }
+
+  NS_METHOD GetOrigin(nsAString & aOrigin)
+  {
+    nsCString origin;
+    mPrincipal->GetOrigin(origin);
+    aOrigin = NS_ConvertUTF8toUTF16(origin);
+    return NS_OK;
+  }
+
+  NS_METHOD GetManifestURL(nsAString & aManifestURL)
+  {
+    // TODO: Returns a good one.
+    return NS_OK;
+  }
+
+  NS_METHOD GetLocalId(uint32_t *aLocalId)
+  {
+    return mPrincipal->GetAppId(aLocalId);
+  }
+
+  NS_IMETHOD HasPermission(const char * permission, bool *_retval)
+  {
+    // This is all the same as how we check permssion in AppsUtils.jsm.
+
+    nsCString origin;
+    mPrincipal->GetOrigin(origin);
+    LOG("Checking permission: %s (%s)", permission, origin.get());
+
+    nsCOMPtr<nsIPermissionManager> permMgr = services::GetPermissionManager();
+    NS_ENSURE_TRUE(permMgr, NS_ERROR_FAILURE);
+
+    uint32_t perm;
+    nsresult rv = permMgr->TestExactPermissionFromPrincipal(mPrincipal, permission, &perm);
+    NS_ENSURE_SUCCESS(rv, NS_ERROR_FAILURE);
+
+    *_retval = (nsIPermissionManager::ALLOW_ACTION == perm);
+    return NS_OK;
+  }
+
+private:
+  virtual ~PackagedWebApp() {}
+
+  nsCOMPtr<nsIPrincipal> mPrincipal;
+};
+
+NS_IMPL_ISUPPORTS(PackagedWebApp, mozIApplication)
+
+} // anon
 
 namespace mozilla {
 namespace dom {
@@ -153,6 +245,17 @@ TabContext::SetTabContext(const TabContext& aContext)
   return true;
 }
 
+bool TabContext::SetTabContextForAppFrame(const nsACString& aOwnAppOrigin,
+                                          mozIApplication* aAppFrameOwnerApp)
+{
+  LOG("TabContext::SetTabContextForAppFrame by origin: %s", nsCString(aOwnAppOrigin).get());
+
+  nsCOMPtr<mozIApplication> packagedWebApp = new PackagedWebApp(aOwnAppOrigin);
+  SetTabContextForAppFrame(packagedWebApp.get(), aAppFrameOwnerApp);
+  mOwnAppOrigin = aOwnAppOrigin;
+  return true;
+}
+
 bool
 TabContext::SetTabContextForAppFrame(mozIApplication* aOwnApp,
                                      mozIApplication* aAppFrameOwnerApp)
@@ -220,7 +323,7 @@ TabContext::AsIPCTabContext() const
     return IPCTabContext(BrowserFrameIPCTabContext(mContainingAppId));
   }
 
-  return IPCTabContext(AppFrameIPCTabContext(mOwnAppId, mContainingAppId));
+  return IPCTabContext(AppFrameIPCTabContext(mOwnAppId, mContainingAppId, mOwnAppOrigin));
 }
 
 static already_AddRefed<mozIApplication>
@@ -241,6 +344,7 @@ MaybeInvalidTabContext::MaybeInvalidTabContext(const IPCTabContext& aParams)
   bool isBrowser = false;
   uint32_t ownAppId = NO_APP_ID;
   uint32_t containingAppId = NO_APP_ID;
+  nsCString ownAppOrigin;
 
   const IPCTabAppBrowserContext& appBrowser = aParams.appBrowserContext();
   switch(appBrowser.type()) {
@@ -298,6 +402,7 @@ MaybeInvalidTabContext::MaybeInvalidTabContext(const IPCTabContext& aParams)
       isBrowser = false;
       ownAppId = ipcContext.ownAppId();
       containingAppId = ipcContext.appFrameOwnerAppId();
+      ownAppOrigin = ipcContext.ownAppOrigin();
       break;
     }
     case IPCTabAppBrowserContext::TBrowserFrameIPCTabContext: {
@@ -335,6 +440,10 @@ MaybeInvalidTabContext::MaybeInvalidTabContext(const IPCTabContext& aParams)
   bool rv;
   if (isBrowser) {
     rv = mTabContext.SetTabContextForBrowserFrame(containingApp);
+  } else if (!ownAppOrigin.IsEmpty()) {
+    // Having a non-empty ownAppOrigin means this TabContext is assoicated with
+    // a packaged web content.
+    rv = mTabContext.SetTabContextForAppFrame(ownAppOrigin, containingApp);
   } else {
     rv = mTabContext.SetTabContextForAppFrame(ownApp,
                                               containingApp);

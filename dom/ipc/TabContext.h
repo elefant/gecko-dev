@@ -125,6 +125,13 @@ protected:
    */
   bool SetTabContextForAppFrame(mozIApplication* aOwnApp,
                                 mozIApplication* aAppFrameOwnerApp);
+  
+  /**
+   * Set this TabContext to be an app frame (with the given own app) inside the
+   * given app.  The owning app is represented by its origin.
+   */
+  bool SetTabContextForAppFrame(const nsACString& aOwnAppOrigin,
+                                mozIApplication* aAppFrameOwnerApp);
 
   /**
    * Set this TabContext to be a browser frame inside the given app (which may
@@ -173,6 +180,11 @@ private:
    * If this is true, mOwnApp must be null.
    */
   bool mIsBrowser;
+  
+  /**
+   * The origin of the packaged web content that this tab owns.
+   */
+  nsCString mOwnAppOrigin;
 };
 
 /**
@@ -202,6 +214,12 @@ public:
   bool SetTabContextForNormalFrame()
   {
     return TabContext::SetTabContextForNormalFrame();
+  }
+
+  bool SetTabContextForAppFrame(const nsACString& aOwnAppOrigin,
+                                mozIApplication* aAppFrameOwnerApp)
+  {
+    return TabContext::SetTabContextForAppFrame(aOwnAppOrigin, aAppFrameOwnerApp);
   }
 };
 
