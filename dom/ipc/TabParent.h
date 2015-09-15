@@ -442,6 +442,13 @@ public:
                                int32_t& aDragAreaX, int32_t& aDragAreaY);
     layout::RenderFrameParent* GetRenderFrame();
 
+    virtual PWebBrowserPersistDocumentParent* AllocPWebBrowserPersistDocumentParent(const uint64_t& aOuterWindowID) override;
+    virtual bool DeallocPWebBrowserPersistDocumentParent(PWebBrowserPersistDocumentParent* aActor) override;
+
+    // Called by HttpChannelParent. The function will use a new process to
+    // load the URI that the given channel associated with if necessary.
+    void OnStartSignedPackageRequest(nsIChannel* aChannel);
+
 protected:
     bool ReceiveMessage(const nsString& aMessage,
                         bool aSync,
@@ -481,6 +488,10 @@ protected:
                                   BrowserConfiguration& aConfiguration);
 
     void SetHasContentOpener(bool aHasContentOpener);
+	
+    // Decide whether we have to use a new process to reload the URI the 
+    // given channel associated with.
+	bool ShouldSwitchProcess(nsIChannel* aChannel);
 
     ContentCacheInParent mContentCache;
 

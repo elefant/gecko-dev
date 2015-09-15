@@ -724,9 +724,22 @@ PackagedAppService::PackagedAppDownloader::OnDataAvailable(nsIRequest *aRequest,
   return aInputStream->ReadSegments(ConsumeData, this, aCount, &n);
 }
 
+void
+PackagedAppService::PackagedAppDownloader::AddRequester(nsIChannel* aRequester)
+{
+  mRequesters.AppendObject(aRequester);
+}
+
+bool
+PackagedAppService::PackagedAppDownloader::RemoveRequester(nsIChannel* aRequester)
+{
+  return mRequesters.RemoveObject(aRequester);
+}
+
 nsresult
 PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
-                                                       nsICacheEntryOpenCallback *aCallback)
+                                                       nsICacheEntryOpenCallback *aCallback,
+                                                       nsIChannel* aRequester)
 {
   MOZ_RELEASE_ASSERT(NS_IsMainThread(), "mCallbacks hashtable is not thread safe");
   nsAutoCString spec;
@@ -734,6 +747,8 @@ PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
 
   LogURI("PackagedAppDownloader::AddCallback", this, aURI);
   LOG(("[%p]    > callback: %p\n", this, aCallback));
+
+  nsCOMPtr<nsIPackagedAppChannelListener> listener = do_QueryInterface(aRequester);
 
   // Check if we already have a resource waiting for this resource
   nsCOMArray<nsICacheEntryOpenCallback>* array = mCallbacks.Get(spec);
@@ -746,9 +761,12 @@ PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
 
       // This is the case where a package downloader is still running and we
       // peek data from it.
-
-      // TODO: Bug 1186290 to notify that the signed packaged content is ready
-      //       to load.
+      if (mVerifier && mVerifier->GetIsPackageSigned()) {
+        // TODO: Bug 1178526 will deal with the package identifier things.
+        //       For now we just use the origin as the identifier.
+        listener->OnStartSignedPackageRequest(mVerifier->GetPackageOrigin());
+        aRequester = nullptr; // So that the request will not be added to the queue.
+      }
       mCacheStorage->AsyncOpenURI(aURI, EmptyCString(),
                                   nsICacheStorage::OPEN_READONLY, aCallback);
     } else {
@@ -765,6 +783,12 @@ PackagedAppService::PackagedAppDownloader::AddCallback(nsIURI *aURI,
     newArray->AppendObject(aCallback);
     mCallbacks.Put(spec, newArray);
   }
+
+  // Add the outer channel for notifying OnStartSignedPackageRequest later if needed.
+  if (aRequester) {
+    AddRequester(aRequester);
+  }
+
   return NS_OK;
 }
 
@@ -859,9 +883,22 @@ PackagedAppService::PackagedAppDownloader::ClearCallbacks(nsresult aResult)
 void
 PackagedAppService::PackagedAppDownloader::NotifyOnStartSignedPackageRequest(const nsACString& aPackageOrigin)
 {
-  // TODO: Bug 1186290 to notify whoever wants to know when the signed package is
-  //       about to load.
-  LOG(("Notifying the signed package is ready to load."));
+  LOG(("Ready to notify OnStartSignedPackageRequest to all requesters."));
+  // Notify all requesters that a signed package is about to download and let
+  // TabParent to decide if the request needs to be re-made in a new process.
+  for (uint32_t i = 0; i < mRequesters.Length(); i++) {
+    nsCOMPtr<nsIChannel> requester = mRequesters.ObjectAt(i);
+    nsCOMPtr<nsIPackagedAppChannelListener> listener = do_QueryInterface(requester);
+    if (listener) {
+      LOG(("Notifying %p OnStartSignedPackageRequest. New origin: %s", listener.get(),
+           nsCString(aPackageOrigin).get()));
+      listener->OnStartSignedPackageRequest(aPackageOrigin);
+    } else {
+      LOG(("%p is not a nsIPackagedAppChannelListener", listener.get()));
+    }
+  }
+
+  mRequesters.Clear();
 }
 
 void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp(const ResourceCacheInfo* aInfo)
@@ -963,6 +1000,14 @@ PackagedAppService::PackagedAppDownloader::OnResourceVerified(const ResourceCach
 {
   if (!aSuccess) {
     return OnError(ERROR_RESOURCE_VERIFIED_FAILED);
+  }
+
+  // Always notify OnStartSignedPackageRequest to switch process as soon as
+  // possible whenever needed.
+  if (mVerifier->GetIsPackageSigned()) {
+    // TODO: Bug 1178526 will deal with the package identifier things.
+    //       For now we just use the origin as the identifier.
+    NotifyOnStartSignedPackageRequest(mVerifier->GetPackageOrigin());
   }
 
   // Serve this resource to all listeners.
@@ -1096,8 +1141,7 @@ PackagedAppService::GetResource(nsIChannel *aChannel,
     // If we find that the package that the file belongs to is currently being
     // downloaded, we will add the callback to the package's queue, and it will
     // be called once the file is processed and saved in the cache.
-
-    downloader->AddCallback(uri, aCallback);
+    downloader->AddCallback(uri, aCallback, aChannel);
     return NS_OK;
   }
 
@@ -1127,7 +1171,7 @@ PackagedAppService::GetResource(nsIChannel *aChannel,
     return rv;
   }
 
-  downloader->AddCallback(uri, aCallback);
+  downloader->AddCallback(uri, aCallback, aChannel);
 
   nsCOMPtr<nsIStreamConverterService> streamconv =
     do_GetService("@mozilla.org/streamConverters;1", &rv);
