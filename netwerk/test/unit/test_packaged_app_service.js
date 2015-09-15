@@ -36,6 +36,9 @@ Cu.import("resource://testing-common/httpd.js");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/NetUtil.jsm");
 
+let gPrefs = Cc["@mozilla.org/preferences-service;1"]
+               .getService(Components.interfaces.nsIPrefBranch);
+
 // The number of times this package has been requested
 // This number might be reset by tests that use it
 var packagedAppRequestsMade = 0;
@@ -60,7 +63,7 @@ function packagedAppContentHandler(metadata, response)
   response.bodyOutputStream.write(body, body.length);
 }
 
-function getChannelForURL(url) {
+function getChannelForURL(url, notificationCallbacks) {
   let uri = createURI(url);
   let ssm = Cc["@mozilla.org/scriptsecuritymanager;1"]
               .getService(Ci.nsIScriptSecurityManager);
@@ -72,17 +75,24 @@ function getChannelForURL(url) {
       contentPolicyType: Ci.nsIContentPolicy.TYPE_OTHER
     });
 
-  tmpChannel.notificationCallbacks =
-    new LoadContextCallback(principal.appId,
-                            principal.isInBrowserElement,
-                            false,
-                            false);
+  if (notificationCallbacks) {
+    // Use custom notificationCallbacks if any.
+    tmpChannel.notificationCallbacks = notificationCallbacks;
+  } else {
+    tmpChannel.notificationCallbacks =
+      new LoadContextCallback(principal.appId,
+                              principal.isInBrowserElement,
+                              false,
+                              false);
+
+  }
   return tmpChannel;
 }
 
 // The package content
 // getData formats it as described at http://www.w3.org/TR/web-packaging/#streamable-package-format
 var testData = {
+  packageHeader: 'manifest-signature: dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk\r\n',
   content: [
    { headers: ["Content-Location: /index.html", "Content-Type: text/html"], data: "<html>\r\n  <head>\r\n    <script src=\"/scripts/app.js\"></script>\r\n    ...\r\n  </head>\r\n  ...\r\n</html>\r\n", type: "text/html" },
    { headers: ["Content-Location: /scripts/app.js", "Content-Type: text/javascript"], data: "module Math from '/scripts/helpers/math.js';\r\n...\r\n", type: "text/javascript" },
@@ -124,7 +134,16 @@ function run_test()
   httpserver.registerPathHandler("/package", packagedAppContentHandler);
   httpserver.registerPathHandler("/304Package", packagedAppContentHandler);
   httpserver.registerPathHandler("/badPackage", packagedAppBadContentHandler);
+  httpserver.registerPathHandler("/signedPackage", signedPackagedAppContentHandler);
   httpserver.start(-1);
+
+  // We will enable the developer mode in 'test_signed_package_callback'.
+  // So restore it after testing.
+  //
+  // TODO: To be removed in Bug 1178518.
+  do_register_cleanup(function() {
+    gPrefs.clearUserPref("network.http.packaged-apps-developer-mode");
+  });
 
   paservice = Cc["@mozilla.org/network/packaged-app-service;1"]
                      .getService(Ci.nsIPackagedAppService);
@@ -142,6 +161,9 @@ function run_test()
 
   add_test(test_bad_package);
   add_test(test_bad_package_404);
+
+  add_test(test_signed_package_callback);
+  add_test(test_unsigned_package_callback);
 
   // Channels created by addons could have no load info.
   // In debug mode this triggers an assertion, but we still want to test that
@@ -327,5 +349,108 @@ function test_channel_no_loadinfo() {
   let url = uri + packagePath + "!//index.html";
   let channel = getChannelForURL(url);
   channel.loadInfo = null;
+  paservice.getResource(channel, cacheListener);
+}
+
+//-----------------------------------------------------------------------------
+
+function signedPackagedAppContentHandler(metadata, response)
+{
+  response.setHeader("Content-Type", 'application/package');
+  var body = testData.packageHeader + testData.getData();
+  response.bodyOutputStream.write(body, body.length);
+}
+
+packagedResourceListener.prototype = {
+  QueryInterface: function (iid) {
+    if (iid.equals(Ci.nsICacheEntryOpenCallback) ||
+        iid.equals(Ci.nsISupports))
+      return this;
+    throw Cr.NS_ERROR_NO_INTERFACE;
+  },
+  onCacheEntryCheck: function() { return Ci.nsICacheEntryOpenCallback.ENTRY_WANTED; },
+  onCacheEntryAvailable: function (entry, isnew, appcache, status) {
+    equal(status, Cr.NS_OK, "status is NS_OK");
+    ok(!!entry, "Needs to have an entry");
+    equal(entry.key, uri + packagePath + "!//index.html", "Check entry has correct name");
+    entry.visitMetaData(metadataListener);
+
+    // Verify if we got OnStartSignedPackageRequest.
+    equal(this.gotOnStartSignedPackageRequest, this.shouldGotOnStartSignedPackageRequest)
+
+    var inputStream = entry.openInputStream(0);
+    pumpReadStream(inputStream, (read) => {
+        inputStream.close();
+        equal(read, this.content); // not using do_check_eq since logger will fail for the 1/4MB string
+        gPrefs.clearUserPref("network.http.packaged-apps-developer-mode");
+        run_next_test();
+    });
+  }
+};
+
+let dummyCacheListener = {
+  QueryInterface: function (iid) {
+    if (iid.equals(Ci.nsICacheEntryOpenCallback) ||
+        iid.equals(Ci.nsISupports))
+      return this;
+    throw Cr.NS_ERROR_NO_INTERFACE;
+  },
+  onCacheEntryCheck: function() { return Ci.nsICacheEntryOpenCallback.ENTRY_WANTED; },
+  onCacheEntryAvailable: function () {}
+};
+
+function test_signed_package_callback()
+{
+  // TODO: To be removed in Bug 1178518.
+  gPrefs.setBoolPref("network.http.packaged-apps-developer-mode", true);
+
+  packagePath = "/signedPackage";
+  let url = uri + packagePath + "!//index.html";
+  let channel = getChannelForURL(url, {
+    onStartSignedPackageRequest: function(aPackageId) {
+      ok(true, "onStartSignedPackageRequest is notifited as expected");
+      run_next_test();
+    },
+
+    getInterface: function (iid) {
+      return this.QueryInterface(iid);
+    },
+
+    QueryInterface: function (iid) {
+      if (iid.equals(Ci.nsISupports) ||
+          iid.equals(Ci.nsIInterfaceRequestor) ||
+          iid.equals(Ci.nsIPackagedAppChannelListener)) {
+        return this;
+      }
+      throw Cr.NS_ERROR_NO_INTERFACE;
+    },
+  });
+
+  paservice.getResource(channel, dummyCacheListener);
+}
+
+function test_unsigned_package_callback()
+{
+  packagePath = "/package";
+  let url = uri + packagePath + "!//index.html";
+  let channel = getChannelForURL(url, {
+    onStartSignedPackageRequest: function(aPackageId) {
+      ok(false, "Unsigned package shouldn't be callback'ed");
+    },
+
+    getInterface: function (iid) {
+      return this.QueryInterface(iid);
+    },
+
+    QueryInterface: function (iid) {
+      if (iid.equals(Ci.nsISupports) ||
+          iid.equals(Ci.nsIInterfaceRequestor) ||
+          iid.equals(Ci.nsIPackagedAppChannelListener)) {
+        return this;
+      }
+      throw Cr.NS_ERROR_NO_INTERFACE;
+    },
+  });
+
   paservice.getResource(channel, cacheListener);
 }
