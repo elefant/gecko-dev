@@ -189,13 +189,13 @@ PackagedAppVerifier::FireVerifiedEvent(bool aForManifest, bool aSuccess)
   nsCOMPtr<nsIRunnable> r;
 
   if (aForManifest) {
-    r = NS_NewNonOwningRunnableMethodWithArgs<bool>(this,
-                                                    &PackagedAppVerifier::OnManifestVerified,
-                                                    aSuccess);
+    r = NS_NewRunnableMethodWithArgs<bool>(this,
+                                           &PackagedAppVerifier::OnManifestVerified,
+                                           aSuccess);
   } else {
-    r = NS_NewNonOwningRunnableMethodWithArgs<bool>(this,
-                                                    &PackagedAppVerifier::OnResourceVerified,
-                                                    aSuccess);
+    r = NS_NewRunnableMethodWithArgs<bool>(this,
+                                           &PackagedAppVerifier::OnResourceVerified,
+                                           aSuccess);
   }
 
   NS_DispatchToMainThread(r);
@@ -232,6 +232,12 @@ PackagedAppVerifier::VerifyResource(const ResourceCacheInfo* aInfo)
 {
   MOZ_RELEASE_ASSERT(NS_IsMainThread(), "Resource verification must be on main thread");
 
+  if (!aInfo->mURI) {
+    // This could be a broken last part. Just fire with failure.
+    FireVerifiedEvent(false, false);
+    return;
+  }
+
   // Look up the resource hash that we computed and stored to
   // mResourceHashStore before.
   nsAutoCString uriAsAscii;
@@ -264,6 +270,11 @@ void
 PackagedAppVerifier::OnManifestVerified(bool aSuccess)
 {
   LOG(("PackagedAppVerifier::OnManifestVerified: %d", aSuccess));
+
+  // The listener could have been removed before we verify the resource.
+  if (!mListener) {
+    return;
+  }
 
   // Only when the manifest verified and package has signature would we
   // regard this package is signed.
@@ -307,6 +318,11 @@ PackagedAppVerifier::OnResourceVerified(bool aSuccess)
   MOZ_RELEASE_ASSERT(NS_IsMainThread(),
                      "PackagedAppVerifier::OnResourceVerified must be on main thread");
 
+  // The listener could have been removed before we verify the resource.
+  if (!mListener) {
+    return;
+  }
+
   RefPtr<ResourceCacheInfo> info(mPendingResourceCacheInfoList.popFirst());
   MOZ_ASSERT(info);
 
@@ -316,6 +332,17 @@ PackagedAppVerifier::OnResourceVerified(bool aSuccess)
                         info->mStatusCode,
                         info->mIsLastPart,
                         aSuccess);
+}
+
+void
+PackagedAppVerifier::SetHasBrokenLastPart(nsresult aStatusCode)
+{
+  // Append a record with null URI as a broken last part.
+  
+  ResourceCacheInfo* info
+    = new ResourceCacheInfo(nullptr, nullptr, aStatusCode, true);
+
+  mPendingResourceCacheInfoList.insertBack(info);
 }
 
 //---------------------------------------------------------------
