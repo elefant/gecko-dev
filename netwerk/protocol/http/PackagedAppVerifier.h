@@ -102,6 +102,14 @@ public:
     return mPackageOrigin;
   }
 
+  // A internal use function to let the verifier know there's a broken
+  // last part.
+  void SetHasBrokenLastPart(nsresult aStatusCode);
+
+  // Used to explicitly clear the listener so that there won't be a
+  // circular reference.
+  void ClearListener() { mListener = nullptr; }
+
   static const char* kSignedPakOriginMetadataKey;
 
 private:
