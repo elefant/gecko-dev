@@ -361,33 +361,7 @@ function signedPackagedAppContentHandler(metadata, response)
   response.bodyOutputStream.write(body, body.length);
 }
 
-packagedResourceListener.prototype = {
-  QueryInterface: function (iid) {
-    if (iid.equals(Ci.nsICacheEntryOpenCallback) ||
-        iid.equals(Ci.nsISupports))
-      return this;
-    throw Cr.NS_ERROR_NO_INTERFACE;
-  },
-  onCacheEntryCheck: function() { return Ci.nsICacheEntryOpenCallback.ENTRY_WANTED; },
-  onCacheEntryAvailable: function (entry, isnew, appcache, status) {
-    equal(status, Cr.NS_OK, "status is NS_OK");
-    ok(!!entry, "Needs to have an entry");
-    equal(entry.key, uri + packagePath + "!//index.html", "Check entry has correct name");
-    entry.visitMetaData(metadataListener);
-
-    // Verify if we got OnStartSignedPackageRequest.
-    equal(this.gotOnStartSignedPackageRequest, this.shouldGotOnStartSignedPackageRequest)
-
-    var inputStream = entry.openInputStream(0);
-    pumpReadStream(inputStream, (read) => {
-        inputStream.close();
-        equal(read, this.content); // not using do_check_eq since logger will fail for the 1/4MB string
-        gPrefs.clearUserPref("network.http.packaged-apps-developer-mode");
-        run_next_test();
-    });
-  }
-};
-
+// Used as a stub when the cache listener is not important.
 let dummyCacheListener = {
   QueryInterface: function (iid) {
     if (iid.equals(Ci.nsICacheEntryOpenCallback) ||
@@ -452,5 +426,6 @@ function test_unsigned_package_callback()
     },
   });
 
+  // Pass cacheListener since we rely on 'run_next_test' in it.
   paservice.getResource(channel, cacheListener);
 }
