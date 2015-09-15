@@ -437,6 +437,85 @@ TabParent::IsVisible()
   return visible;
 }
 
+bool
+TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
+{
+  // The resource URL we are loading.
+  nsCOMPtr<nsIURI> uri;
+  aChannel->GetURI(getter_AddRefs(uri));
+  nsCString uriString;
+  uri->GetAsciiSpec(uriString);
+
+  nsCOMPtr<nsILoadInfo> loadInfo;
+  aChannel->GetLoadInfo(getter_AddRefs(loadInfo));
+
+  // The content policy type is used to check if the loading resource
+  // is a subresource in a document.
+  nsContentPolicyType contentPolicyType = loadInfo->GetContentPolicyType();
+
+  // Get the loading origin.
+  nsCOMPtr<nsIPrincipal> loadingPrincipal;
+  loadInfo->GetLoadingPrincipal(getter_AddRefs(loadingPrincipal));
+  nsCString loadingOrigin;
+  loadingPrincipal->GetOrigin(loadingOrigin);
+
+  LOG(("Loading %s from origin %s (type: %d)", uriString.get(),
+                                               loadingOrigin.get(),
+                                               contentPolicyType));
+
+  nsCOMPtr<nsIPrincipal> resultPrincipal;
+  nsContentUtils::GetSecurityManager()->
+    GetChannelResultPrincipal(aChannel, getter_AddRefs(resultPrincipal));
+
+  nsCString resultPrincipalOrigin;
+  resultPrincipal->GetOrigin(resultPrincipalOrigin);
+  LOG(("Result principal origin: %s", resultPrincipalOrigin.get()));
+
+  if (nsIContentPolicy::TYPE_DOCUMENT != loadInfo->GetContentPolicyType()) {
+    // No need to switch process for subresource.
+    LOG(("Subresource of a document. No need to switch process."));
+    return false;
+  }
+
+  if (loadingOrigin == resultPrincipalOrigin) {
+    LOG(("Loading from the same signed package. No need to switch process."));
+    return false;
+  }
+
+  if (StringBeginsWith(loadingOrigin, NS_LITERAL_CSTRING("moz-safe-about:"))) {
+    LOG(("The content is already loaded by a brand new process."));
+    return false;
+  }
+
+  return true;
+}
+
+void
+TabParent::OnStartSignedPackageRequest(nsIChannel* aChannel)
+{
+  if (!ShouldSwitchProcess(aChannel)) {
+    return;
+  }
+
+  nsCOMPtr<nsIURI> uri;
+  aChannel->GetURI(getter_AddRefs(uri));
+
+  // TODO: Use a proper error code.
+  aChannel->Cancel(NS_ERROR_UNKNOWN_HOST);
+
+  nsCString uriString;
+  uri->GetAsciiSpec(uriString);
+  LOG(("We decide to switch process. Call TabParent::SwitchProcessAndLoadURIs: %s",
+       uriString.get()));
+
+  nsRefPtr<nsFrameLoader> frameLoader = GetFrameLoader();
+  if (!frameLoader) {
+    return;
+  }
+
+  frameLoader->SwitchProcessAndLoadURI(uri);
+}
+
 void
 TabParent::DestroyInternal()
 {
