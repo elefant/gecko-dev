@@ -208,6 +208,12 @@ PackagedAppVerifier::VerifyManifest(const ResourceCacheInfo* aInfo)
 
   LOG(("Ready to verify manifest."));
 
+  if (aInfo->IsBroken()) {
+    FireVerifiedEvent(false, false);
+    mState = STATE_MANIFEST_VERIFIED_FAILED;
+    return;
+  }
+
   mState = STATE_MANIFEST_VERIFYING;
 
   if (gDeveloperMode) {
@@ -232,8 +238,7 @@ PackagedAppVerifier::VerifyResource(const ResourceCacheInfo* aInfo)
 {
   MOZ_RELEASE_ASSERT(NS_IsMainThread(), "Resource verification must be on main thread");
 
-  if (!aInfo->mURI) {
-    // This could be a broken last part. Just fire with failure.
+  if (aInfo->IsBroken()) {
     FireVerifiedEvent(false, false);
     return;
   }
@@ -338,7 +343,7 @@ void
 PackagedAppVerifier::SetHasBrokenLastPart(nsresult aStatusCode)
 {
   // Append a record with null URI as a broken last part.
-  
+
   ResourceCacheInfo* info
     = new ResourceCacheInfo(nullptr, nullptr, aStatusCode, true);
 
