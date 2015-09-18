@@ -50,6 +50,7 @@ PackagedAppVerifier::PackagedAppVerifier(nsIPackagedAppVerifierListener* aListen
 
 PackagedAppVerifier::~PackagedAppVerifier()
 {
+  MOZ_RELEASE_ASSERT(NS_IsMainThread(), "mPendingResourceCacheInfoList is not thread safe.");
   while (auto i = mPendingResourceCacheInfoList.popFirst()) {
     // This seems to be the only way that we can manually delete a
     // nsISupports instance with no warning.
@@ -127,6 +128,8 @@ PackagedAppVerifier::OnStopRequest(nsIRequest* aRequest,
                                     nsISupports* aContext,
                                     nsresult aStatusCode)
 {
+  MOZ_RELEASE_ASSERT(NS_IsMainThread(), "mHashingResourceURI is not thread safe.");
+
   NS_ENSURE_TRUE(mHasher, NS_ERROR_FAILURE);
 
   nsAutoCString hash;
@@ -208,7 +211,7 @@ PackagedAppVerifier::VerifyManifest(const ResourceCacheInfo* aInfo)
 
   LOG(("Ready to verify manifest."));
 
-  if (aInfo->IsBroken()) {
+  if (!aInfo->mURI) { // Broken last part.
     FireVerifiedEvent(false, false);
     mState = STATE_MANIFEST_VERIFIED_FAILED;
     return;
@@ -238,7 +241,7 @@ PackagedAppVerifier::VerifyResource(const ResourceCacheInfo* aInfo)
 {
   MOZ_RELEASE_ASSERT(NS_IsMainThread(), "Resource verification must be on main thread");
 
-  if (aInfo->IsBroken()) {
+  if (!aInfo->mURI) { // Broken last part.
     FireVerifiedEvent(false, false);
     return;
   }
@@ -274,6 +277,8 @@ PackagedAppVerifier::VerifyResource(const ResourceCacheInfo* aInfo)
 void
 PackagedAppVerifier::OnManifestVerified(bool aSuccess)
 {
+  MOZ_RELEASE_ASSERT(NS_IsMainThread(), "OnManifestVerified must be on main thread.");
+
   LOG(("PackagedAppVerifier::OnManifestVerified: %d", aSuccess));
 
   // The listener could have been removed before we verify the resource.

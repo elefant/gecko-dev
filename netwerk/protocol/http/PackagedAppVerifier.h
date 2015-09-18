@@ -77,8 +77,6 @@ public:
 
     // A ResourceCacheInfo must have a URI. If mURI is null, this
     // resource is broken.
-    bool IsBroken() const { return !mURI.get(); }
-
     nsCOMPtr<nsIURI> mURI;
     nsCOMPtr<nsICacheEntry> mCacheEntry;
     nsresult mStatusCode;
