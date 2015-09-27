@@ -109,7 +109,7 @@ public:
     return mIsPackageSigned;
   }
 
-  nsCString GetPackageOrigin() const
+  const nsACString& GetPackageOrigin() const
   {
     return mPackageOrigin;
   }

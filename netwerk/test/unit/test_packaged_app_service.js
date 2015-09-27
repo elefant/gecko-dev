@@ -554,7 +554,7 @@ function test_unsigned_package_callback()
   let url = uri + packagePath + "!//index.html";
   let channel = getChannelForURL(url, {
     onStartSignedPackageRequest: function(aPackageId) {
-      ok(false, "Unsigned package shouldn't be callback'ed");
+      ok(false, "Unsigned package shouldn't be called.");
     },
 
     getInterface: function (iid) {

@@ -5676,7 +5676,7 @@ nsHttpChannel::OnStartSignedPackageRequest(const nsACString& aPackageId)
     if (listener) {
         listener->OnStartSignedPackageRequest(aPackageId);
     } else {
-        LOG(("No packaged app channel listener to notify (%p)", mListener.get()));
+        LOG(("nsHttpChannel::OnStartSignedPackageRequest [this=%p], no listener on %p", this, mListener.get()));
     }
 
     return NS_OK;

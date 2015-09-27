@@ -108,6 +108,8 @@ using namespace mozilla::services;
 using namespace mozilla::widget;
 using namespace mozilla::jsipc;
 
+#define LOG(args) PR_LogPrint args
+
 // The flags passed by the webProgress notifications are 16 bits shifted
 // from the ones registered by webProgressListeners.
 #define NOTIFY_FLAG_SHIFT 16
@@ -440,12 +442,6 @@ TabParent::IsVisible()
 bool
 TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
 {
-  // The resource URL we are loading.
-  nsCOMPtr<nsIURI> uri;
-  aChannel->GetURI(getter_AddRefs(uri));
-  nsCString uriString;
-  uri->GetAsciiSpec(uriString);
-
   nsCOMPtr<nsILoadInfo> loadInfo;
   aChannel->GetLoadInfo(getter_AddRefs(loadInfo));
 
@@ -459,6 +455,11 @@ TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
   nsCString loadingOrigin;
   loadingPrincipal->GetOrigin(loadingOrigin);
 
+  // The resource URL we are loading.
+  nsCOMPtr<nsIURI> uri;
+  aChannel->GetURI(getter_AddRefs(uri));
+  nsCString uriString;
+  uri->GetAsciiSpec(uriString);
   LOG(("Loading %s from origin %s (type: %d)", uriString.get(),
                                                loadingOrigin.get(),
                                                contentPolicyType));
@@ -477,12 +478,19 @@ TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
     return false;
   }
 
-  if (loadingOrigin == resultPrincipalOrigin) {
-    LOG(("Loading from the same signed package. No need to switch process."));
+  // Check if the signed package is loaded from the same origin.
+  bool sameOrigin = false;
+  loadingPrincipal->Equals(resultPrincipal, &sameOrigin);
+  if (sameOrigin) {
+    LOG(("Loading singed package from the same origin. Don't switch process."));
     return false;
   }
 
-  if (StringBeginsWith(loadingOrigin, NS_LITERAL_CSTRING("moz-safe-about:"))) {
+  // If this is a brand new process created to load the signed package 
+  // (triggered by previous OnStartSignedPackageRequest), the loading origin 
+  // will be "moz-safe-about:blank". In that case, we don't need to switch process
+  // again.
+  if (loadingOrigin.EqualsLiteral("moz-safe-about:blank")) {
     LOG(("The content is already loaded by a brand new process."));
     return false;
   }
@@ -500,8 +508,7 @@ TabParent::OnStartSignedPackageRequest(nsIChannel* aChannel)
   nsCOMPtr<nsIURI> uri;
   aChannel->GetURI(getter_AddRefs(uri));
 
-  // TODO: Use a proper error code.
-  aChannel->Cancel(NS_ERROR_UNKNOWN_HOST);
+  aChannel->Cancel(NS_BINDING_FAILED);
 
   nsCString uriString;
   uri->GetAsciiSpec(uriString);
