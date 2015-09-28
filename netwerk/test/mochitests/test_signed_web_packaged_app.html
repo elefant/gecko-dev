@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title> Web packaged app </title>
+  <script type="text/javascript" src="/MochiKit/MochiKit.js"></script>
+  <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
+  <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
+</head>
+<body>
+
+<p id="display"></p>
+<div id="content" style="display: none">
+
+</div>
+<pre id="test">
+<script class="testbody" type="application/javascript;version=1.7">
+
+var Cc = SpecialPowers.Cc;
+var Ci = SpecialPowers.Ci;
+var Cu = SpecialPowers.Cu;
+var Cr = SpecialPowers.Cr;
+var LoadContextInfo = Cu.import("resource://gre/modules/LoadContextInfo.jsm", {}).LoadContextInfo;
+var CommonUtils = Cu.import("resource://services-common/utils.js", {}).CommonUtils;
+
+var gGenerator = runTest();
+
+addLoadEvent(go);
+function go() {
+  SpecialPowers.pushPermissions(
+    [
+     { "type": "webapps-manage", "allow": 1, "context": document },
+     { "type": "embed-apps", "allow": 1, "context": document },
+     { "type": "browser", "allow": 1, "context": document }
+    ],
+    function() {
+      SpecialPowers.pushPrefEnv({"set": [['network.http.enable-packaged-apps', true],
+        ['network.http.packaged-apps-developer-mode', true],
+        ["dom.ipc.processPriorityManager.testMode", true],
+        ["dom.ipc.processPriorityManager.enabled", true],
+        ["dom.ipc.tabs.disabled", false],
+        ["dom.ipc.processCount", 3],
+        ["dom.mozBrowserFramesEnabled", true]]},
+        function() { gGenerator.next(); } );
+    });
+}
+
+function continueTest() {
+  try {
+    gGenerator.next();
+  } catch (e if e instanceof StopIteration) {
+    finish();
+  }
+}
+
+function finish() {
+  SimpleTest.finish();
+}
+
+function cbError(aEvent) {
+  ok(false, "Error callback invoked " +
+            aEvent.target.error.name + " " + aEvent.target.error.message);
+  finish();
+}
+
+SimpleTest.waitForExplicitFinish();
+
+function runTest() {
+  netscape.security.PrivilegeManager.enablePrivilege("UniversalXPConnect");
+
+  function waitUntilProcessCreated() {
+    var topic = "process-priority-manager:TEST-ONLY:process-created";
+    function observer() {
+      SpecialPowers.removeObserver(observer, topic);
+      ok(true, "Expect process created");
+      continueTest();
+    }
+    SpecialPowers.addObserver(observer, topic, /* weak = */ false);
+  }
+
+  // Test that we can load a file in an iframe, with default permissions
+  var iframe = document.createElement("iframe");
+  iframe.setAttribute('mozbrowser', 'true');
+  //iframe.addEventListener("mozbrowserloadend", continueTest, false);
+  document.body.appendChild(iframe);
+  iframe.src = "http://mochi.test:8888/tests/netwerk/test/mochitests/signed_web_packaged_app.sjs!//scripts/app.js";
+  
+  waitUntilProcessCreated();
+  yield undefined;
+}
+
+</script>
+</pre>
+</body>
+</html>
