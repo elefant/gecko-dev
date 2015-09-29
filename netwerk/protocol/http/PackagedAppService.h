@@ -139,7 +139,7 @@ private:
     void SetIsFromCache(bool aFromCache) { mIsFromCache = aFromCache; }
 
     // Notify the observers who are interested in knowing a signed packaged content
-    // is about to load from either or cache..
+    // is about to load from either HTTP or cache..
     void NotifyOnStartSignedPackageRequest(const nsACString& PackageOrigin);
 
   private:
