@@ -951,7 +951,7 @@ PackagedAppService::PackagedAppDownloader::OnResourceVerified(const ResourceCach
   }
 
   // If this package is signed and there is any pending requests, we just notify
-  // then right now regardless if this is the requested resource. Doing this can
+  // right now no matter if this is the requested resource. Doing this can
   // have the potential process switch be done as early as possible.  
   if (mVerifier->GetIsPackageSigned()) {
     // TODO: Bug 1178526 will deal with the package identifier things.
