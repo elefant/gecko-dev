@@ -108,7 +108,15 @@ using namespace mozilla::services;
 using namespace mozilla::widget;
 using namespace mozilla::jsipc;
 
-#define LOG(args) PR_LogPrint args
+#if DEUBG
+  #ifdef MOZ_WIDGET_GONK
+    #define LOG(args...) printf_stderr(##args)
+  #else
+    #define LOG(args...) PR_LogPrint(##args)
+  #endif
+#else
+  #define LOG(...)
+#endif
 
 // The flags passed by the webProgress notifications are 16 bits shifted
 // from the ones registered by webProgressListeners.
@@ -442,16 +450,18 @@ TabParent::IsVisible()
 bool
 TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
 {
+  // If we lack of any information which is required to decide the need of
+  // process switch, consider that we should switch process.
+
   nsCOMPtr<nsILoadInfo> loadInfo;
   aChannel->GetLoadInfo(getter_AddRefs(loadInfo));
-
-  // The content policy type is used to check if the loading resource
-  // is a subresource in a document.
-  nsContentPolicyType contentPolicyType = loadInfo->GetContentPolicyType();
+  if (NS_WARN_IF(!loadInfo)) { return true; }
 
   // Get the loading origin.
   nsCOMPtr<nsIPrincipal> loadingPrincipal;
   loadInfo->GetLoadingPrincipal(getter_AddRefs(loadingPrincipal));
+  if (NS_WARN_IF(!loadingPrincipal)) { return true; }
+
   nsCString loadingOrigin;
   loadingPrincipal->GetOrigin(loadingOrigin);
 
@@ -460,9 +470,9 @@ TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
   aChannel->GetURI(getter_AddRefs(uri));
   nsCString uriString;
   uri->GetAsciiSpec(uriString);
-  LOG(("Loading %s from origin %s (type: %d)", uriString.get(),
-                                               loadingOrigin.get(),
-                                               contentPolicyType));
+  LOG("Loading %s from origin %s (type: %d)", uriString.get(),
+                                              loadingOrigin.get(),
+                                              loadInfo->GetContentPolicyType());
 
   nsCOMPtr<nsIPrincipal> resultPrincipal;
   nsContentUtils::GetSecurityManager()->
@@ -470,11 +480,11 @@ TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
 
   nsCString resultPrincipalOrigin;
   resultPrincipal->GetOrigin(resultPrincipalOrigin);
-  LOG(("Result principal origin: %s", resultPrincipalOrigin.get()));
+  LOG("Result principal origin: %s", resultPrincipalOrigin.get());
 
   if (nsIContentPolicy::TYPE_DOCUMENT != loadInfo->GetContentPolicyType()) {
     // No need to switch process for subresource.
-    LOG(("Subresource of a document. No need to switch process."));
+    LOG("Subresource of a document. No need to switch process.");
     return false;
   }
 
@@ -482,7 +492,7 @@ TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
   bool sameOrigin = false;
   loadingPrincipal->Equals(resultPrincipal, &sameOrigin);
   if (sameOrigin) {
-    LOG(("Loading singed package from the same origin. Don't switch process."));
+    LOG("Loading singed package from the same origin. Don't switch process.");
     return false;
   }
 
@@ -494,7 +504,7 @@ TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
   nsCString loadingOriginNoSuffix;
   loadingPrincipal->GetOriginNoSuffix(loadingOriginNoSuffix);
   if (loadingOriginNoSuffix.EqualsLiteral("moz-safe-about:blank")) {
-    LOG(("The content is already loaded by a brand new process."));
+    LOG("The content is already loaded by a brand new process.");
     return false;
   }
 
@@ -515,13 +525,11 @@ TabParent::OnStartSignedPackageRequest(nsIChannel* aChannel)
 
   nsCString uriString;
   uri->GetAsciiSpec(uriString);
-  LOG(("We decide to switch process. Call TabParent::SwitchProcessAndLoadURIs: %s",
-       uriString.get()));
+  LOG("We decide to switch process. Call TabParent::SwitchProcessAndLoadURIs: %s",
+       uriString.get());
 
   nsRefPtr<nsFrameLoader> frameLoader = GetFrameLoader();
-  if (!frameLoader) {
-    return;
-  }
+  if (NS_WARN_IF(!frameLoader)) { return; }
 
   frameLoader->SwitchProcessAndLoadURI(uri);
 }
