@@ -20,7 +20,9 @@ var Cu = SpecialPowers.Cu;
 var Cr = SpecialPowers.Cr;
 
 SpecialPowers.pushPrefEnv(
-  { "set": [["dom.ipc.processPriorityManager.testMode", true],
+  { "set": [["network.http.enable-packaged-apps", true],
+            ["network.http.packaged-apps-developer-mode", true],
+            ["dom.ipc.processPriorityManager.testMode", true],
             ["dom.ipc.processPriorityManager.enabled", true],
             ["dom.ipc.tabs.disabled", false],
             ["dom.ipc.processCount", 3],
@@ -33,24 +35,30 @@ SpecialPowers.pushPrefEnv(
 
 SimpleTest.waitForExplicitFinish();
 
+// Listen for and count process-created event. Since we are loading a 
+// signed content from a remote tab, there shouls be two processes created.
+var kProcessCreatedTopic = "process-priority-manager:TEST-ONLY:process-created";
+var processCreatedCnt = 0;
+SpecialPowers.addObserver(() => {
+  processCreatedCnt++;
+  if (processCreatedCnt == 1) {
+    ok(true, "We have one more process to create.");
+  } else if (processCreatedCnt == 2) {
+    SimpleTest.finish();
+  }
+}, kProcessCreatedTopic, /* weak = */ false);
+
 function runTest() {
   var iframe = document.createElement("iframe");
   iframe.setAttribute('mozbrowser', 'true');
   iframe.setAttribute('remote', 'true');
-  iframe.setAttribute("src", "http://mochi.test:8888/tests/netwerk/test/mochitests/signed_web_packaged_app.sjs!//scripts/app.js");
+  iframe.setAttribute("src", "http://example.org:80");
 
-  // Listen for and count process-created event. Since we are loading a 
-  // signed content from a remote tab, there shouls be two processes created.
-  var kProcessCreatedTopic = "process-priority-manager:TEST-ONLY:process-created";
-  var processCreatedCnt = 0;
-  SpecialPowers.addObserver(() => {
-    processCreatedCnt++;
-    if (processCreatedCnt == 1) {
-      ok(true, "We have one more process to create.");
-    } else if (processCreatedCnt == 2) {
-      SimpleTest.finish();
-    }
-  }, kProcessCreatedTopic, /* weak = */ false);
+  iframe.addEventListener("mozbrowserloadend", function loadend(e) {
+    iframe.removeEventListener("mozbrowserloadend", loadend);
+    ok(true, "Got mozbrowserloadend");
+    iframe.setAttribute("src", "http://mochi.test:8888/tests/netwerk/test/mochitests/signed_web_packaged_app.sjs!//scripts/app.js");
+  });
 
   document.body.appendChild(iframe);
 }
