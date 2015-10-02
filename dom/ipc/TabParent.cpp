@@ -455,12 +455,12 @@ TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
 
   nsCOMPtr<nsILoadInfo> loadInfo;
   aChannel->GetLoadInfo(getter_AddRefs(loadInfo));
-  if (NS_WARN_IF(!loadInfo)) { return true; }
+  NS_ENSURE_TRUE(loadInfo, true);
 
   // Get the loading origin.
   nsCOMPtr<nsIPrincipal> loadingPrincipal;
   loadInfo->GetLoadingPrincipal(getter_AddRefs(loadingPrincipal));
-  if (NS_WARN_IF(!loadingPrincipal)) { return true; }
+  NS_ENSURE_TRUE(loadingPrincipal, true);
 
   nsCString loadingOrigin;
   loadingPrincipal->GetOrigin(loadingOrigin);
@@ -496,8 +496,8 @@ TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
     return false;
   }
 
-  // If this is a brand new process created to load the signed package 
-  // (triggered by previous OnStartSignedPackageRequest), the loading origin 
+  // If this is a brand new process created to load the signed package
+  // (triggered by previous OnStartSignedPackageRequest), the loading origin
   // will be "moz-safe-about:blank". In that case, we don't need to switch process
   // again. We compare with "moz-safe-about:blank" without appId/isBrowserElement/etc
   // taken into account. That's why we use originNoSuffix.
@@ -525,13 +525,16 @@ TabParent::OnStartSignedPackageRequest(nsIChannel* aChannel)
 
   nsCString uriString;
   uri->GetAsciiSpec(uriString);
-  LOG("We decide to switch process. Call TabParent::SwitchProcessAndLoadURIs: %s",
+  LOG("We decide to switch process. Call nsFrameLoader::SwitchProcessAndLoadURIs: %s",
        uriString.get());
 
   nsRefPtr<nsFrameLoader> frameLoader = GetFrameLoader();
-  if (NS_WARN_IF(!frameLoader)) { return; }
+  NS_ENSURE_TRUE_VOID(frameLoader);
 
-  frameLoader->SwitchProcessAndLoadURI(uri);
+  nsresult rv = frameLoader->SwitchProcessAndLoadURI(uri);
+  if (NS_FAILED(rv)) {
+    NS_WARNING("Failed to switch process.");
+  }
 }
 
 void
@@ -2586,7 +2589,7 @@ TabParent::RecvStartPluginIME(const WidgetKeyboardEvent& aKeyboardEvent,
     return true;
   }
   widget->StartPluginIME(aKeyboardEvent,
-                         (int32_t&)aPanelX, 
+                         (int32_t&)aPanelX,
                          (int32_t&)aPanelY,
                          *aCommitted);
   return true;
@@ -3534,7 +3537,7 @@ TabParent::RecvInvokeDragSession(nsTArray<IPCDataTransfer>&& aTransfers,
   }
   mDragAreaX = aDragAreaX;
   mDragAreaY = aDragAreaY;
-  
+
   esm->BeginTrackingRemoteDragGesture(mFrameElement);
 
   return true;
