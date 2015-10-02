@@ -12,13 +12,15 @@ function handleRequest(request, response)
 // The package content
 // getData formats it as described at http://www.w3.org/TR/web-packaging/#streamable-package-format
 var octetStreamData = {
-  packageHeader: 'manifest-signature: dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk\r\n',
+  packageHeader: 'manifest-signature: 11111111111111\r\n',
 
   content: [
-   { headers: ["Content-Location: /index.html", "Content-Type: text/html"], data: "<html>\r\n  <head>\r\n    <script> alert('OK: hello'); alert('DONE'); </script>\r\n</head>\r\n  Web Packaged App Index\r\n</html>\r\n", type: "text/html" },
+   { headers: ["Content-Location: manifest.webapp", "Content-Type: application/x-web-app-manifest+json"], 
+     data: '{ "package-identifier": "611FC2FE-491D-4A47-B3B3-43FBDF6F404F" }', type: "text/html" },
    { headers: ["Content-Location: /scripts/app.js", "Content-Type: text/javascript"], data: "module Math from '/scripts/helpers/math.js';\r\n...\r\n", type: "text/javascript" },
    { headers: ["Content-Location: /scripts/helpers/math.js", "Content-Type: text/javascript"], data: "export function sum(nums) { ... }\r\n...\r\n", type: "text/javascript" }
   ],
+
   token : "gc0pJq0M:08jU534c0p",
   getData: function() {
     var str = "";

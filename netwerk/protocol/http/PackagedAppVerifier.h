@@ -114,7 +114,12 @@ public:
     return mPackageOrigin;
   }
 
-  static const char* kSignedPakOriginMetadataKey;
+  const nsACString& GetPackageIdentifier() const
+  {
+    return mPackageIdentifer;
+  }
+
+  static const char* kSignedPakIdMetadataKey;
 
 private:
   virtual ~PackagedAppVerifier();
@@ -191,6 +196,8 @@ private:
 
   // A place to store the computed hashes of each resource.
   nsClassHashtable<nsCStringHashKey, nsCString> mResourceHashStore;
+
+  nsCString mPackageIdentifer;
 }; // class PackagedAppVerifier
 
 } // namespace net

@@ -23,6 +23,13 @@ static const short kResourceHashType = nsICryptoHash::SHA256;
 // be treated signed.
 static bool gDeveloperMode = false;
 
+#undef LOG
+#ifdef MOZ_WIDGET_GONK
+  #define LOG(args) printf_stderr args
+#else
+  #define LOG(args) PR_LogPrint args
+#endif
+
 namespace mozilla {
 namespace net {
 
@@ -32,7 +39,7 @@ NS_IMPL_ISUPPORTS(PackagedAppVerifier, nsIPackagedAppVerifier, nsIVerificationCa
 
 NS_IMPL_ISUPPORTS(PackagedAppVerifier::ResourceCacheInfo, nsISupports)
 
-const char* PackagedAppVerifier::kSignedPakOriginMetadataKey = "signed-pak-origin";
+const char* PackagedAppVerifier::kSignedPakIdMetadataKey = "package-id";
 
 PackagedAppVerifier::PackagedAppVerifier()
 {
@@ -268,12 +275,6 @@ PackagedAppVerifier::VerifyManifest(const ResourceCacheInfo* aInfo)
 
   mState = STATE_MANIFEST_VERIFYING;
 
-  if (gDeveloperMode) {
-    LOG(("Developer mode! Bypass verification."));
-    FireVerifiedEvent(true, true);
-    return;
-  }
-
   if (mSignature.IsEmpty()) {
     LOG(("No signature. No need to do verification."));
     FireVerifiedEvent(true, true);
@@ -349,6 +350,11 @@ PackagedAppVerifier::OnManifestVerified(bool aSuccess)
     return;
   }
 
+  if (!aSuccess && gDeveloperMode) {
+    aSuccess = true;
+    LOG(("Developer mode! Treat junk signature valid."));
+  }
+
   // Only when the manifest verified and package has signature would we
   // regard this package is signed.
   mIsPackageSigned = aSuccess && !mSignature.IsEmpty();
@@ -357,13 +363,15 @@ PackagedAppVerifier::OnManifestVerified(bool aSuccess)
                     : STATE_MANIFEST_VERIFIED_FAILED;
 
   // TODO: Update mPackageOrigin.
+  mPackagedAppUtils->GetPackageIdentifier(mPackageIdentifer);
+  LOG(("PackageIdentifer: %s", mPackageIdentifer.get()));
 
   // If the package is signed, add related info to the package cache.
   if (mIsPackageSigned && mPackageCacheEntry) {
     LOG(("This package is signed. Add this info to the cache channel."));
     if (mPackageCacheEntry) {
-      mPackageCacheEntry->SetMetaDataElement(kSignedPakOriginMetadataKey,
-                                             mPackageOrigin.get());
+      mPackageCacheEntry->SetMetaDataElement(kSignedPakIdMetadataKey,
+                                             mPackageIdentifer.get());
       mPackageCacheEntry = nullptr; // the cache entry is no longer needed.
     }
   }
