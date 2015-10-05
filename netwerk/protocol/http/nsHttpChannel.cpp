@@ -267,8 +267,8 @@ nsHttpChannel::nsHttpChannel()
     , mPushedStream(nullptr)
     , mLocalBlocklist(false)
     , mWarningReporter(nullptr)
-    , mDidReval(false)
     , mIsSignedContent(false)
+    , mDidReval(false)
 {
     LOG(("Creating nsHttpChannel [this=%p]\n", this));
     mChannelCreationTime = PR_Now();

@@ -447,7 +447,6 @@ PackagedAppService::PackagedAppDownloader::EnsureVerifier(nsIRequest *aRequest)
   nsCOMPtr<nsICacheEntry> packageCacheEntry = GetPackageCacheEntry(aRequest);
 
   mVerifier = new PackagedAppVerifier(this,
-                                      mPackageOrigin,
                                       signature,
                                       packageCacheEntry);
 }
@@ -886,7 +885,24 @@ PackagedAppService::PackagedAppDownloader::NotifyOnStartSignedPackageRequest(con
   mRequesters.Clear();
 }
 
-void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp(const ResourceCacheInfo* aInfo)
+static bool
+AddPackageIdToOrigin(nsACString& aOrigin, const nsACString& aPackageId)
+{
+  nsAutoCString originNoSuffix;
+  mozilla::OriginAttributes attrs;
+  if (!attrs.PopulateFromOrigin(aOrigin, originNoSuffix)) {
+    return false;
+  }
+
+  attrs.mSignedPkg = NS_ConvertUTF8toUTF16(aPackageId);
+  nsAutoCString suffixWithPackageId;
+  attrs.CreateSuffix(suffixWithPackageId);
+  aOrigin = originNoSuffix + suffixWithPackageId;
+  return true;
+}
+
+void
+PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp(const ResourceCacheInfo* aInfo)
 {
   // TODO: Bug 1178533 to register permissions, system messages etc on navigation to
   //       signed packages.
@@ -904,13 +920,14 @@ void PackagedAppService::PackagedAppDownloader::InstallSignedPackagedApp(const R
   nsCString manifestURL;
   aInfo->mURI->GetAsciiSpec(manifestURL);
 
-  // Use the origin stored in the verifier since the signed packaged app would
-  // have a specifi package identifer defined in the manifest file.
-  nsCString packageOrigin;
-  mVerifier->GetPackageOrigin(packageOrigin);
+
+  nsCString originWithPackageId = mPackageOrigin;
+  if (!AddPackageIdToOrigin(originWithPackageId, mVerifier->GetPackageIdentifier())) {
+    NS_WARNING("mPackageOrigin is malformed.");
+  }
 
   installer->InstallPackagedWebapp(mManifestContent.get(),
-                                   packageOrigin.get(),
+                                   originWithPackageId.get(),
                                    manifestURL.get(),
                                    &isSuccess);
   if (!isSuccess) {
@@ -987,7 +1004,7 @@ PackagedAppService::PackagedAppDownloader::OnResourceVerified(const ResourceCach
 
   // If this package is signed and there is any pending requests, we just notify
   // right now no matter if this is the requested resource. Doing this can
-  // have the potential process switch be done as early as possible.  
+  // have the potential process switch be done as early as possible.
   if (mVerifier->GetIsPackageSigned()) {
     // TODO: Bug 1178526 will deal with the package identifier things.
     //       For now we just use the origin as the identifier.

@@ -46,15 +46,14 @@ PackagedAppVerifier::PackagedAppVerifier()
   MOZ_RELEASE_ASSERT(NS_IsMainThread(),
                      "PackagedAppVerifier::OnResourceVerified must be on main thread");
 
-  Init(nullptr, EmptyCString(), EmptyCString(), nullptr);
+  Init(nullptr, EmptyCString(), nullptr);
 }
 
 PackagedAppVerifier::PackagedAppVerifier(nsIPackagedAppVerifierListener* aListener,
-                                         const nsACString& aPackageOrigin,
                                          const nsACString& aSignature,
                                          nsICacheEntry* aPackageCacheEntry)
 {
-  Init(aListener, aPackageOrigin, aSignature, aPackageCacheEntry);
+  Init(aListener, aSignature, aPackageCacheEntry);
 }
 
 PackagedAppVerifier::~PackagedAppVerifier()
@@ -68,7 +67,6 @@ PackagedAppVerifier::~PackagedAppVerifier()
 }
 
 NS_IMETHODIMP PackagedAppVerifier::Init(nsIPackagedAppVerifierListener* aListener,
-                                        const nsACString& aPackageOrigin,
                                         const nsACString& aSignature,
                                         nsICacheEntry* aPackageCacheEntry)
 {
@@ -81,7 +79,6 @@ NS_IMETHODIMP PackagedAppVerifier::Init(nsIPackagedAppVerifierListener* aListene
 
   mListener = aListener;
   mState = STATE_UNKNOWN;
-  mPackageOrigin = aPackageOrigin;
   mSignature = aSignature;
   mIsPackageSigned = false;
   mPackageCacheEntry = aPackageCacheEntry;
@@ -362,9 +359,11 @@ PackagedAppVerifier::OnManifestVerified(bool aSuccess)
   mState = aSuccess ? STATE_MANIFEST_VERIFIED_OK
                     : STATE_MANIFEST_VERIFIED_FAILED;
 
-  // TODO: Update mPackageOrigin.
-  mPackagedAppUtils->GetPackageIdentifier(mPackageIdentifer);
-  LOG(("PackageIdentifer: %s", mPackageIdentifer.get()));
+  // Obtain the package identifier from manifest if the package is signed.
+  if (mIsPackageSigned) {
+    mPackagedAppUtils->GetPackageIdentifier(mPackageIdentifer);
+    LOG(("PackageIdentifer is: %s", mPackageIdentifer.get()));
+  }
 
   // If the package is signed, add related info to the package cache.
   if (mIsPackageSigned && mPackageCacheEntry) {
@@ -431,9 +430,9 @@ PackagedAppVerifier::SetHasBrokenLastPart(nsresult aStatusCode)
 //---------------------------------------------------------------
 
 NS_IMETHODIMP
-PackagedAppVerifier::GetPackageOrigin(nsACString& aPackageOrigin)
+PackagedAppVerifier::GetPackageIdentifier(nsACString& aPackageIdentifier)
 {
-  aPackageOrigin = mPackageOrigin;
+  aPackageIdentifier = mPackageIdentifer;
   return NS_OK;
 }
 

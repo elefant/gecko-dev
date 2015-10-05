@@ -23,7 +23,7 @@ interface nsIDOMElement;
  * can be queried for various information about where the load is
  * happening.
  */
-[scriptable, uuid(ccba2b1d-1527-4f31-b62c-fc352b5b1e9b)]
+[scriptable, uuid(3eed60f8-8101-44f6-8f1a-1fd3d80e219e)]
 interface nsILoadContext : nsISupports
 {
   /**

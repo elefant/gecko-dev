@@ -93,7 +93,6 @@ public:
   PackagedAppVerifier();
 
   PackagedAppVerifier(nsIPackagedAppVerifierListener* aListener,
-                      const nsACString& aPackageOrigin,
                       const nsACString& aSignature,
                       nsICacheEntry* aPackageCacheEntry);
 
@@ -107,11 +106,6 @@ public:
   bool GetIsPackageSigned() const
   {
     return mIsPackageSigned;
-  }
-
-  const nsACString& GetPackageOrigin() const
-  {
-    return mPackageOrigin;
   }
 
   const nsACString& GetPackageIdentifier() const
