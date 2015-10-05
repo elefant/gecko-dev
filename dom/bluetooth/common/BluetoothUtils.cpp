@@ -20,6 +20,168 @@
 BEGIN_BLUETOOTH_NAMESPACE
 
 void
+AddressToString(const BluetoothAddress& aAddress, nsAString& aString)
+{
+  char str[BLUETOOTH_ADDRESS_LENGTH + 1];
+
+  int res = snprintf(str, sizeof(str), "%02x:%02x:%02x:%02x:%02x:%02x",
+                     static_cast<int>(aAddress.mAddr[0]),
+                     static_cast<int>(aAddress.mAddr[1]),
+                     static_cast<int>(aAddress.mAddr[2]),
+                     static_cast<int>(aAddress.mAddr[3]),
+                     static_cast<int>(aAddress.mAddr[4]),
+                     static_cast<int>(aAddress.mAddr[5]));
+
+  if ((res == EOF) ||
+      (res < 0) ||
+      (static_cast<size_t>(res) >= sizeof(str))) {
+    /* Conversion should have succeeded or (a) we're out of memory, or
+     * (b) our code is massively broken. We should crash in both cases.
+     */
+    MOZ_CRASH("Failed to convert Bluetooth address to string");
+  }
+
+  aString = NS_ConvertUTF8toUTF16(str);
+}
+
+nsresult
+StringToAddress(const nsAString& aString, BluetoothAddress& aAddress)
+{
+  int res = sscanf(NS_ConvertUTF16toUTF8(aString).get(),
+                   "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
+                   &aAddress.mAddr[0],
+                   &aAddress.mAddr[1],
+                   &aAddress.mAddr[2],
+                   &aAddress.mAddr[3],
+                   &aAddress.mAddr[4],
+                   &aAddress.mAddr[5]);
+  if (res < static_cast<ssize_t>(MOZ_ARRAY_LENGTH(aAddress.mAddr))) {
+    return NS_ERROR_ILLEGAL_VALUE;
+  }
+  return NS_OK;
+}
+
+nsresult
+StringToPinCode(const nsAString& aString, BluetoothPinCode& aPinCode)
+{
+  NS_ConvertUTF16toUTF8 stringUTF8(aString);
+
+  auto len = stringUTF8.Length();
+
+  if (len > sizeof(aPinCode.mPinCode)) {
+    BT_LOGR("Service-name string too long");
+    return NS_ERROR_ILLEGAL_VALUE;
+  }
+
+  auto str = stringUTF8.get();
+
+  memcpy(aPinCode.mPinCode, str, len);
+  memset(aPinCode.mPinCode + len, 0, sizeof(aPinCode.mPinCode) - len);
+  aPinCode.mLength = len;
+
+  return NS_OK;
+}
+
+nsresult
+StringToPropertyType(const nsAString& aString, BluetoothPropertyType& aType)
+{
+  if (aString.EqualsLiteral("Name")) {
+    aType = PROPERTY_BDNAME;
+  } else if (aString.EqualsLiteral("Discoverable")) {
+    aType = PROPERTY_ADAPTER_SCAN_MODE;
+  } else if (aString.EqualsLiteral("DiscoverableTimeout")) {
+    aType = PROPERTY_ADAPTER_DISCOVERY_TIMEOUT;
+  } else {
+    BT_LOGR("Invalid property name: %s", NS_ConvertUTF16toUTF8(aString).get());
+    aType = PROPERTY_UNKNOWN; // silences compiler warning
+    return NS_ERROR_ILLEGAL_VALUE;
+  }
+  return NS_OK;
+}
+
+nsresult
+NamedValueToProperty(const BluetoothNamedValue& aValue,
+                     BluetoothProperty& aProperty)
+{
+  nsresult rv = StringToPropertyType(aValue.name(), aProperty.mType);
+  if (NS_FAILED(rv)) {
+    return rv;
+  }
+
+  switch (aProperty.mType) {
+    case PROPERTY_BDNAME:
+      if (aValue.value().type() != BluetoothValue::TnsString) {
+        BT_LOGR("Bluetooth property value is not a string");
+        return NS_ERROR_ILLEGAL_VALUE;
+      }
+      // Set name
+      aProperty.mString = aValue.value().get_nsString();
+      break;
+
+    case PROPERTY_ADAPTER_SCAN_MODE:
+      if (aValue.value().type() != BluetoothValue::Tbool) {
+        BT_LOGR("Bluetooth property value is not a boolean");
+        return NS_ERROR_ILLEGAL_VALUE;
+      }
+      // Set scan mode
+      if (aValue.value().get_bool()) {
+        aProperty.mScanMode = SCAN_MODE_CONNECTABLE_DISCOVERABLE;
+      } else {
+        aProperty.mScanMode = SCAN_MODE_CONNECTABLE;
+      }
+      break;
+
+    case PROPERTY_ADAPTER_DISCOVERY_TIMEOUT:
+      if (aValue.value().type() != BluetoothValue::Tuint32_t) {
+        BT_LOGR("Bluetooth property value is not an unsigned integer");
+        return NS_ERROR_ILLEGAL_VALUE;
+      }
+      // Set discoverable timeout
+      aProperty.mUint32 = aValue.value().get_uint32_t();
+      break;
+
+    default:
+      BT_LOGR("Invalid property value type");
+      return NS_ERROR_ILLEGAL_VALUE;
+  }
+
+  return NS_OK;
+}
+
+void
+RemoteNameToString(const BluetoothRemoteName& aRemoteName, nsAString& aString)
+{
+  auto name = reinterpret_cast<const char*>(aRemoteName.mName);
+
+  /* The content in |BluetoothRemoteName| is not a C string and not
+   * terminated by \0. We use |strnlen| to limit its length.
+   */
+  aString =
+    NS_ConvertUTF8toUTF16(name, strnlen(name, sizeof(aRemoteName.mName)));
+}
+
+nsresult
+StringToServiceName(const nsAString& aString,
+                    BluetoothServiceName& aServiceName)
+{
+  NS_ConvertUTF16toUTF8 serviceNameUTF8(aString);
+
+  auto len = serviceNameUTF8.Length();
+
+  if (len > sizeof(aServiceName.mName)) {
+    BT_LOGR("Service-name string too long");
+    return NS_ERROR_ILLEGAL_VALUE;
+  }
+
+  auto str = serviceNameUTF8.get();
+
+  memcpy(aServiceName.mName, str, len);
+  memset(aServiceName.mName + len, 0, sizeof(aServiceName.mName) - len);
+
+  return NS_OK;
+}
+
+void
 UuidToString(const BluetoothUuid& aUuid, nsAString& aString)
 {
   char uuidStr[37];

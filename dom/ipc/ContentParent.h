@@ -81,6 +81,7 @@ class ContentParent final : public PContentParent
     typedef mozilla::ipc::PFileDescriptorSetParent PFileDescriptorSetParent;
     typedef mozilla::ipc::TestShellParent TestShellParent;
     typedef mozilla::ipc::URIParams URIParams;
+    typedef mozilla::ipc::PrincipalInfo PrincipalInfo;
     typedef mozilla::dom::ClonedMessageData ClonedMessageData;
 
 public:
@@ -394,12 +395,14 @@ public:
     virtual POfflineCacheUpdateParent*
     AllocPOfflineCacheUpdateParent(const URIParams& aManifestURI,
                                    const URIParams& aDocumentURI,
+                                   const PrincipalInfo& aLoadingPrincipalInfo,
                                    const bool& aStickDocument,
                                    const TabId& aTabId) override;
     virtual bool
     RecvPOfflineCacheUpdateConstructor(POfflineCacheUpdateParent* aActor,
                                        const URIParams& aManifestURI,
                                        const URIParams& aDocumentURI,
+                                       const PrincipalInfo& aLoadingPrincipal,
                                        const bool& stickDocument,
                                        const TabId& aTabId) override;
     virtual bool
@@ -709,6 +712,9 @@ private:
     virtual PSpeechSynthesisParent* AllocPSpeechSynthesisParent() override;
     virtual bool DeallocPSpeechSynthesisParent(PSpeechSynthesisParent* aActor) override;
     virtual bool RecvPSpeechSynthesisConstructor(PSpeechSynthesisParent* aActor) override;
+
+    virtual PWebBrowserPersistDocumentParent* AllocPWebBrowserPersistDocumentParent(PBrowserParent* aBrowser, const uint64_t& aOuterWindowID) override;
+    virtual bool DeallocPWebBrowserPersistDocumentParent(PWebBrowserPersistDocumentParent* aActor) override;
 
     virtual bool RecvReadPrefsArray(InfallibleTArray<PrefSetting>* aPrefs) override;
     virtual bool RecvReadFontList(InfallibleTArray<FontListEntry>* retValue) override;

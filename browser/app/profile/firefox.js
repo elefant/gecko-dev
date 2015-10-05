@@ -1344,7 +1344,7 @@ pref("devtools.toolbox.sidebar.width", 500);
 pref("devtools.toolbox.host", "bottom");
 pref("devtools.toolbox.previousHost", "side");
 pref("devtools.toolbox.selectedTool", "webconsole");
-pref("devtools.toolbox.toolbarSpec", '["splitconsole", "paintflashing toggle","tilt toggle","scratchpad","resize toggle","eyedropper","screenshot --fullpage", "rulers"]');
+pref("devtools.toolbox.toolbarSpec", '["splitconsole", "paintflashing toggle","tilt toggle","scratchpad","resize toggle","eyedropper","screenshot --fullpage", "rulers", "measure"]');
 pref("devtools.toolbox.sideEnabled", true);
 pref("devtools.toolbox.zoomValue", "1");
 pref("devtools.toolbox.splitconsoleEnabled", false);
@@ -1361,6 +1361,7 @@ pref("devtools.command-button-responsive.enabled", true);
 pref("devtools.command-button-eyedropper.enabled", false);
 pref("devtools.command-button-screenshot.enabled", false);
 pref("devtools.command-button-rulers.enabled", false);
+pref("devtools.command-button-measure.enabled", false);
 
 // Inspector preferences
 // Enable the Inspector
@@ -1884,7 +1885,7 @@ pref("browser.tabs.remote.autostart.2", true);
 #endif
 
 #ifdef NIGHTLY_BUILD
-#if defined(XP_MACOSX) || defined(XP_WIN)
+#ifndef MOZ_MULET
 pref("layers.async-pan-zoom.enabled", true);
 #endif
 #endif
@@ -1928,12 +1929,7 @@ pref("browser.pocket.oAuthConsumerKey", "40249-e88c401e1b1f2242d9e441c4");
 pref("browser.pocket.useLocaleList", true);
 pref("browser.pocket.enabledLocales", "cs de en-GB en-US en-ZA es-ES es-MX fr hu it ja ja-JP-mac ko nl pl pt-BR pt-PT ru zh-CN zh-TW");
 
-// View source tabs are only enabled by default for Dev. Ed and Nightly.
-#ifdef RELEASE_BUILD
-pref("view_source.tab", false);
-#else
 pref("view_source.tab", true);
-#endif
 
 // Enable ServiceWorkers for Push API consumers.
 // Interception is still disabled on beta and release.

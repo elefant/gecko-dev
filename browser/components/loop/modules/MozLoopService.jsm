@@ -88,6 +88,16 @@ const ROOM_CONTEXT_ADD = {
 // See LOG_LEVELS in Console.jsm. Common examples: "All", "Info", "Warn", & "Error".
 const PREF_LOG_LEVEL = "loop.debug.loglevel";
 
+const kChatboxHangupButton = {
+  id: "loop-hangup",
+  visibleWhenUndocked: false,
+  onCommand: function(e, chatbox) {
+    let window = chatbox.content.contentWindow;
+    let event = new window.CustomEvent("LoopHangupNow");
+    window.dispatchEvent(event);
+  }
+};
+
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/Promise.jsm");
@@ -203,7 +213,8 @@ var MozLoopServiceInternal = {
   pushURLs: new Map(),
 
   mocks: {
-    pushHandler: undefined
+    pushHandler: undefined,
+    isChatWindowOpen: undefined
   },
 
   /**
@@ -872,6 +883,22 @@ var MozLoopServiceInternal = {
   },
 
   /**
+   * Determines if a chat window is already open for a given window id.
+   *
+   * @param  {String}  chatWindowId The window id.
+   * @return {Boolean}              True if the window is opened.
+   */
+  isChatWindowOpen: function(chatWindowId) {
+    if (this.mocks.isChatWindowOpen !== undefined) {
+      return this.mocks.isChatWindowOpen;
+    }
+
+    let chatUrl = this.getChatURL(chatWindowId);
+
+    return [...Chat.chatboxes].some(chatbox => chatbox.src == chatUrl);
+  },
+
+  /**
    * Opens the chat window
    *
    * @param {Object} conversationWindowData The data to be obtained by the
@@ -887,6 +914,8 @@ var MozLoopServiceInternal = {
     gConversationWindowData.set(windowId, conversationWindowData);
 
     let url = this.getChatURL(windowId);
+
+    Chat.registerButton(kChatboxHangupButton);
 
     let callback = chatbox => {
       // We need to use DOMContentLoaded as otherwise the injection will happen
@@ -983,7 +1012,7 @@ var MozLoopServiceInternal = {
           }
         };
 
-        let pc_static = new window.mozRTCPeerConnectionStatic();
+        let pc_static = new window.RTCPeerConnectionStatic();
         pc_static.registerPeerConnectionLifecycleCallback(onPCLifecycleChange);
 
         UITour.notify("Loop:ChatWindowOpened");
@@ -997,11 +1026,11 @@ var MozLoopServiceInternal = {
       return null;
     // It's common for unit tests to overload Chat.open.
     } else if (chatboxInstance.setAttribute) {
-      // Set properties that influence visual appeara nce of the chatbox right
+      // Set properties that influence visual appearance of the chatbox right
       // away to circumvent glitches.
-      chatboxInstance.setAttribute("dark", true);
       chatboxInstance.setAttribute("customSize", "loopDefault");
       chatboxInstance.parentNode.setAttribute("customSize", "loopDefault");
+      Chat.loadButtonSet(chatboxInstance, "minimize,swap," + kChatboxHangupButton.id);
     }
     return windowId;
   },
@@ -1375,6 +1404,16 @@ this.MozLoopService = {
    */
   openChatWindow: function(conversationWindowData) {
     return MozLoopServiceInternal.openChatWindow(conversationWindowData);
+  },
+
+  /**
+   * Determines if a chat window is already open for a given window id.
+   *
+   * @param  {String}  chatWindowId The window id.
+   * @return {Boolean}              True if the window is opened.
+   */
+  isChatWindowOpen: function(chatWindowId) {
+    return MozLoopServiceInternal.isChatWindowOpen(chatWindowId);
   },
 
   /**

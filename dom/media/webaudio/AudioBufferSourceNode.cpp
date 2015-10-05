@@ -69,9 +69,8 @@ public:
   virtual void RecvTimelineEvent(uint32_t aIndex,
                                  dom::AudioTimelineEvent& aEvent) override
   {
-    MOZ_ASSERT(mSource && mDestination);
+    MOZ_ASSERT(mDestination);
     WebAudioUtils::ConvertAudioTimelineEventToTicks(aEvent,
-                                                    mSource,
                                                     mDestination);
 
     switch (aIndex) {
@@ -98,8 +97,7 @@ public:
     switch (aIndex) {
     case AudioBufferSourceNode::START:
       MOZ_ASSERT(!mStart, "Another START?");
-      mStart =
-        mSource->FractionalTicksFromDestinationTime(mDestination, aParam);
+      mStart = mDestination->SecondsToNearestStreamTime(aParam);
       // Round to nearest
       mBeginProcessing = mStart + 0.5;
       break;
@@ -471,7 +469,7 @@ public:
       return;
     }
 
-    StreamTime streamPosition = aStream->GraphTimeToStreamTime(aFrom);
+    StreamTime streamPosition = mDestination->GraphTimeToStreamTime(aFrom);
     // We've finished if we've gone past mStop, or if we're past mDuration when
     // looping is disabled.
     if (streamPosition >= mStop ||
@@ -582,8 +580,8 @@ AudioBufferSourceNode::AudioBufferSourceNode(AudioContext* aContext)
   , mLoopStart(0.0)
   , mLoopEnd(0.0)
   // mOffset and mDuration are initialized in Start().
-  , mPlaybackRate(new AudioParam(this, SendPlaybackRateToStream, 1.0f, "playbackRate"))
-  , mDetune(new AudioParam(this, SendDetuneToStream, 0.0f, "detune"))
+  , mPlaybackRate(new AudioParam(this, PLAYBACKRATE, 1.0f, "playbackRate"))
+  , mDetune(new AudioParam(this, DETUNE, 0.0f, "detune"))
   , mLoop(false)
   , mStartCalled(false)
 {
@@ -670,7 +668,7 @@ AudioBufferSourceNode::Start(double aWhen, double aOffset,
 
   // Don't set parameter unnecessarily
   if (aWhen > 0.0) {
-    ns->SetDoubleParameter(START, mContext->DOMTimeToStreamTime(aWhen));
+    ns->SetDoubleParameter(START, aWhen);
   }
 }
 
@@ -784,28 +782,6 @@ AudioBufferSourceNode::NotifyMainThreadStreamFinished()
   // Drop the playing reference
   // Warning: The below line might delete this.
   MarkInactive();
-}
-
-void
-AudioBufferSourceNode::SendPlaybackRateToStream(AudioNode* aNode,
-                                                const AudioTimelineEvent& aEvent)
-{
-  AudioBufferSourceNode* This = static_cast<AudioBufferSourceNode*>(aNode);
-  if (!This->mStream) {
-    return;
-  }
-  SendTimelineEventToStream(This, PLAYBACKRATE, aEvent);
-}
-
-void
-AudioBufferSourceNode::SendDetuneToStream(AudioNode* aNode,
-                                          const AudioTimelineEvent& aEvent)
-{
-  AudioBufferSourceNode* This = static_cast<AudioBufferSourceNode*>(aNode);
-  if (!This->mStream) {
-    return;
-  }
-  SendTimelineEventToStream(This, DETUNE, aEvent);
 }
 
 void

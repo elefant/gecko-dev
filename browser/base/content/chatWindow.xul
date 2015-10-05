@@ -128,7 +128,14 @@ chatBrowserAccess.prototype = {
     return browser ? browser.QueryInterface(Ci.nsIFrameLoaderOwner) : null;
   },
 
-  isTabContentWindow: function (aWindow) this.contentWindow == aWindow,
+  isTabContentWindow: function (aWindow) {
+    return this.contentWindow == aWindow;
+  },
+
+  canClose() {
+    let {BrowserUtils} = Cu.import("resource://gre/modules/BrowserUtils.jsm", {});
+    return BrowserUtils.canCloseWindow(window);
+  },
 };
 
 </script>

@@ -153,7 +153,7 @@ interface nsILoadContext : nsISupports
     JS::Rooted<JS::Value> v(jsapi.cx());
     nsresult rv = GetOriginAttributes(&v);
     NS_ENSURE_SUCCESS(rv, false);
-    MOZ_ASSERT(v.isObject());
+    NS_ENSURE_TRUE(v.isObject(), false);
     JS::Rooted<JSObject*> obj(jsapi.cx(), &v.toObject());
 
     // If we're JS-implemented, the object will be left in a different (System-Principaled)

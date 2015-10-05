@@ -33,6 +33,7 @@
 #include "jsboolinlines.h"
 #include "jsscriptinlines.h"
 
+#include "jit/AtomicOperations-inl.h"
 #include "jit/JitFrames-inl.h"
 #include "jit/MacroAssembler-inl.h"
 #include "jit/shared/Lowering-shared-inl.h"
@@ -11104,7 +11105,7 @@ ICGetElem_NativePrototypeCallNative<T>::Clone(JSContext* cx,
                                               ICGetElem_NativePrototypeCallNative<T>& other)
 {
     return ICStub::New<ICGetElem_NativePrototypeCallNative<T>>(cx, space, other.jitCode(),
-                firstMonitorStub, other.receiverGuard(), other.key().unsafeGet(), other.accessType(),
+                firstMonitorStub, other.receiverGuard(), &other.key().get(), other.accessType(),
                 other.needsAtomize(), other.getter(), other.pcOffset_, other.holder(),
                 other.holderShape());
 }
@@ -11124,7 +11125,7 @@ ICGetElem_NativePrototypeCallScripted<T>::Clone(JSContext* cx,
                                                 ICGetElem_NativePrototypeCallScripted<T>& other)
 {
     return ICStub::New<ICGetElem_NativePrototypeCallScripted<T>>(cx, space, other.jitCode(),
-                firstMonitorStub, other.receiverGuard(), other.key().unsafeGet(), other.accessType(),
+                firstMonitorStub, other.receiverGuard(), &other.key().get(), other.accessType(),
                 other.needsAtomize(), other.getter(), other.pcOffset_, other.holder(),
                 other.holderShape());
 }

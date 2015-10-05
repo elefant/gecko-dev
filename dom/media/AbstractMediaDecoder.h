@@ -117,10 +117,6 @@ public:
   // on the main thread.
   virtual MediaDecoderOwner* GetOwner() = 0;
 
-  // May be called by the reader to notify the decoder that the resources
-  // required to begin playback have been acquired. Can be called on any thread.
-  virtual void NotifyWaitingForResourcesStatusChanged() = 0;
-
   // Called by the reader's MediaResource as data arrives over the network.
   // Must be called on the main thread.
   virtual void NotifyDataArrived(uint32_t aLength, int64_t aOffset,
@@ -163,11 +159,6 @@ public:
   // Observe and it should never be called directly.
   NS_IMETHOD Observe(nsISupports *aSubject, const char * aTopic, const char16_t * aData) override
   { MOZ_CRASH("Forbidden method"); return NS_OK; }
-
-#ifdef MOZ_EME
-  virtual nsresult SetCDMProxy(CDMProxy* aProxy) { return NS_ERROR_NOT_IMPLEMENTED; }
-  virtual CDMProxy* GetCDMProxy() { return nullptr; }
-#endif
 };
 
 class MetadataContainer

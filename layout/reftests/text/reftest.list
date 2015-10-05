@@ -24,7 +24,7 @@ HTTP(..) load ligature-with-space-1.html
 == line-editing-1c.html line-editing-1-ref.html
 == line-editing-1d.html line-editing-1-ref.html
 == line-editing-1e.html line-editing-1-ref.html
-fails-if(cocoaWidget||(winWidget&&!/^Windows\x20NT\x205\.1/.test(http.oscpu)&&layersGPUAccelerated)) HTTP(..) == lineheight-metrics-1.html lineheight-metrics-1-ref.html # bug 657864
+fails-if(cocoaWidget||(winWidget&&d2d&&layersGPUAccelerated)) HTTP(..) == lineheight-metrics-1.html lineheight-metrics-1-ref.html # bug 657864
 HTTP(..) == lineheight-metrics-2a.html lineheight-metrics-2-ref.html
 HTTP(..) == lineheight-metrics-2b.html lineheight-metrics-2-ref.html
 == lineheight-percentage-1.html lineheight-percentage-1-ref.html
@@ -224,6 +224,9 @@ HTTP(..) == graphite-05-feat.html graphite-05-ref.html
 pref(gfx.font_rendering.graphite.enabled,false) HTTP(..) == glyph-decomposition-opentype.html glyph-decomposition-opentype-ref.html
 pref(gfx.font_rendering.graphite.enabled,true) HTTP(..) == glyph-decomposition-graphite.html glyph-decomposition-graphite-ref.html
 
+# test for bidi bug in graphite 1.3.2, fixed in 1.3.3 (bug 1207061)
+HTTP(..) == graphite-bidi-1.html graphite-bidi-1-ref.html
+
 # Tests for hyphenation with hyphens property
 == auto-hyphenation-1.html auto-hyphenation-1-ref.html
 != auto-hyphenation-1.html auto-hyphenation-1-notref.html
@@ -313,10 +316,10 @@ pref(layout.css.text-align-true-value.enabled,true) == text-align-true.html text
 != control-chars-02.html control-chars-02-notref.html
 == control-chars-03a.html control-chars-03-ref.html
 == control-chars-03b.html control-chars-03-ref.html
-!= control-chars-04a.html control-chars-04-notref.html
-!= control-chars-04b.html control-chars-04-notref.html
-!= control-chars-04c.html control-chars-04-notref.html
-!= control-chars-04d.html control-chars-04-notref.html
+pref(layout.css.control-characters.visible,true) != control-chars-04a.html control-chars-04-notref.html
+pref(layout.css.control-characters.visible,true) != control-chars-04b.html control-chars-04-notref.html
+pref(layout.css.control-characters.visible,true) != control-chars-04c.html control-chars-04-notref.html
+pref(layout.css.control-characters.visible,true) != control-chars-04d.html control-chars-04-notref.html
 
 # font fallback for <space> when not supported in the primary font family - bug 970891
 HTTP(..) == space-font-1.html space-font-1-ref.html

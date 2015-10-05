@@ -225,7 +225,8 @@ AudioNode::Connect(AudioNode& aDestination, uint32_t aOutput,
     MOZ_ASSERT(aInput <= UINT16_MAX, "Unexpected large input port number");
     MOZ_ASSERT(aOutput <= UINT16_MAX, "Unexpected large output port number");
     input->mStreamPort = destinationStream->
-      AllocateInputPort(mStream, static_cast<uint16_t>(aInput),
+      AllocateInputPort(mStream, AudioNodeStream::AUDIO_TRACK,
+                        static_cast<uint16_t>(aInput),
                         static_cast<uint16_t>(aOutput));
   }
   aDestination.NotifyInputsChanged();
@@ -267,7 +268,8 @@ AudioNode::Connect(AudioParam& aDestination, uint32_t aOutput,
     // Setup our stream as an input to the AudioParam's stream
     MOZ_ASSERT(aOutput <= UINT16_MAX, "Unexpected large output port number");
     input->mStreamPort =
-      ps->AllocateInputPort(mStream, 0, static_cast<uint16_t>(aOutput));
+      ps->AllocateInputPort(mStream, AudioNodeStream::AUDIO_TRACK,
+                            0, static_cast<uint16_t>(aOutput));
   }
 }
 
@@ -299,15 +301,6 @@ AudioNode::SendChannelMixingParametersToStream()
     mStream->SetChannelMixingParameters(mChannelCount, mChannelCountMode,
                                         mChannelInterpretation);
   }
-}
-
-void
-AudioNode::SendTimelineEventToStream(AudioNode* aNode, uint32_t aIndex,
-                                     const AudioTimelineEvent& aEvent)
-{
-  AudioNodeStream* ns = aNode->mStream;
-  MOZ_ASSERT(ns, "How come we don't have a stream here?");
-  ns->SendTimelineEvent(aIndex, aEvent);
 }
 
 void

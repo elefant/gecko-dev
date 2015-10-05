@@ -53,11 +53,14 @@ default: $(TOPOBJDIR)/dist/bin/greprefs.js
 default: $(TOPOBJDIR)/dist/bin/platform.ini
 default: $(TOPOBJDIR)/dist/bin/webapprt/webapprt.ini
 
+# Targets from the recursive make backend to be built for a default build
+default: $(TOPOBJDIR)/config/makefiles/xpidl/xpidl
+
 .PHONY: FORCE
 
 # Extra define to trigger some workarounds. We should strive to limit the
-# use of those. As of writing the only one is in
-# toolkit/content/buildconfig.html.
+# use of those. As of writing the only ones are in
+# toolkit/content/buildconfig.html and browser/locales/jar.mn.
 ACDEFINES += -DBUILD_FASTER
 
 # Generic rule to fall back to the recursive make backend
@@ -90,8 +93,6 @@ $(addprefix install-,$(INSTALL_MANIFESTS)): install-%:
 # Preprocessed files. Ideally they would be using install manifests but
 # right now, it's not possible because of things like APP_BUILDID or
 # nsURLFormatter.js.
-# Things missing:
-# - XULPPFLAGS
 #
 # The list of preprocessed files is defined in PP_TARGETS. The list is
 # relative to TOPOBJDIR.
@@ -111,6 +112,7 @@ $(addprefix $(TOPOBJDIR)/,$(PP_TARGETS)): $(TOPOBJDIR)/%:
 		-DAB_CD=en-US \
 		$(defines) \
 		$(ACDEFINES) \
+		$(MOZ_DEBUG_DEFINES) \
 		$< \
 		-o $@
 
@@ -122,7 +124,6 @@ $(foreach pp_target,$(PP_TARGETS), \
 # manifests, but the code to read jar manifests and emit appropriate
 # install manifests is not there yet.
 # Things missing:
-# - XULPPFLAGS
 # - DEFINES from config/config.mk
 # - L10N
 # - -e when USE_EXTENSION_MANIFEST is set in moz.build
@@ -162,6 +163,7 @@ jar-%:
 		-DAB_CD=en-US \
 		$(defines) \
 		$(ACDEFINES) \
+		$(MOZ_DEBUG_DEFINES) \
 		$<
 
 # Create some chrome manifests
@@ -189,15 +191,6 @@ jar-browser-themes-%-jar.mn: \
 	$(TOPOBJDIR)/browser/themes/%/tab-selected-end.svg \
 	$(TOPOBJDIR)/browser/themes/%/tab-selected-start.svg
 
-# These files are manually generated from
-# toolkit/components/urlformatter/Makefile.in and are force-included so that
-# the corresponding defines don't end up in the command lines.
-KEYS = mozilla_api_key google_api_key google_oauth_api_key bing_api_key
-$(TOPOBJDIR)/dist/bin/components/nsURLFormatter.js: \
-	$(addprefix $(TOPOBJDIR)/toolkit/components/urlformatter/, $(KEYS))
-$(TOPOBJDIR)/dist/bin/components/nsURLFormatter.js: defines += \
-	$(addprefix -I $(TOPOBJDIR)/toolkit/components/urlformatter/,$(KEYS))
-
 # Extra dependencies and/or definitions for preprocessed files.
 $(TOPOBJDIR)/dist/bin/application.ini: $(TOPOBJDIR)/config/buildid
 $(TOPOBJDIR)/dist/bin/application.ini: defines += \
@@ -207,3 +200,7 @@ $(TOPOBJDIR)/dist/bin/application.ini: defines += \
 $(TOPOBJDIR)/dist/bin/greprefs.js: $(TOPOBJDIR)/modules/libpref/greprefs.js
 $(TOPOBJDIR)/dist/bin/platform.ini: $(TOPOBJDIR)/toolkit/xre/platform.ini
 $(TOPOBJDIR)/dist/bin/webapprt/webapprt.ini: $(TOPOBJDIR)/webapprt/webapprt.ini
+
+# The xpidl target in config/makefiles/xpidl requires the install manifest for
+# dist/idl to have been processed.
+$(TOPOBJDIR)/config/makefiles/xpidl/xpidl: $(TOPOBJDIR)/install-dist_idl

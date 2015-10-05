@@ -111,7 +111,7 @@ public class HistoryPanel extends HomeFragment {
         THREE_MONTHS_AGO,
         FOUR_MONTHS_AGO,
         FIVE_MONTHS_AGO,
-        MostRecentSection, OLDER_THAN_SIX_MONTHS
+        OLDER_THAN_SIX_MONTHS
     };
 
     protected interface HistoryUrlProvider {
@@ -237,6 +237,14 @@ public class HistoryPanel extends HomeFragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+
+        // Discard any additional item clicks on the list as the
+        // panel is getting destroyed (bug 1210243).
+        if (mRangeList != null) {
+            mRangeList.setOnItemClickListener(null);
+        }
+        mList.setOnItemClickListener(null);
+
         mRangeList = null;
         mList = null;
         mEmptyView = null;
@@ -317,6 +325,10 @@ public class HistoryPanel extends HomeFragment {
                 emptyHint.setText(hintBuilder);
                 emptyHint.setMovementMethod(LinkMovementMethod.getInstance());
                 emptyHint.setVisibility(View.VISIBLE);
+            }
+
+            if (!RestrictedProfiles.isAllowed(getActivity(), Restriction.DISALLOW_PRIVATE_BROWSING)) {
+                emptyHint.setVisibility(View.GONE);
             }
 
             mList.setEmptyView(mEmptyView);
@@ -404,15 +416,15 @@ public class HistoryPanel extends HomeFragment {
         cal.set(Calendar.DAY_OF_MONTH, cal.getMinimum(Calendar.DAY_OF_MONTH));
 
         // Iterate over the remaining MostRecentSections, to find the start, end and display text.
-        for (int i = MostRecentSection.THIS_MONTH.ordinal(); i <= MostRecentSection.OLDER_THAN_SIX_MONTHS.ordinal(); i++) {
+        for (int i = MostRecentSection.THIS_MONTH.ordinal(); i < MostRecentSection.OLDER_THAN_SIX_MONTHS.ordinal(); i++) {
             final long end = cal.getTimeInMillis();
             cal.add(Calendar.MONTH, -1);
             final long start = cal.getTimeInMillis();
-            final String displayName = (i != MostRecentSection.OLDER_THAN_SIX_MONTHS.ordinal())
-                    ? cal.getDisplayName(Calendar.MONTH, Calendar.LONG, Locale.getDefault())
-                    : context.getString(R.string.history_older_section);
+            final String displayName = cal.getDisplayName(Calendar.MONTH, Calendar.LONG, Locale.getDefault());
             recentSectionTimeOffsetList.add(i, new MostRecentSectionRange(start, end, displayName));
         }
+        recentSectionTimeOffsetList.add(MostRecentSection.OLDER_THAN_SIX_MONTHS.ordinal(),
+                new MostRecentSectionRange(0L, cal.getTimeInMillis(), context.getString(R.string.history_older_section)));
     }
 
     private static class HistoryCursorLoader extends SimpleCursorLoader {

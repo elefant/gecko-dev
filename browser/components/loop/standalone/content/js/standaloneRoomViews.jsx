@@ -75,7 +75,7 @@ loop.standaloneRoomViews = (function(mozL10n) {
       this.props.dispatcher.dispatch(new sharedActions.JoinRoom());
     },
 
-    render: function() {
+    _renderJoinButton: function() {
       var buttonMessage = this.state.roomState === ROOM_STATES.JOINED ?
         mozL10n.get("rooms_room_joined_own_conversation_label") :
         mozL10n.get("rooms_room_join_label");
@@ -86,6 +86,22 @@ loop.standaloneRoomViews = (function(mozL10n) {
         disabled: this.state.roomState === ROOM_STATES.JOINED
       });
 
+      return (
+        <button
+          className={buttonClasses}
+          onClick={this.handleJoinButton}>
+          {buttonMessage}
+        </button>
+      );
+    },
+
+    _renderFailureText: function() {
+      return (
+        <p className="failure">{ mozL10n.get("rooms_already_joined") }</p>
+      );
+    },
+
+    render: function() {
       // The extra scroller div here is for providing a scroll view for shorter
       // screens, as the common.css specifies overflow:hidden for the body which
       // we need in some places.
@@ -96,14 +112,13 @@ loop.standaloneRoomViews = (function(mozL10n) {
               <p className="loop-logo-text" title={ mozL10n.get("clientShortname2") }></p>
               <p className="roomName">{ this.state.roomName }</p>
               <p className="loop-logo" />
-              <button
-                className={buttonClasses}
-                onClick={this.handleJoinButton}>
-                {buttonMessage}
-              </button>
+              {
+                this.state.failureReason ?
+                  this._renderFailureText() :
+                  this._renderJoinButton()
+              }
             </div>
-            <ToSView
-              dispatcher={this.props.dispatcher} />
+            <ToSView dispatcher={this.props.dispatcher} />
             <p className="mozilla-logo" />
           </div>
         </div>
@@ -294,6 +309,7 @@ loop.standaloneRoomViews = (function(mozL10n) {
                       onClick={this.props.joinRoom}>
                 {mozL10n.get("rooms_room_join_label")}
               </button>
+              <ToSView dispatcher={this.props.dispatcher} />
             </div>
           );
         }
@@ -407,8 +423,6 @@ loop.standaloneRoomViews = (function(mozL10n) {
       return (
         <footer className="rooms-footer">
           <div className="footer-logo" />
-          <ToSView
-            dispatcher={this.props.dispatcher} />
         </footer>
       );
     }
@@ -468,10 +482,16 @@ loop.standaloneRoomViews = (function(mozL10n) {
     componentWillUpdate: function(nextProps, nextState) {
       if (this.state.roomState !== ROOM_STATES.READY &&
           nextState.roomState === ROOM_STATES.READY) {
-        this.setTitle(mozL10n.get("standalone_title_with_room_name", {
-          roomName: nextState.roomName || this.state.roomName,
-          clientShortname: mozL10n.get("clientShortname2")
-        }));
+        var roomName = nextState.roomName || this.state.roomName;
+
+        if (roomName) {
+          this.setTitle(mozL10n.get("standalone_title_with_room_name", {
+            roomName: roomName,
+            clientShortname: mozL10n.get("clientShortname2")
+          }));
+        } else {
+          this.setTitle(mozL10n.get("clientShortname2"));
+        }
       }
 
       if (this.state.roomState !== ROOM_STATES.MEDIA_WAIT &&

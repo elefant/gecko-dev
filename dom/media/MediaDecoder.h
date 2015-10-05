@@ -383,8 +383,6 @@ public:
   // Adjust the speed of the playback, optionally with pitch correction,
   virtual void SetVolume(double aVolume);
 
-  virtual void NotifyWaitingForResourcesStatusChanged() override;
-
   virtual void SetPlaybackRate(double aPlaybackRate);
   void SetPreservesPitch(bool aPreservesPitch);
 
@@ -664,11 +662,13 @@ public:
   MediaDecoderOwner* GetOwner() override;
 
 #ifdef MOZ_EME
-  // This takes the decoder monitor.
-  virtual nsresult SetCDMProxy(CDMProxy* aProxy) override;
+  typedef MozPromise<nsRefPtr<CDMProxy>, bool /* aIgnored */, /* IsExclusive = */ true> CDMProxyPromise;
 
-  // Decoder monitor must be held.
-  virtual CDMProxy* GetCDMProxy() override;
+  // Resolved when a CDMProxy is available and the capabilities are known or
+  // rejected when this decoder is about to shut down.
+  nsRefPtr<CDMProxyPromise> RequestCDMProxy() const;
+
+  void SetCDMProxy(CDMProxy* aProxy);
 #endif
 
 #ifdef MOZ_RAW
@@ -818,7 +818,8 @@ private:
   ReentrantMonitor mReentrantMonitor;
 
 #ifdef MOZ_EME
-  nsRefPtr<CDMProxy> mProxy;
+  MozPromiseHolder<CDMProxyPromise> mCDMProxyPromiseHolder;
+  nsRefPtr<CDMProxyPromise> mCDMProxyPromise;
 #endif
 
 protected:

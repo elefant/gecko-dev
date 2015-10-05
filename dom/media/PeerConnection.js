@@ -233,7 +233,7 @@ function RTCIceCandidate() {
   this.candidate = this.sdpMid = this.sdpMLineIndex = null;
 }
 RTCIceCandidate.prototype = {
-  classDescription: "mozRTCIceCandidate",
+  classDescription: "RTCIceCandidate",
   classID: PC_ICE_CID,
   contractID: PC_ICE_CONTRACT,
   QueryInterface: XPCOMUtils.generateQI([Ci.nsISupports,
@@ -252,7 +252,7 @@ function RTCSessionDescription() {
   this.type = this.sdp = null;
 }
 RTCSessionDescription.prototype = {
-  classDescription: "mozRTCSessionDescription",
+  classDescription: "RTCSessionDescription",
   classID: PC_SESSION_CID,
   contractID: PC_SESSION_CONTRACT,
   QueryInterface: XPCOMUtils.generateQI([Ci.nsISupports,
@@ -346,7 +346,7 @@ function RTCPeerConnection() {
   this._iceGatheringState = this._iceConnectionState = "new";
 }
 RTCPeerConnection.prototype = {
-  classDescription: "mozRTCPeerConnection",
+  classDescription: "RTCPeerConnection",
   classID: PC_CID,
   contractID: PC_CONTRACT,
   QueryInterface: XPCOMUtils.generateQI([Ci.nsISupports,
@@ -387,8 +387,9 @@ RTCPeerConnection.prototype = {
         "RTCPeerConnection constructor passed invalid RTCConfiguration");
     }
     // Save the appId
-    this._appId = Cu.getWebIDLCallerPrincipal().appId;
-    this._https = this._win.document.documentURIObject.schemeIs("https");
+    var principal = Cu.getWebIDLCallerPrincipal();
+    this._appId = principal.appId;
+    this._isChrome = Services.scriptSecurityManager.isSystemPrincipal(principal);
 
     // Get the offline status for this appId
     let appOffline = false;
@@ -458,7 +459,7 @@ RTCPeerConnection.prototype = {
       }
       certPromise = Promise.resolve(cert);
     } else {
-      certPromise = this._win.mozRTCPeerConnection.generateCertificate({
+      certPromise = this._win.RTCPeerConnection.generateCertificate({
         name: "ECDSA", namedCurve: "P-256"
       });
     }
@@ -733,7 +734,7 @@ RTCPeerConnection.prototype = {
           }));
         p = this._addIdentityAssertion(p, origin);
         return p.then(
-          sdp => new this._win.mozRTCSessionDescription({ type: "offer", sdp: sdp }));
+          sdp => new this._win.RTCSessionDescription({ type: "offer", sdp: sdp }));
       });
     });
   },
@@ -768,7 +769,7 @@ RTCPeerConnection.prototype = {
           }));
         p = this._addIdentityAssertion(p, origin);
         return p.then(sdp => {
-          return new this._win.mozRTCSessionDescription({ type: "answer", sdp: sdp });
+          return new this._win.RTCSessionDescription({ type: "answer", sdp: sdp });
         });
       });
     });
@@ -778,7 +779,8 @@ RTCPeerConnection.prototype = {
     if (this._havePermission) {
       return this._havePermission;
     }
-    if (AppConstants.MOZ_B2G ||
+    if (this._isChrome ||
+        AppConstants.MOZ_B2G ||
         Services.prefs.getBoolPref("media.navigator.permission.disabled")) {
       return this._havePermission = Promise.resolve();
     }
@@ -1069,7 +1071,7 @@ RTCPeerConnection.prototype = {
     }
 
     sdp = this._localIdp.addIdentityAttribute(sdp);
-    return new this._win.mozRTCSessionDescription({ type: this._localType,
+    return new this._win.RTCSessionDescription({ type: this._localType,
                                                     sdp: sdp });
   },
 
@@ -1079,7 +1081,7 @@ RTCPeerConnection.prototype = {
     if (sdp.length == 0) {
       return null;
     }
-    return new this._win.mozRTCSessionDescription({ type: this._remoteType,
+    return new this._win.RTCSessionDescription({ type: this._remoteType,
                                                     sdp: sdp });
   },
 
@@ -1268,7 +1270,7 @@ PeerConnectionObserver.prototype = {
     if (candidate == "") {
       this.foundIceCandidate(null);
     } else {
-      this.foundIceCandidate(new this._dompc._win.mozRTCIceCandidate(
+      this.foundIceCandidate(new this._dompc._win.RTCIceCandidate(
           {
               candidate: candidate,
               sdpMid: mid,
@@ -1447,7 +1449,7 @@ PeerConnectionObserver.prototype = {
 function RTCPeerConnectionStatic() {
 }
 RTCPeerConnectionStatic.prototype = {
-  classDescription: "mozRTCPeerConnectionStatic",
+  classDescription: "RTCPeerConnectionStatic",
   QueryInterface: XPCOMUtils.generateQI([Ci.nsISupports,
                                          Ci.nsIDOMGlobalPropertyInitializer]),
 

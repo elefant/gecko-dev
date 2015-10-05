@@ -140,7 +140,6 @@ public:
   enum State {
     DECODER_STATE_DECODING_NONE,
     DECODER_STATE_DECODING_METADATA,
-    DECODER_STATE_WAIT_FOR_RESOURCES,
     DECODER_STATE_WAIT_FOR_CDM,
     DECODER_STATE_DORMANT,
     DECODER_STATE_DECODING,
@@ -174,10 +173,6 @@ public:
   {
     mReader->DispatchNotifyDataArrived(aLength, aOffset, aThrottleUpdates);
   }
-
-  // Called when the reader may have acquired the hardware resources required
-  // to begin decoding.
-  void DispatchWaitingForResourcesStatusChanged();
 
   // Notifies the state machine that should minimize the number of samples
   // decoded we preroll, until playback starts. The first time playback starts
@@ -256,8 +251,6 @@ private:
   void SetDormant(bool aDormant);
 
   void SetAudioCaptured(bool aCaptured);
-
-  void NotifyWaitingForResourcesStatusChanged();
 
   nsRefPtr<MediaDecoder::SeekPromise> Seek(SeekTarget aTarget);
 
@@ -653,6 +646,8 @@ private:
   // Return true if the video decoder's decode speed can not catch up the
   // play time.
   bool NeedToSkipToNextKeyframe();
+
+  void AdjustAudioThresholds();
 
   // The decoder object that created this state machine. The state machine
   // holds a strong reference to the decoder to ensure that the decoder stays
@@ -1136,7 +1131,7 @@ private:
   // True if we shouldn't play our audio (but still write it to any capturing
   // streams). When this is true, the audio thread will never start again after
   // it has stopped.
-  bool mAudioCaptured;
+  Watchable<bool> mAudioCaptured;
 
   // True if the audio playback thread has finished. It is finished
   // when either all the audio frames have completed playing, or we've moved
@@ -1228,7 +1223,7 @@ private:
   // SetStartTime because the mStartTime already set before. Also we don't need
   // to decode any audio/video since the MediaDecoder will trigger a seek
   // operation soon.
-  bool mSentFirstFrameLoadedEvent;
+  Watchable<bool> mSentFirstFrameLoadedEvent;
 
   bool mSentPlaybackEndedEvent;
 
@@ -1246,6 +1241,13 @@ private:
 
   MediaEventListener mAudioQueueListener;
   MediaEventListener mVideoQueueListener;
+
+#ifdef MOZ_EME
+  void OnCDMProxyReady(nsRefPtr<CDMProxy> aProxy);
+  void OnCDMProxyNotReady();
+  nsRefPtr<CDMProxy> mCDMProxy;
+  MozPromiseRequestHolder<MediaDecoder::CDMProxyPromise> mCDMProxyPromise;
+#endif
 
 private:
   // The buffered range. Mirrored from the decoder thread.

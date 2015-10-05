@@ -350,7 +350,7 @@ static int nr_ice_component_create_tcp_host_candidate(struct nr_ice_ctx_ *ctx,
 
       /* It would be better to stop trying if there is error other than
          port already used, but it'd require significant work to support this. */
-      r=nr_socket_multi_tcp_create(ctx,&addr,tcp_type,so_sock_ct,1,NR_STUN_MAX_MESSAGE_SIZE,&nrsock);
+      r=nr_socket_multi_tcp_create(ctx,&addr,tcp_type,so_sock_ct,NR_STUN_MAX_MESSAGE_SIZE,&nrsock);
 
     } while(r);
 
@@ -624,12 +624,7 @@ int nr_ice_component_initialize(struct nr_ice_ctx_ *ctx,nr_ice_component *compon
     cand=TAILQ_FIRST(&component->candidates);
     while(cand){
       if(cand->state!=NR_ICE_CAND_STATE_INITIALIZING){
-        if(r=nr_ice_candidate_initialize(cand,nr_ice_gather_finished_cb,cand)){
-          if(r!=R_WOULDBLOCK){
-            ctx->uninitialized_candidates--;
-            cand->state=NR_ICE_CAND_STATE_FAILED;
-          }
-        }
+        nr_ice_candidate_initialize(cand,nr_ice_gather_finished_cb,cand);
       }
       cand=TAILQ_NEXT(cand,entry_comp);
     }

@@ -26,10 +26,8 @@ class AudioParam final : public nsWrapperCache,
   virtual ~AudioParam();
 
 public:
-  typedef void (*CallbackType)(AudioNode* aNode, const AudioTimelineEvent&);
-
   AudioParam(AudioNode* aNode,
-             CallbackType aCallback,
+             uint32_t aIndex,
              float aDefaultValue,
              const char* aName);
 
@@ -40,11 +38,6 @@ public:
   AudioContext* GetParentObject() const
   {
     return mNode->Context();
-  }
-
-  double DOMTimeToStreamTime(double aTime) const
-  {
-    return mNode->Context()->DOMTimeToStreamTime(aTime);
   }
 
   virtual JSObject* WrapObject(JSContext* aCx, JS::Handle<JSObject*> aGivenProto) override;
@@ -77,7 +70,7 @@ public:
 
     AudioParamTimeline::SetValue(aValue);
 
-    mCallback(mNode, event);
+    SendEventToEngine(event);
   }
 
   void SetValueAtTime(float aValue, double aStartTime, ErrorResult& aRv)
@@ -129,15 +122,12 @@ public:
       return;
     }
 
-    double streamTime = DOMTimeToStreamTime(aStartTime);
-
     // Remove some events on the main thread copy.
-    AudioEventTimeline::CancelScheduledValues(streamTime);
+    AudioEventTimeline::CancelScheduledValues(aStartTime);
 
-    AudioTimelineEvent event(AudioTimelineEvent::Cancel,
-                             streamTime, 0.0f);
+    AudioTimelineEvent event(AudioTimelineEvent::Cancel, aStartTime, 0.0f);
 
-    mCallback(mNode, event);
+    SendEventToEngine(event);
   }
 
   uint32_t ParentNodeId()
@@ -153,11 +143,6 @@ public:
   float DefaultValue() const
   {
     return mDefaultValue;
-  }
-
-  AudioNode* Node() const
-  {
-    return mNode;
   }
 
   const nsTArray<AudioNode::InputNode>& InputNodes() const
@@ -201,10 +186,6 @@ public:
     return aMallocSizeOf(this) + SizeOfExcludingThis(aMallocSizeOf);
   }
 
-protected:
-  nsCycleCollectingAutoRefCnt mRefCnt;
-  NS_DECL_OWNINGTHREAD
-
 private:
   void EventInsertionHelper(ErrorResult& aRv,
                             AudioTimelineEvent::Type aType,
@@ -214,8 +195,7 @@ private:
                             const float* aCurve = nullptr,
                             uint32_t aCurveLength = 0)
   {
-    AudioTimelineEvent event(aType,
-                             DOMTimeToStreamTime(aTime), aValue,
+    AudioTimelineEvent event(aType, aTime, aValue,
                              aTimeConstant, aDuration, aCurve, aCurveLength);
 
     if (!ValidateEvent(event, aRv)) {
@@ -224,18 +204,22 @@ private:
 
     AudioEventTimeline::InsertEvent<double>(event);
 
-    mCallback(mNode, event);
+    SendEventToEngine(event);
   }
 
+  void SendEventToEngine(const AudioTimelineEvent& aEvent);
+
+  nsCycleCollectingAutoRefCnt mRefCnt;
+  NS_DECL_OWNINGTHREAD
   nsRefPtr<AudioNode> mNode;
   // For every InputNode, there is a corresponding entry in mOutputParams of the
   // InputNode's mInputNode.
   nsTArray<AudioNode::InputNode> mInputNodes;
-  CallbackType mCallback;
-  const float mDefaultValue;
   const char* mName;
   // The input port used to connect the AudioParam's stream to its node's stream
   nsRefPtr<MediaInputPort> mNodeStreamPort;
+  const uint32_t mIndex;
+  const float mDefaultValue;
 };
 
 } // namespace dom

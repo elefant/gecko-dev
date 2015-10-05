@@ -94,6 +94,7 @@
 #include "mozilla/Services.h"
 #include "mozilla/StaticPtr.h"
 #include "mozilla/Telemetry.h"
+#include "mozilla/WebBrowserPersistDocumentParent.h"
 #include "mozilla/unused.h"
 #include "nsAnonymousTemporaryFile.h"
 #include "nsAppRunner.h"
@@ -5103,6 +5104,7 @@ ContentParent::GetManagedTabContext()
 mozilla::docshell::POfflineCacheUpdateParent*
 ContentParent::AllocPOfflineCacheUpdateParent(const URIParams& aManifestURI,
                                               const URIParams& aDocumentURI,
+                                              const PrincipalInfo& aLoadingPrincipalInfo,
                                               const bool& aStickDocument,
                                               const TabId& aTabId)
 {
@@ -5123,6 +5125,7 @@ bool
 ContentParent::RecvPOfflineCacheUpdateConstructor(POfflineCacheUpdateParent* aActor,
                                                   const URIParams& aManifestURI,
                                                   const URIParams& aDocumentURI,
+                                                  const PrincipalInfo& aLoadingPrincipal,
                                                   const bool& aStickDocument,
                                                   const TabId& aTabId)
 {
@@ -5131,7 +5134,7 @@ ContentParent::RecvPOfflineCacheUpdateConstructor(POfflineCacheUpdateParent* aAc
     nsRefPtr<mozilla::docshell::OfflineCacheUpdateParent> update =
         static_cast<mozilla::docshell::OfflineCacheUpdateParent*>(aActor);
 
-    nsresult rv = update->Schedule(aManifestURI, aDocumentURI, aStickDocument);
+    nsresult rv = update->Schedule(aManifestURI, aDocumentURI, aLoadingPrincipal, aStickDocument);
     if (NS_FAILED(rv) && IsAlive()) {
         // Inform the child of failure.
         unused << update->SendFinish(false, false);
@@ -5258,6 +5261,20 @@ ContentParent::DeallocPContentPermissionRequestParent(PContentPermissionRequestP
     nsContentPermissionUtils::NotifyRemoveContentPermissionRequestParent(actor);
     delete actor;
     return true;
+}
+
+PWebBrowserPersistDocumentParent*
+ContentParent::AllocPWebBrowserPersistDocumentParent(PBrowserParent* aBrowser,
+                                                     const uint64_t& aOuterWindowID)
+{
+  return new WebBrowserPersistDocumentParent();
+}
+
+bool
+ContentParent::DeallocPWebBrowserPersistDocumentParent(PWebBrowserPersistDocumentParent* aActor)
+{
+  delete aActor;
+  return true;
 }
 
 /* static */ bool

@@ -199,12 +199,6 @@ PrincipalToPrincipalInfo(nsIPrincipal* aPrincipal,
     return rv;
   }
 
-  bool isUnknownAppId;
-  rv = aPrincipal->GetUnknownAppId(&isUnknownAppId);
-  if (NS_WARN_IF(NS_FAILED(rv))) {
-    return rv;
-  }
-
   *aPrincipalInfo = ContentPrincipalInfo(BasePrincipal::Cast(aPrincipal)->OriginAttributesRef(),
                                          spec);
   return NS_OK;

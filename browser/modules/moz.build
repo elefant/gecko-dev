@@ -38,6 +38,7 @@ EXTRA_JS_MODULES += [
     'ReaderParent.jsm',
     'RecentWindow.jsm',
     'RemotePrompt.jsm',
+    'Sanitizer.jsm',
     'SelfSupportBackend.jsm',
     'SitePermissions.jsm',
     'Social.jsm',
@@ -61,6 +62,3 @@ if CONFIG['NIGHTLY_BUILD']:
 EXTRA_PP_COMPONENTS += [
     'browsermodules.manifest',
 ]
-
-if CONFIG['MOZILLA_OFFICIAL']:
-    DEFINES['MOZILLA_OFFICIAL'] = 1

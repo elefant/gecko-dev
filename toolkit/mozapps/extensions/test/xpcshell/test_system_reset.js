@@ -5,6 +5,8 @@ const PREF_SYSTEM_ADDON_SET = "extensions.systemAddonSet";
 // Enable signature checks for these tests
 Services.prefs.setBoolPref(PREF_XPI_SIGNATURES_REQUIRED, true);
 
+BootstrapMonitor.init();
+
 const featureDir = FileUtils.getDir("ProfD", ["features"]);
 
 // Build the test sets
@@ -61,8 +63,7 @@ function* check_installed(inProfile, ...versions) {
       do_check_eq(addon.signedState, AddonManager.SIGNEDSTATE_SYSTEM);
 
       // Verify the add-on actually started
-      let installed = Services.prefs.getCharPref("bootstraptest." + id + ".active_version");
-      do_check_eq(installed, versions[i]);
+      BootstrapMonitor.checkAddonStarted(id, versions[i]);
     }
     else {
       if (inProfile) {
@@ -74,12 +75,12 @@ function* check_installed(inProfile, ...versions) {
         do_check_true(!addon || !addon.isActive);
       }
 
-      try {
-        Services.prefs.getCharPref("bootstraptest." + id + ".active_version");
-        do_throw("Expected pref to be missing");
-      }
-      catch (e) {
-      }
+      BootstrapMonitor.checkAddonNotStarted(id);
+
+      if (addon)
+        BootstrapMonitor.checkAddonInstalled(id);
+      else
+        BootstrapMonitor.checkAddonNotInstalled(id);
     }
   }
 }
@@ -169,6 +170,27 @@ add_task(function* test_updated() {
   yield promiseShutdownManager();
 });
 
+// Entering safe mode should disable the updated system add-ons and use the
+// default system add-ons
+add_task(function* safe_mode_disabled() {
+  gAppInfo.inSafeMode = true;
+  startupManager(false);
+
+  yield check_installed(false, "1.0", "1.0", null);
+
+  yield promiseShutdownManager();
+});
+
+// Leaving safe mode should re-enable the updated system add-ons
+add_task(function* normal_mode_enabled() {
+  gAppInfo.inSafeMode = false;
+  startupManager(false);
+
+  yield check_installed(true, null, "1.0", "1.0");
+
+  yield promiseShutdownManager();
+});
+
 // An additional add-on in the directory should be ignored
 add_task(function* test_skips_additional() {
   // Copy in the system add-ons
@@ -185,6 +207,9 @@ add_task(function* test_skips_additional() {
 // Missing add-on should revert to the default set
 add_task(function* test_revert() {
   manuallyUninstall(featureDir, "system2@tests.mozilla.org");
+
+  // With the add-on physically gone from disk we won't see uninstall events
+  BootstrapMonitor.clear("system2@tests.mozilla.org");
 
   startupManager(false);
 
@@ -258,7 +283,7 @@ add_task(function* test_bad_app_cert() {
   // Add-on will still be present just not active
   let addon = yield promiseAddonByID("system1@tests.mozilla.org");
   do_check_neq(addon, null);
-  do_check_eq(addon.signedState, AddonManager.SIGNEDSTATE_SIGNED);
+  do_check_eq(addon.signedState, AddonManager.SIGNEDSTATE_BROKEN);
 
   yield check_installed(false, null, null, "1.0");
 

@@ -21,7 +21,7 @@ def arg_parser():
     parser.add_argument('-b', dest='builds', default='do',
                         help='Build types to run (d for debug, o for optimized).')
     parser.add_argument('-p', dest='platforms', action="append",
-                        help='Platforms to run (required if not found in the environment).')
+                        help='Platforms to run (required if not found in the environment as AUTOTRY_PLATFORM_HINT).')
     parser.add_argument('-u', dest='tests', action="append",
                         help='Test suites to run in their entirety.')
     parser.add_argument('-t', dest="talos", action="append",
@@ -194,9 +194,12 @@ class AutoTry(object):
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
             return None
 
-        kwargs = vars(arg_parser().parse_args(data.split()))
+        kwargs = vars(arg_parser().parse_args(self.split_try_string(data)))
 
         return kwargs
+
+    def split_try_string(self, data):
+        return re.findall(r'(?:\[.*?\]|\S)+', data)
 
     def save_config(self, name, data):
         assert data.startswith("try: ")
@@ -228,16 +231,39 @@ class AutoTry(object):
                 if 'subsuite' in t and t['subsuite'] == 'devtools':
                     flavor = 'devtools-chrome'
 
-                for path in paths:
-                    if flavor in ["crashtest", "reftest"]:
-                        manifest_relpath = os.path.relpath(t['manifest'], self.topsrcdir)
-                        if manifest_relpath.startswith(path):
-                            paths_by_flavor[flavor].add(manifest_relpath)
-                    else:
-                        if t['file_relpath'].startswith(path):
-                            paths_by_flavor[flavor].add(path)
+                if flavor in ['crashtest', 'reftest']:
+                    manifest_relpath = os.path.relpath(t['manifest'], self.topsrcdir)
+                    paths_by_flavor[flavor].add(os.path.dirname(manifest_relpath))
+                elif 'dir_relpath' in t:
+                    paths_by_flavor[flavor].add(t['dir_relpath'])
+                else:
+                    file_relpath = os.path.relpath(t['path'], self.topsrcdir)
+                    dir_relpath = os.path.dirname(file_relpath)
+                    paths_by_flavor[flavor].add(dir_relpath)
+
+        for flavor, path_set in paths_by_flavor.items():
+            paths_by_flavor[flavor] = self.deduplicate_prefixes(path_set, paths)
 
         return dict(paths_by_flavor)
+
+    def deduplicate_prefixes(self, path_set, input_paths):
+        # Removes paths redundant to test selection in the given path set.
+        # If a path was passed on the commandline that is the prefix of a
+        # path in our set, we only need to include the specified prefix to
+        # run the intended tests (every test in "layout/base" will run if
+        # "layout" is passed to the reftest harness).
+        removals = set()
+        additions = set()
+
+        for path in path_set:
+            full_path = path
+            while path:
+                path, _ = os.path.split(path)
+                if path in input_paths:
+                    removals.add(full_path)
+                    additions.add(path)
+
+        return additions | (path_set - removals)
 
     def remove_duplicates(self, paths_by_flavor, tests):
         rv = {}
@@ -297,6 +323,52 @@ class AutoTry(object):
         finally:
             self._run_git('reset', 'HEAD~')
 
+    def _git_find_changed_files(self):
+        # This finds the files changed on the current branch based on the
+        # diff of the current branch its merge-base base with other branches.
+        try:
+            args = ['git', 'rev-parse', 'HEAD']
+            current_branch = subprocess.check_output(args).strip()
+            args = ['git', 'for-each-ref', 'refs/heads', 'refs/remotes',
+                    '--format=%(objectname)']
+            all_branches = subprocess.check_output(args).splitlines()
+            other_branches = set(all_branches) - set([current_branch])
+            args = ['git', 'merge-base', 'HEAD'] + list(other_branches)
+            base_commit = subprocess.check_output(args).strip()
+            args = ['git', 'diff', '--name-only', '-z', 'HEAD', base_commit]
+            return subprocess.check_output(args).strip('\0').split('\0')
+        except subprocess.CalledProcessError as e:
+            print('Failed while determining files changed on this branch')
+            print('Failed whle running: %s' % args)
+            print(e.output)
+            sys.exit(1)
+
+    def _hg_find_changed_files(self):
+        hg_args = [
+            'hg', 'log', '-r',
+            '::. and not public()',
+            '--template',
+            '{join(files, "\n")}\n',
+        ]
+        try:
+            return subprocess.check_output(hg_args).splitlines()
+        except subprocess.CalledProcessError as e:
+            print('Failed while finding files changed since the last '
+                  'public ancestor')
+            print('Failed whle running: %s' % hg_args)
+            print(e.output)
+            sys.exit(1)
+
+    def find_changed_files(self):
+        """Finds files changed in a local source tree.
+
+        For hg, changes since the last public ancestor of '.' are
+        considered. For git, changes in the current branch are considered.
+        """
+        if self._use_git:
+            return self._git_find_changed_files()
+        return self._hg_find_changed_files()
+
     def push_to_try(self, msg, verbose):
         if not self._use_git:
             try:
@@ -327,3 +399,33 @@ class AutoTry(object):
             stat = subprocess.check_output(['hg', 'status'])
             return any(len(entry.strip()) and entry.strip()[0] in ('A', 'M', 'R')
                        for entry in stat.splitlines())
+
+    def find_paths_and_tags(self, verbose):
+        paths, tags = set(), set()
+        changed_files = self.find_changed_files()
+        if changed_files:
+            if verbose:
+                print("Pushing tests based on modifications to the "
+                      "following files:\n\t%s" % "\n\t".join(changed_files))
+
+            from mozbuild.frontend.reader import (
+                BuildReader,
+                EmptyConfig,
+            )
+
+            config = EmptyConfig(self.topsrcdir)
+            reader = BuildReader(config)
+            files_info = reader.files_info(changed_files)
+
+            for path, info in files_info.items():
+                paths |= info.test_files
+                tags |= info.test_tags
+
+            if verbose:
+                if paths:
+                    print("Pushing tests based on the following patterns:\n\t%s" %
+                          "\n\t".join(paths))
+                if tags:
+                    print("Pushing tests based on the following tags:\n\t%s" %
+                          "\n\t".join(tags))
+        return paths, tags

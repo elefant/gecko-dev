@@ -2710,6 +2710,7 @@ nsContentUtils::SubjectPrincipal()
   MOZ_ASSERT(NS_IsMainThread());
   JSContext* cx = GetCurrentJSContext();
   if (!cx) {
+    Telemetry::Accumulate(Telemetry::SUBJECT_PRINCIPAL_ACCESSED_WITHOUT_SCRIPT_ON_STACK, true);
     return GetSystemPrincipal();
   }
 
@@ -7818,23 +7819,26 @@ nsContentUtils::SendMouseEvent(nsCOMPtr<nsIPresShell> aPresShell,
 
   EventMessage msg;
   bool contextMenuKey = false;
-  if (aType.EqualsLiteral("mousedown"))
+  if (aType.EqualsLiteral("mousedown")) {
     msg = eMouseDown;
-  else if (aType.EqualsLiteral("mouseup"))
+  } else if (aType.EqualsLiteral("mouseup")) {
     msg = eMouseUp;
-  else if (aType.EqualsLiteral("mousemove"))
+  } else if (aType.EqualsLiteral("mousemove")) {
     msg = eMouseMove;
-  else if (aType.EqualsLiteral("mouseover"))
+  } else if (aType.EqualsLiteral("mouseover")) {
     msg = eMouseEnterIntoWidget;
-  else if (aType.EqualsLiteral("mouseout"))
+  } else if (aType.EqualsLiteral("mouseout")) {
     msg = eMouseExitFromWidget;
-  else if (aType.EqualsLiteral("contextmenu")) {
+  } else if (aType.EqualsLiteral("mouselongtap")) {
+    msg = eMouseLongTap;
+  } else if (aType.EqualsLiteral("contextmenu")) {
     msg = eContextMenu;
     contextMenuKey = (aButton == 0);
-  } else if (aType.EqualsLiteral("MozMouseHittest"))
+  } else if (aType.EqualsLiteral("MozMouseHittest")) {
     msg = eMouseHitTest;
-  else
+  } else {
     return NS_ERROR_FAILURE;
+  }
 
   if (aInputSourceArg == nsIDOMMouseEvent::MOZ_SOURCE_UNKNOWN) {
     aInputSourceArg = nsIDOMMouseEvent::MOZ_SOURCE_MOUSE;
@@ -8161,6 +8165,26 @@ nsContentUtils::InternalStorageAllowedForPrincipal(nsIPrincipal* aPrincipal,
   // About URIs are allowed to access storage, even if they don't have chrome
   // privileges. If this is not desired, than the consumer will have to
   // implement their own restriction functionality.
+  //
+  // This is due to backwards-compatibility and the state of storage access before
+  // the introducton of nsContentUtils::InternalStorageAllowedForPrincipal:
+  //
+  // BEFORE:
+  // localStorage, caches: allowed in 3rd-party iframes always
+  // IndexedDB: allowed in 3rd-party iframes only if 3rd party URI is an about:
+  //   URI within a specific whitelist
+  //
+  // AFTER:
+  // localStorage, caches: allowed in 3rd-party iframes by default. Preference
+  //   can be set to disable in 3rd-party, which will not disallow in about: URIs.
+  // IndexedDB: allowed in 3rd-party iframes by default. Preference can be set to
+  //   disable in 3rd-party, which will disallow in about: URIs, unless they are
+  //   within a specific whitelist.
+  //
+  // This means that behavior for storage with internal about: URIs should not be
+  // affected, which is desireable due to the lack of automated testing for about:
+  // URIs with these preferences set, and the importance of the correct functioning
+  // of these URIs even with custom preferences.
   nsCOMPtr<nsIURI> uri;
   nsresult rv = aPrincipal->GetURI(getter_AddRefs(uri));
   if (NS_SUCCEEDED(rv) && uri) {

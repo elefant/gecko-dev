@@ -283,11 +283,10 @@ add_task(function* test() {
       break;
     } else {
       info(`Not enough CPU time detected: ${parent.jank.totalUserTime}`);
-      info(`Details: ${JSON.stringify(parent, null, "\t")}`);
     }
   }
   isShuttingDown = true;
 
   // Cleanup
-  gBrowser.removeTab(newTab);
+  gBrowser.removeTab(newTab, {skipPermitUnload: true});
 });

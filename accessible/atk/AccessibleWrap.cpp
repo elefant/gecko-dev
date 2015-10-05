@@ -1115,6 +1115,10 @@ GetInterfacesForProxy(ProxyAccessible* aProxy, uint32_t aInterfaces)
   if (aInterfaces & Interfaces::DOCUMENT)
     interfaces |= 1 << MAI_INTERFACE_DOCUMENT;
 
+  if (aInterfaces & Interfaces::SELECTION) {
+    interfaces |= 1 << MAI_INTERFACE_SELECTION;
+  }
+
   return interfaces;
 }
 
@@ -1251,6 +1255,11 @@ AccessibleWrap::HandleAccEvent(AccEvent* aEvent)
       g_signal_emit_by_name(atkObj, "selection_changed");
       break;
     }
+
+    case nsIAccessibleEvent::EVENT_ALERT:
+      // A hack using state change showing events as alert events.
+      atk_object_notify_state_change(atkObj, ATK_STATE_SHOWING, true);
+      break;
 
     case nsIAccessibleEvent::EVENT_TEXT_SELECTION_CHANGED:
         g_signal_emit_by_name(atkObj, "text_selection_changed");

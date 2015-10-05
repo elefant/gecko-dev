@@ -5314,6 +5314,12 @@
     "kind": "flag",
     "description": "Whether enablePrivilege has ever been called during the current session"
   },
+  "SUBJECT_PRINCIPAL_ACCESSED_WITHOUT_SCRIPT_ON_STACK": {
+    "expires_in_version": "46",
+    "alert_emails": ["bholley@mozilla.com"],
+    "kind": "flag",
+    "description": "Whether the subject principal was accessed without script on the stack during the current session"
+  },
   "TOUCH_ENABLED_DEVICE": {
     "expires_in_version": "never",
     "kind": "boolean",
@@ -5981,6 +5987,22 @@
     "high": "10000",
     "n_buckets": "1000",
     "description": "The time (in milliseconds) that it took a 'listAddons' request to go round trip."
+  },
+  "DEVTOOLS_DEBUGGER_RDP_LOCAL_LISTWORKERS_MS": {
+    "alert_emails": ["dev-developer-tools@lists.mozilla.org", "jan@mozilla.com"],
+    "expires_in_version": "55",
+    "kind": "exponential",
+    "high": "10000",
+    "n_buckets": "50",
+    "description": "The time (in milliseconds) that it took a 'listWorkers' request to go round trip."
+  },
+  "DEVTOOLS_DEBUGGER_RDP_REMOTE_LISTWORKERS_MS": {
+    "alert_emails": ["dev-developer-tools@lists.mozilla.org", "jan@mozilla.com"],
+    "expires_in_version": "55",
+    "kind": "exponential",
+    "high": "10000",
+    "n_buckets": "50",
+    "description": "The time (in milliseconds) that it took a 'listWorkers' request to go round trip."
   },
   "DEVTOOLS_DEBUGGER_RDP_LOCAL_LISTPROCESSES_MS": {
     "expires_in_version": "never",
@@ -8319,6 +8341,13 @@
     "releaseChannelCollection": "opt-out",
     "description": "Number times room context is clicked to visit the attached URL"
   },
+  "LOOP_ROOM_SESSION_WITHCHAT": {
+    "alert_emails": ["firefox-dev@mozilla.org", "mdeboer@mozilla.com"],
+    "expires_in_version": "45",
+    "kind": "count",
+    "releaseChannelCollection": "opt-out",
+    "description": "Number of sessions where at least one chat message was exchanged"
+  },
   "E10S_AUTOSTART": {
     "expires_in_version": "never",
     "kind": "boolean",
@@ -8844,6 +8873,38 @@
     "expires_in_version": "45",
     "kind": "count",
     "description": "Counts the number of times that a sync has failed because of trying to sync before server backoff interval has passed."
+  },
+  "ABOUT_ACCOUNTS_CONTENT_SERVER_LOAD_STARTED_COUNT": {
+    "alert_emails": ["mobile-frontend@mozilla.com"],
+    "expires_in_version": "50",
+    "kind": "count",
+    "keyed": true,
+    "description": "The number of remote content loads started. Keyed on fxa-content-server endpoint, like '/signin' or '/settings'."
+  },
+  "ABOUT_ACCOUNTS_CONTENT_SERVER_LOADED_RATE": {
+    "alert_emails": ["mobile-frontend@mozilla.com"],
+    "expires_in_version": "50",
+    "kind": "boolean",
+    "keyed": true,
+    "description": "The number of remote content loads that fail (0) vs. receive the remote 'LOADED' message (1). Keyed on fxa-content-server endpoint path, like '/signin' or '/settings'."
+  },
+  "ABOUT_ACCOUNTS_CONTENT_SERVER_LOADED_TIME_MS": {
+    "alert_emails": ["mobile-frontend@mozilla.com"],
+    "expires_in_version": "50",
+    "keyed": true,
+    "kind": "exponential",
+    "high": "60000",
+    "n_buckets": 50,
+    "description": "The length of time (in milliseconds) between starting remote content load and receiving the remote 'LOADED' message. Keyed on fxa-content-server endpoint path, like '/signin' or '/settings'."
+  },
+  "ABOUT_ACCOUNTS_CONTENT_SERVER_FAILURE_TIME_MS": {
+    "alert_emails": ["mobile-frontend@mozilla.com"],
+    "expires_in_version": "50",
+    "keyed": true,
+    "kind": "exponential",
+    "high": "60000",
+    "n_buckets": 50,
+    "description": "The length of time (in milliseconds) between starting remote content load and failing with a connection error. Keyed on fxa-content-server endpoint path, like '/signin' or '/settings'."
   },
   "SLOW_SCRIPT_NOTICE_COUNT": {
     "alert_emails": ["perf-telemetry-alerts@mozilla.com"],
@@ -9766,6 +9827,13 @@
     "expires_in_version": "55",
     "kind": "count",
     "description": "Attempt to notify ServiceWorker of push notification resubscription."
+  },
+  "D3D11_SYNC_HANDLE_FAILURE": {
+    "alert_emails": ["bschouten@mozilla.com","danderson@mozilla.com","msreckovic@mozilla.com","ashughes@mozilla.com"],
+    "expires_in_version": "50",
+    "releaseChannelCollection": "opt-out",
+    "kind": "count",
+    "description": "Number of times the D3D11 compositor failed to get a texture sync handle."
   },
   "PLUGIN_ACTIVATION_COUNT": {
     "alert_emails": ["cpeterson@mozilla.com"],

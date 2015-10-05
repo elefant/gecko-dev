@@ -156,13 +156,13 @@ public:
   const nsIntSize& TargetSize() const { return nsIntSize(); }
   const gfxSize& Scale() const { return gfxSize(1.0, 1.0); }
 
-  nsresult BeginFrame(const nsIntSize&, uint8_t*, bool, bool = false)
+  nsresult BeginFrame(const nsIntSize&, const Maybe<nsIntRect>&, uint8_t*, bool, bool = false)
   {
     return NS_ERROR_FAILURE;
   }
 
   uint8_t* RowBuffer() { return nullptr; }
-  void ClearRow(uint32_t = 0);
+  void ClearRow(uint32_t = 0) { }
   void CommitRow() { }
   bool HasInvalidation() const { return false; }
   DownscalerInvalidRect TakeInvalidRect() { return DownscalerInvalidRect(); }
@@ -171,33 +171,7 @@ public:
 
 #endif // MOZ_ENABLE_SKIA
 
-/**
- * Deinterlacer is a utility class to allow Downscaler to work with interlaced
- * images.
 
- * Since Downscaler needs to receive rows in top-to-bottom or
- * bottom-to-top order, it can't natively handle interlaced images, in which the
- * rows arrive in an interleaved order. Deinterlacer solves this problem by
- * acting as an intermediate buffer that records decoded rows. Unlike
- * Downscaler, it allows the rows to be written in arbitrary order. After each
- * pass, calling PropagatePassToDownscaler() will downscale every buffered row
- * in a single operation. The rows remain in the buffer, so rows that were
- * written in one pass will be included in subsequent passes.
- */
-class Deinterlacer
-{
-public:
-  explicit Deinterlacer(const nsIntSize& aImageSize);
-
-  uint8_t* RowBuffer(uint32_t aRow);
-  void PropagatePassToDownscaler(Downscaler& aDownscaler);
-
-private:
-  uint32_t RowSize() const;
-
-  nsIntSize mImageSize;
-  UniquePtr<uint8_t[]> mBuffer;
-};
 
 } // namespace image
 } // namespace mozilla

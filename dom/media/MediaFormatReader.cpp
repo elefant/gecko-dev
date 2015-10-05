@@ -213,29 +213,24 @@ private:
   nsTArray<uint8_t> mInitData;
   nsString mInitDataType;
 };
+
+void
+MediaFormatReader::SetCDMProxy(CDMProxy* aProxy)
+{
+  nsRefPtr<CDMProxy> proxy = aProxy;
+  nsRefPtr<MediaFormatReader> self = this;
+  nsCOMPtr<nsIRunnable> r = NS_NewRunnableFunction([=] () {
+    self->mCDMProxy = proxy;
+  });
+  OwnerThread()->DispatchDirectTask(r.forget());
+}
 #endif // MOZ_EME
 
-bool MediaFormatReader::IsWaitingOnCDMResource() {
+bool
+MediaFormatReader::IsWaitingOnCDMResource() {
+  MOZ_ASSERT(OnTaskQueue());
 #ifdef MOZ_EME
-  nsRefPtr<CDMProxy> proxy;
-  {
-    if (!IsEncrypted()) {
-      // Not encrypted, no need to wait for CDMProxy.
-      return false;
-    }
-    ReentrantMonitorAutoEnter mon(mDecoder->GetReentrantMonitor());
-    proxy = mDecoder->GetCDMProxy();
-    if (!proxy) {
-      // We're encrypted, we need a CDMProxy to decrypt file.
-      return true;
-    }
-  }
-  // We'll keep waiting if the CDM hasn't informed Gecko of its capabilities.
-  {
-    CDMCaps::AutoLock caps(proxy->Capabilites());
-    LOG("capsKnown=%d", caps.AreCapsKnown());
-    return !caps.AreCapsKnown();
-  }
+  return IsEncrypted() && !mCDMProxy;
 #else
   return false;
 #endif
@@ -392,18 +387,8 @@ MediaFormatReader::EnsureDecodersCreated()
       // even if EME is disabled, so that if script tries and fails to create
       // a CDM, we can detect that and notify chrome and show some UI
       // explaining that we failed due to EME being disabled.
-      nsRefPtr<CDMProxy> proxy;
-      {
-        ReentrantMonitorAutoEnter mon(mDecoder->GetReentrantMonitor());
-        proxy = mDecoder->GetCDMProxy();
-        MOZ_ASSERT(proxy);
-
-        CDMCaps::AutoLock caps(proxy->Capabilites());
-        mInfo.mVideo.mIsRenderedExternally = caps.CanRenderVideo();
-        mInfo.mAudio.mIsRenderedExternally = caps.CanRenderAudio();
-      }
-
-      mPlatform = PlatformDecoderModule::CreateCDMWrapper(proxy);
+      MOZ_ASSERT(mCDMProxy);
+      mPlatform = PlatformDecoderModule::CreateCDMWrapper(mCDMProxy);
       NS_ENSURE_TRUE(mPlatform, false);
 #else
       // EME not supported.
@@ -454,6 +439,36 @@ MediaFormatReader::EnsureDecodersCreated()
 }
 
 bool
+MediaFormatReader::EnsureDecoderInitialized(TrackType aTrack)
+{
+  MOZ_ASSERT(OnTaskQueue());
+  auto& decoder = GetDecoderData(aTrack);
+
+  if (!decoder.mDecoder || decoder.mInitPromise.Exists()) {
+    MOZ_ASSERT(decoder.mDecoder);
+    return false;
+  }
+  if (decoder.mDecoderInitialized) {
+    return true;
+  }
+  nsRefPtr<MediaFormatReader> self = this;
+  decoder.mInitPromise.Begin(decoder.mDecoder->Init()
+       ->Then(OwnerThread(), __func__,
+              [self] (TrackType aTrack) {
+                auto& decoder = self->GetDecoderData(aTrack);
+                decoder.mInitPromise.Complete();
+                decoder.mDecoderInitialized = true;
+                self->ScheduleUpdate(aTrack);
+              },
+              [self, aTrack] (MediaDataDecoder::DecoderFailureReason aResult) {
+                auto& decoder = self->GetDecoderData(aTrack);
+                decoder.mInitPromise.Complete();
+                self->NotifyError(aTrack);
+              }));
+  return false;
+}
+
+bool
 MediaFormatReader::EnsureDecodersInitialized()
 {
   MOZ_ASSERT(OnTaskQueue());
@@ -464,16 +479,19 @@ MediaFormatReader::EnsureDecodersInitialized()
   // will call ScheduleUpdate() again.
   // It also avoids calling decoder->Init() multiple times.
   if (mDecodersInitRequest.Exists()) {
+    MOZ_ASSERT(false);
     return false;
   }
 
   nsTArray<nsRefPtr<MediaDataDecoder::InitPromise>> promises;
 
   if (mVideo.mDecoder && !mVideo.mDecoderInitialized) {
+    MOZ_ASSERT(!mVideo.mInitPromise.Exists());
     promises.AppendElement(mVideo.mDecoder->Init());
   }
 
   if (mAudio.mDecoder && !mAudio.mDecoderInitialized) {
+    MOZ_ASSERT(!mAudio.mInitPromise.Exists());
     promises.AppendElement(mAudio.mDecoder->Init());
   }
 
@@ -501,17 +519,14 @@ MediaFormatReader::OnDecoderInitDone(const nsTArray<TrackType>& aTrackTypes)
   for (const auto& track : aTrackTypes) {
     auto& decoder = GetDecoderData(track);
     decoder.mDecoderInitialized = true;
-
-    ScheduleUpdate(track);
   }
 
-  if (!mMetadataPromise.IsEmpty()) {
-    mInitDone = true;
-    nsRefPtr<MetadataHolder> metadata = new MetadataHolder();
-    metadata->mInfo = mInfo;
-    metadata->mTags = nullptr;
-    mMetadataPromise.Resolve(metadata, __func__);
-  }
+  MOZ_ASSERT(!mMetadataPromise.IsEmpty());
+  mInitDone = true;
+  nsRefPtr<MetadataHolder> metadata = new MetadataHolder();
+  metadata->mInfo = mInfo;
+  metadata->mTags = nullptr;
+  mMetadataPromise.Resolve(metadata, __func__);
 }
 
 void
@@ -925,8 +940,7 @@ MediaFormatReader::DecodeDemuxedSamples(TrackType aTrack,
     return;
   }
 
-  if (!EnsureDecodersInitialized()) {
-    ScheduleUpdate(aTrack);
+  if (!EnsureDecoderInitialized(aTrack)) {
     return;
   }
 
@@ -1055,7 +1069,7 @@ MediaFormatReader::Update(TrackType aTrack)
 {
   MOZ_ASSERT(OnTaskQueue());
 
-  if (mShutdown) {
+  if (mShutdown || !mInitDone) {
     return;
   }
 

@@ -163,7 +163,7 @@ loop.shared.views = (function(_, mozL10n) {
         <div>
           <button className={screenShareClasses}
                   onClick={this.handleClick}
-                  ref="menu-button"
+                  ref="anchor"
                   title={this._getTitle()}>
             {isActive ? null : <span className="chevron"/>}
           </button>
@@ -203,11 +203,48 @@ loop.shared.views = (function(_, mozL10n) {
     },
 
     /**
-     * Show or hide the settings menu
+     * Reposition Menu if cropped
+     *
+     * Added to reposition the menu if it is cropped on the left side because of
+     * a long text string. This function measures how much the menu is cropped
+     * on the left or right and adjusts the coordinates so the menu isn't cropped.
+     * Also, sets the left style to auto, to prevent complexity in calculations
+     *
+     * The dropdownmenu mixin needs to be revamped, along with all components
+     * using dropdown menus. Components should be utilizing a global function
+     * for menu positions and it should be consistent throughout.
+     *
      */
-    handleClick: function(event) {
-      event.preventDefault();
-      this.toggleDropdownMenu();
+    _repositionMenu: function() {
+      if (this.refs.menu && this.state.showMenu) {
+        var menuNode = this.refs.menu && this.refs.menu.getDOMNode();
+
+        if (menuNode) {
+          // Amount of pixels that the dropdown needs to stay away from the edges
+          // of the page body. Copied from the mixin.
+          var boundOffset = 4;
+          var menuNodeRect = menuNode.getBoundingClientRect();
+          var menuComputedStyle = window.getComputedStyle(menuNode);
+          var documentBody = this.getDOMNode().ownerDocument.body;
+          var bodyRect = documentBody.getBoundingClientRect();
+          var menuLeft = parseFloat(menuNodeRect.left);
+          var menuRight = parseFloat(menuNodeRect.right);
+          var bodyRight = parseFloat(bodyRect.right);
+
+          menuNode.style.left = "auto";
+
+          // If menu is too close or cropped on left, move right
+          if (menuLeft < -boundOffset) {
+            menuNode.style.right =
+              (parseFloat(menuComputedStyle.right) + menuLeft - boundOffset) + "px";
+          }
+          // If menu is too close or cropped on right, move left
+          if (menuRight > bodyRight - boundOffset) {
+            menuNode.style.right =
+              (parseFloat(menuComputedStyle.right) + (menuRight - bodyRight) + boundOffset) + "px";
+          }
+        }
+      }
     },
 
     /**
@@ -339,7 +376,8 @@ loop.shared.views = (function(_, mozL10n) {
         audio: {enabled: true, visible: true},
         screenShare: {state: SCREEN_SHARE_STATES.INACTIVE, visible: false},
         settingsMenuItems: null,
-        enableHangup: true
+        enableHangup: true,
+        showHangup: true
       };
     },
 
@@ -360,6 +398,7 @@ loop.shared.views = (function(_, mozL10n) {
       screenShare: React.PropTypes.object,
       settingsMenuItems: React.PropTypes.array,
       show: React.PropTypes.bool.isRequired,
+      showHangup: React.PropTypes.bool,
       video: React.PropTypes.object.isRequired
     },
 
@@ -456,14 +495,17 @@ loop.shared.views = (function(_, mozL10n) {
       });
       return (
         <ul className={conversationToolbarCssClasses}>
-          <li className="conversation-toolbar-btn-box btn-hangup-entry">
-            <button className="btn btn-hangup"
-                    disabled={!this.props.enableHangup}
-                    onClick={this.handleClickHangup}
-                    title={mozL10n.get("hangup_button_title")}>
-              {this._getHangupButtonLabel()}
-            </button>
-          </li>
+          {
+            this.props.showHangup ?
+            <li className="conversation-toolbar-btn-box btn-hangup-entry">
+              <button className="btn btn-hangup"
+                      disabled={!this.props.enableHangup}
+                      onClick={this.handleClickHangup}
+                      title={mozL10n.get("hangup_button_title")}>
+                {this._getHangupButtonLabel()}
+              </button>
+            </li> : null
+          }
           <li className="conversation-toolbar-btn-box">
             <div className={mediaButtonGroupCssClasses}>
                 <MediaControlButton action={this.handleToggleVideo}

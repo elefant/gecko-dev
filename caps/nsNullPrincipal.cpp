@@ -57,7 +57,6 @@ nsresult
 nsNullPrincipal::Init(const OriginAttributes& aOriginAttributes)
 {
   mOriginAttributes = aOriginAttributes;
-  MOZ_ASSERT(AppId() != nsIScriptSecurityManager::UNKNOWN_APP_ID);
 
   mURI = nsNullPrincipalURI::Create();
   NS_ENSURE_TRUE(mURI, NS_ERROR_NOT_AVAILABLE);
@@ -108,15 +107,9 @@ nsNullPrincipal::GetOriginInternal(nsACString& aOrigin)
   return mURI->GetSpec(aOrigin);
 }
 
-NS_IMETHODIMP
-nsNullPrincipal::CheckMayLoad(nsIURI* aURI, bool aReport, bool aAllowIfInheritsPrincipal)
- {
-  if (aAllowIfInheritsPrincipal) {
-    if (nsPrincipal::IsPrincipalInherited(aURI)) {
-      return NS_OK;
-    }
-  }
-
+bool
+nsNullPrincipal::MayLoadInternal(nsIURI* aURI)
+{
   // Also allow the load if we are the principal of the URI being checked.
   nsCOMPtr<nsIURIWithPrincipal> uriPrinc = do_QueryInterface(aURI);
   if (uriPrinc) {
@@ -124,16 +117,11 @@ nsNullPrincipal::CheckMayLoad(nsIURI* aURI, bool aReport, bool aAllowIfInheritsP
     uriPrinc->GetPrincipal(getter_AddRefs(principal));
 
     if (principal == this) {
-      return NS_OK;
+      return true;
     }
   }
 
-  if (aReport) {
-    nsScriptSecurityManager::ReportError(
-      nullptr, NS_LITERAL_STRING("CheckSameOriginError"), mURI, aURI);
-  }
-
-  return NS_ERROR_DOM_BAD_URI;
+  return false;
 }
 
 NS_IMETHODIMP
@@ -173,9 +161,6 @@ nsNullPrincipal::Read(nsIObjectInputStream* aStream)
 NS_IMETHODIMP
 nsNullPrincipal::Write(nsIObjectOutputStream* aStream)
 {
-  NS_ENSURE_TRUE(mOriginAttributes.mAppId != nsIScriptSecurityManager::UNKNOWN_APP_ID,
-                 NS_ERROR_INVALID_ARG);
-
   nsAutoCString suffix;
   OriginAttributesRef().CreateSuffix(suffix);
 

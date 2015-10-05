@@ -16,6 +16,7 @@ if CONFIG['MOZ_B2G_BT']:
         ]
 
     SOURCES += [
+        'common/BluetoothCommon.cpp',
         'common/BluetoothHidManager.cpp',
         'common/BluetoothInterface.cpp',
         'common/BluetoothProfileController.cpp',
@@ -83,6 +84,7 @@ if CONFIG['MOZ_B2G_BT']:
                 'bluedroid/BluetoothDaemonSetupInterface.cpp',
                 'bluedroid/BluetoothDaemonSocketInterface.cpp',
                 'bluedroid/BluetoothGattManager.cpp',
+                'bluedroid/BluetoothMapBMessage.cpp',
                 'bluedroid/BluetoothMapFolder.cpp',
                 'bluedroid/BluetoothMapSmsManager.cpp',
                 'bluedroid/BluetoothOppManager.cpp',
@@ -137,6 +139,7 @@ EXPORTS.mozilla.dom.bluetooth.ipc += [
 ]
 EXPORTS.mozilla.dom.bluetooth += [
     'common/BluetoothCommon.h',
+    'common/BluetoothHashKeys.h',
     'common/webapi/BluetoothAdapter.h',
     'common/webapi/BluetoothClassOfDevice.h',
     'common/webapi/BluetoothDevice.h',

@@ -58,12 +58,12 @@ function runTest() {
           SimpleTest.finish();
         });
 
-        let frameScript = 
+        let frameScript =
 `
 function getNodePrincipalOrigin() {
   sendAsyncMessage("my-e10s-extension-message", {}, { origin: content.document.nodePrincipal.origin });
 }
-`;        
+`;
         fsl.loadFrameScript("data:,(" + frameScript + ")()", true);
     });
   });
