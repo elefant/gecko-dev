@@ -1132,7 +1132,11 @@ void nsBaseWidget::CreateCompositor(int aWidth, int aHeight)
 
   mLayerManager = lm.forget();
 
-  gfxPlatform::GetPlatform()->NotifyCompositorCreated(mLayerManager->GetCompositorBackendType());
+  if (mWindowType == eWindowType_toplevel) {
+    // Only track compositors for top-level windows, since other window types
+    // may use the basic compositor.
+    gfxPlatform::GetPlatform()->NotifyCompositorCreated(mLayerManager->GetCompositorBackendType());
+  }
 }
 
 bool nsBaseWidget::ShouldUseOffMainThreadCompositing()
@@ -1850,10 +1854,8 @@ nsIWidget::LookupRegisteredPluginWindow(uintptr_t aWindowID)
   return nullptr;
 #else
   MOZ_ASSERT(NS_IsMainThread());
-  nsIWidget* widget = nullptr;
   MOZ_ASSERT(sPluginWidgetList);
-  sPluginWidgetList->Get((void*)aWindowID, &widget);
-  return widget;
+  return sPluginWidgetList->GetWeak((void*)aWindowID);
 #endif
 }
 

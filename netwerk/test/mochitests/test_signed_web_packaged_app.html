@@ -35,7 +35,7 @@ SpecialPowers.pushPrefEnv(
 
 SimpleTest.waitForExplicitFinish();
 
-// Listen for and count process-created event. Since we are loading a 
+// Listen for and count process-created event. Since we are loading a
 // signed content from a remote tab, there shouls be two processes created.
 // One is for remote tab and one for the signed package.
 var kProcessCreatedTopic = "process-priority-manager:TEST-ONLY:process-created";

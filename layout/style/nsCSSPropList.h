@@ -3590,11 +3590,14 @@ CSS_PROP_POSITION(
     kWidthKTable,
     offsetof(nsStylePosition, mWidth),
     eStyleAnimType_Coord)
+#ifndef CSS_PROP_LIST_EXCLUDE_INTERNAL
 CSS_PROP_USERINTERFACE(
     -moz-window-dragging,
     _moz_window_dragging,
     CSS_PROP_DOMPROP_PREFIXED(WindowDragging),
-    CSS_PROPERTY_PARSE_VALUE,
+    CSS_PROPERTY_INTERNAL |
+        CSS_PROPERTY_PARSE_VALUE |
+        CSS_PROPERTY_ENABLED_IN_UA_SHEETS_AND_CHROME,
     "",
     VARIANT_HK,
     kWindowDraggingKTable,
@@ -3604,12 +3607,15 @@ CSS_PROP_UIRESET(
     -moz-window-shadow,
     _moz_window_shadow,
     CSS_PROP_DOMPROP_PREFIXED(WindowShadow),
-    CSS_PROPERTY_PARSE_VALUE,
+    CSS_PROPERTY_INTERNAL |
+        CSS_PROPERTY_PARSE_VALUE |
+        CSS_PROPERTY_ENABLED_IN_UA_SHEETS_AND_CHROME,
     "",
     VARIANT_HK,
     kWindowShadowKTable,
     CSS_PROP_NO_OFFSET,
     eStyleAnimType_None)
+#endif
 CSS_PROP_TEXT(
     word-break,
     word_break,
@@ -3754,10 +3760,11 @@ CSS_PROP_FONT(
     -moz-script-level,
     script_level,
     ScriptLevel,
-    // REVIEW: no range restriction?
-    // NOTE: CSSParserImpl::ParseSingleValueProperty only accepts this
-    // property when mUnsafeRulesEnabled is set.
+    // We only allow 'script-level' when unsafe rules are enabled, because
+    // otherwise it could interfere with rulenode optimizations if used in
+    // a non-MathML-enabled document.
     CSS_PROPERTY_INTERNAL |
+        CSS_PROPERTY_ENABLED_IN_UA_SHEETS |
         CSS_PROPERTY_PARSE_VALUE,
     "",
     // script-level can take Auto, Integer and Number values, but only Auto
@@ -3771,7 +3778,6 @@ CSS_PROP_FONT(
     -moz-script-size-multiplier,
     script_size_multiplier,
     ScriptSizeMultiplier,
-    // REVIEW: no range restriction?
     CSS_PROPERTY_INTERNAL |
         CSS_PROPERTY_PARSE_INACCESSIBLE,
     "",
@@ -3783,7 +3789,6 @@ CSS_PROP_FONT(
     -moz-script-min-size,
     script_min_size,
     ScriptMinSize,
-    // REVIEW: no range restriction?
     CSS_PROPERTY_INTERNAL |
         CSS_PROPERTY_PARSE_INACCESSIBLE,
     "",
@@ -3806,9 +3811,8 @@ CSS_PROP_FONT(
     -moz-math-display,
     math_display,
     MathDisplay,
-    // NOTE: CSSParserImpl::ParseSingleValueProperty only accepts this
-    // property when mUnsafeRulesEnabled is set.
     CSS_PROPERTY_INTERNAL |
+        CSS_PROPERTY_ENABLED_IN_UA_SHEETS |
         CSS_PROPERTY_PARSE_VALUE,
     "",
     VARIANT_HK,

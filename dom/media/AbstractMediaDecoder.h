@@ -48,10 +48,6 @@ enum class MediaDecoderEventVisibility : int8_t {
 class AbstractMediaDecoder : public nsIObserver
 {
 public:
-  // Returns the monitor for other threads to synchronise access to
-  // state.
-  virtual ReentrantMonitor& GetReentrantMonitor() = 0;
-
   // A special version of the above for the ogg decoder that is allowed to be
   // called cross-thread.
   virtual bool IsOggDecoderShutdown() { return false; }
@@ -124,9 +120,6 @@ public:
 
   // Set by Reader if the current audio track can be offloaded
   virtual void SetPlatformCanOffloadAudio(bool aCanOffloadAudio) {}
-
-  // Called by Decoder/State machine to check audio offload condtions are met
-  virtual bool CheckDecoderCanOffloadAudio() { return false; }
 
   // Called from HTMLMediaElement when owner document activity changes
   virtual void SetElementVisibility(bool aIsVisible) {}
