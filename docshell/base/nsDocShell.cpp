@@ -13059,6 +13059,13 @@ nsDocShell::GetIsContent(bool* aIsContent)
   return NS_OK;
 }
 
+NS_IMETHODIMP
+nsDocShell::SetPackageId(const nsACString& aPackageId)
+{
+  mPackageId = aPackageId;
+  return NS_OK;
+}
+
 bool
 nsDocShell::IsOKToLoadURI(nsIURI* aURI)
 {
@@ -13799,6 +13806,8 @@ nsDocShell::GetOriginAttributes()
   if (mFrameType == eFrameTypeBrowser) {
     attrs.mInBrowser = true;
   }
+
+  attrs.mSignedPkg = NS_ConvertUTF8toUTF16(mPackageId);
 
   return attrs;
 }
