@@ -1134,6 +1134,19 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
     }
   }
 
+  nsCString packageId;
+  if (mLoadContext) {
+    // mChannel has been updated the origin as a signed package content.
+    // It will be updated to the child through SendOnStartRequest.
+    mozilla::OriginAttributes attr;
+    if (!mLoadContext->GetOriginAttributes(attr)) {
+      NS_WARNING("GetOriginAttributes failed");
+    }
+    packageId = NS_ConvertUTF16toUTF8(attr.mSignedPkg);
+  }
+
+  LOG(("HttpChannelParent::OnStartRequest: packageId: %s", packageId.get()));
+
   if (mIPCClosed ||
       !SendOnStartRequest(channelStatus,
                           responseHead ? *responseHead : nsHttpResponseHead(),
@@ -1144,7 +1157,8 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
                           expirationTime, cachedCharset, secInfoSerialization,
                           mChannel->GetSelfAddr(), mChannel->GetPeerAddr(),
                           redirectCount,
-                          cacheKeyValue))
+                          cacheKeyValue,
+                          packageId))
   {
     return NS_ERROR_UNEXPECTED;
   }

@@ -519,6 +519,9 @@ private:
     // If non-null, warnings should be reported to this object.
     HttpChannelSecurityWarningReporter* mWarningReporter;
 
+    // Indicate that if this channel is associated with a signed content.
+    bool mIsSignedContent;
+
 protected:
     virtual void DoNotifyListenerCleanup() override;
 

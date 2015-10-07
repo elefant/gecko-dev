@@ -267,6 +267,7 @@ nsHttpChannel::nsHttpChannel()
     , mPushedStream(nullptr)
     , mLocalBlocklist(false)
     , mWarningReporter(nullptr)
+    , mIsSignedContent(false)
     , mDidReval(false)
 {
     LOG(("Creating nsHttpChannel [this=%p]\n", this));
@@ -5635,6 +5636,16 @@ nsHttpChannel::GetRequestMethod(nsACString& aMethod)
 NS_IMETHODIMP
 nsHttpChannel::OnStartSignedPackageRequest(const nsACString& aPackageId)
 {
+    mIsSignedContent = true;
+
+    // Update the packageId to the loadcontext to update the origin
+    // of this channel.
+    nsCOMPtr<nsILoadContext> loadContext;
+    NS_QueryNotificationCallbacks(this, loadContext);
+    if (loadContext) {
+        loadContext->SetPackageId(aPackageId);
+    }
+
     nsCOMPtr<nsIPackagedAppChannelListener> listener;
     NS_QueryNotificationCallbacks(this, listener);
 
@@ -5656,6 +5667,16 @@ nsHttpChannel::OnStartRequest(nsIRequest *request, nsISupports *ctxt)
 {
     PROFILER_LABEL("nsHttpChannel", "OnStartRequest",
         js::ProfileEntry::Category::NETWORK);
+
+    // Restore the packageId in the loadContext so that we will not
+    // use the packageId that was set in the previous load.
+    if (!mIsSignedContent) {
+        nsCOMPtr<nsILoadContext> loadContext;
+        NS_QueryNotificationCallbacks(this, loadContext);
+        if (loadContext) {
+            loadContext->SetPackageId(EmptyCString());
+        }
+    }
 
     if (!(mCanceled || NS_FAILED(mStatus))) {
         // capture the request's status, so our consumers will know ASAP of any

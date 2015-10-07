@@ -284,5 +284,12 @@ OfflineCacheUpdateParent::GetOriginAttributes(JS::MutableHandleValue aAttrs)
     return NS_OK;
 }
 
+NS_IMETHODIMP
+OfflineCacheUpdateParent::SetPackageId(const nsACString& aPackageId)
+{
+    mOriginAttributes.mSignedPkg = NS_ConvertUTF8toUTF16(aPackageId);
+    return NS_OK;
+}
+
 } // namespace docshell
 } // namespace mozilla
