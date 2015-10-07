@@ -5676,6 +5676,9 @@ nsHttpChannel::GetRequestMethod(nsACString& aMethod)
 NS_IMETHODIMP
 nsHttpChannel::OnStartSignedPackageRequest(const nsACString& aPackageId)
 {
+    // Update the packageId of this channel.
+    mPackageId = aPackageId;
+
     nsCOMPtr<nsIPackagedAppChannelListener> listener;
     NS_QueryNotificationCallbacks(this, listener);
 

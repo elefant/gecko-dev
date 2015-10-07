@@ -30,8 +30,9 @@ function make_channel(url) {
                          Ci.nsIContentPolicy.TYPE_OTHER);
 }
 
-function Listener(callback) {
+function Listener(callback, expectedPackageId) {
     this._callback = callback;
+    this._expectedPackageId = expectedPackageId;
 }
 
 Listener.prototype = {
@@ -59,6 +60,11 @@ Listener.prototype = {
     },
     onStartRequest: function(request, ctx) {
         this.gotStartRequest = true;
+        if (this._expectedPackageId) {
+          equal(request.QueryInterface(Ci.nsIHttpChannelInternal).packageId,
+                this._expectedPackageId,
+                "Should have expected package");
+        }
     },
     onStopRequest: function(request, ctx, status) {
         this.gotStopRequestOK = (Cr.NS_OK === status);
@@ -249,7 +255,7 @@ function test_channel_with_bad_signature_from_trusted_origin() {
     do_check_true(l.gotStopRequestOK);
     Services.prefs.clearUserPref(pref);
     run_next_test();
-  }), null);
+  }, "611FC2FE-491D-4A47-B3B3-43FBDF6F404F"), null);
 }
 
 function test_channel_with_good_signature() {

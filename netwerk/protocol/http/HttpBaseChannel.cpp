@@ -2212,6 +2212,20 @@ HttpBaseChannel::SetRedirectMode(uint32_t aMode)
   return NS_OK;
 }
 
+NS_IMETHODIMP
+HttpBaseChannel::GetPackageId(nsACString& aPackageId)
+{
+  aPackageId = mPackageId;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+HttpBaseChannel::SetPackageId(const nsACString& aPackageId)
+{
+  mPackageId = aPackageId;
+  return NS_OK;
+}
+
 //-----------------------------------------------------------------------------
 // HttpBaseChannel::nsISupportsPriority
 //-----------------------------------------------------------------------------

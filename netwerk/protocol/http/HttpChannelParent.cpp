@@ -1136,6 +1136,12 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
     }
   }
 
+  nsCString packageId;
+  mChannel->GetPackageId(packageId);
+  if (packageId.IsEmpty()) {
+    LOG(("HttpChannelParent::OnStartRequest: packageId: %s", packageId.get()));
+  }
+
   if (mIPCClosed ||
       !SendOnStartRequest(channelStatus,
                           responseHead ? *responseHead : nsHttpResponseHead(),
@@ -1146,7 +1152,8 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
                           expirationTime, cachedCharset, secInfoSerialization,
                           mChannel->GetSelfAddr(), mChannel->GetPeerAddr(),
                           redirectCount,
-                          cacheKeyValue))
+                          cacheKeyValue,
+                          packageId))
   {
     return NS_ERROR_UNEXPECTED;
   }
