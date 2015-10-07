@@ -68,6 +68,8 @@
 #include "nsJSUtils.h"
 #include "nsILoadInfo.h"
 #include "nsXPCOMStrings.h"
+#include "nsIHttpChannelInternal.h"
+#include "nsNetUtil.h"
 
 // This should be probably defined on some other place... but I couldn't find it
 #define WEBAPPS_PERM_NAME "webapps-manage"
@@ -392,24 +394,20 @@ nsScriptSecurityManager::GetChannelURIPrincipal(nsIChannel* aChannel,
 {
     NS_PRECONDITION(aChannel, "Must have channel!");
 
-    // Get the principal from the URI.  Make sure this does the same thing
-    // as nsDocument::Reset and XULDocument::StartDocumentLoad.
+    mozilla::OriginAttributes attrs(UNKNOWN_APP_ID, false);
+    NS_GetOriginAttributes(aChannel, attrs);
+
+    // Add addonId. Should we move this to NS_GetOriginAttributes?
     nsCOMPtr<nsIURI> uri;
     nsresult rv = NS_GetFinalChannelURI(aChannel, getter_AddRefs(uri));
     NS_ENSURE_SUCCESS(rv, rv);
-
-    nsCOMPtr<nsILoadContext> loadContext;
-    NS_QueryNotificationCallbacks(aChannel, loadContext);
-
-    if (loadContext) {
-        return GetLoadContextCodebasePrincipal(uri, loadContext, aPrincipal);
-    }
-
-    OriginAttributes attrs(UNKNOWN_APP_ID, false);
     rv = MaybeSetAddonIdFromURI(attrs, uri);
     NS_ENSURE_SUCCESS(rv, rv);
-    nsCOMPtr<nsIPrincipal> prin = BasePrincipal::CreateCodebasePrincipal(uri, attrs);
-    prin.forget(aPrincipal);
+
+    nsCOMPtr<nsIPrincipal> principal =
+      BasePrincipal::CreateCodebasePrincipal(uri, attrs);
+
+    principal.forget(aPrincipal);
     return *aPrincipal ? NS_OK : NS_ERROR_FAILURE;
 }
 
