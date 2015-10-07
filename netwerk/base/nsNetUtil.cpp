@@ -1240,6 +1240,16 @@ NS_GetOriginAttributes(nsIChannel *aChannel,
     }
 
     loadContext->GetOriginAttributes(aAttributes);
+
+    nsCOMPtr<nsIHttpChannelInternal> internal = do_QueryInterface(aChannel);
+    if (!internal) {
+      return true;
+    }
+
+    nsCString packageId;
+    internal->GetPackageId(packageId);
+    aAttributes.mSignedPkg = NS_ConvertUTF8toUTF16(packageId);
+
     return true;
 }
 

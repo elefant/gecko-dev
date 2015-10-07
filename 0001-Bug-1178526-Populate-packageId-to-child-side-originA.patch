@@ -1,0 +1,624 @@
+From ad050af4d797e82453a049b0f8126f4ec9dba7e2 Mon Sep 17 00:00:00 2001
+From: Henry <hchang@mozilla.com>
+Date: Wed, 7 Oct 2015 18:36:01 +0800
+Subject: [PATCH] Bug 1178526 - Populate packageId to child side
+ originAttributes.signedPkg. r=honzab.
+
+---
+ caps/nsScriptSecurityManager.cpp                   | 21 +++++-
+ dom/base/nsDocument.cpp                            | 14 ++++
+ netwerk/protocol/http/HttpBaseChannel.cpp          | 14 ++++
+ netwerk/protocol/http/HttpBaseChannel.h            |  5 ++
+ netwerk/protocol/http/HttpChannelChild.cpp         | 20 ++++--
+ netwerk/protocol/http/HttpChannelChild.h           |  6 +-
+ netwerk/protocol/http/HttpChannelParent.cpp        |  7 +-
+ netwerk/protocol/http/PHttpChannel.ipdl            |  3 +-
+ netwerk/protocol/http/nsHttpChannel.cpp            |  3 +
+ netwerk/protocol/http/nsIHttpChannelInternal.idl   |  8 ++-
+ netwerk/test/mochitests/mochitest.ini              |  2 +
+ .../test_signed_web_packaged_app_origin.html       | 81 ++++++++++++++++++++++
+ 12 files changed, 172 insertions(+), 12 deletions(-)
+ create mode 100644 netwerk/test/mochitests/test_signed_web_packaged_app_origin.html
+
+diff --git a/caps/nsScriptSecurityManager.cpp b/caps/nsScriptSecurityManager.cpp
+index 0d5e4b0..c58ad8d 100644
+--- a/caps/nsScriptSecurityManager.cpp
++++ b/caps/nsScriptSecurityManager.cpp
+@@ -63,16 +63,17 @@
+ #include <stdint.h>
+ #include "mozilla/dom/ScriptSettings.h"
+ #include "mozilla/ClearOnShutdown.h"
+ #include "mozilla/StaticPtr.h"
+ #include "nsContentUtils.h"
+ #include "nsJSUtils.h"
+ #include "nsILoadInfo.h"
+ #include "nsXPCOMStrings.h"
++#include "nsIHttpChannelInternal.h"
+ 
+ // This should be probably defined on some other place... but I couldn't find it
+ #define WEBAPPS_PERM_NAME "webapps-manage"
+ 
+ using namespace mozilla;
+ using namespace mozilla::dom;
+ 
+ nsIIOService    *nsScriptSecurityManager::sIOService = nullptr;
+@@ -397,17 +398,35 @@ nsScriptSecurityManager::GetChannelURIPrincipal(nsIChannel* aChannel,
+     nsCOMPtr<nsIURI> uri;
+     nsresult rv = NS_GetFinalChannelURI(aChannel, getter_AddRefs(uri));
+     NS_ENSURE_SUCCESS(rv, rv);
+ 
+     nsCOMPtr<nsILoadContext> loadContext;
+     NS_QueryNotificationCallbacks(aChannel, loadContext);
+ 
+     if (loadContext) {
+-        return GetLoadContextCodebasePrincipal(uri, loadContext, aPrincipal);
++      nsCOMPtr<nsIPrincipal> prin;
++      rv = GetLoadContextCodebasePrincipal(uri, loadContext, getter_AddRefs(prin));
++      NS_ENSURE_SUCCESS(rv, rv);
++
++      // Re-create a principal if the channel is associated with a signed package.
++      nsCString packageId;
++      nsCOMPtr<nsIHttpChannelInternal> internal = do_QueryInterface(aChannel);
++      if (internal) {
++        internal->GetPackageId(packageId);
++      }
++      if (!packageId.IsEmpty()) {
++        mozilla::OriginAttributes attr =
++          BasePrincipal::Cast(prin)->OriginAttributesRef();
++        attr.mSignedPkg = NS_ConvertUTF8toUTF16(packageId);
++        prin = BasePrincipal::CreateCodebasePrincipal(uri, attr);
++      }
++
++      prin.forget(aPrincipal);
++      return *aPrincipal ? NS_OK : NS_ERROR_FAILURE;
+     }
+ 
+     OriginAttributes attrs(UNKNOWN_APP_ID, false);
+     rv = MaybeSetAddonIdFromURI(attrs, uri);
+     NS_ENSURE_SUCCESS(rv, rv);
+     nsCOMPtr<nsIPrincipal> prin = BasePrincipal::CreateCodebasePrincipal(uri, attrs);
+     prin.forget(aPrincipal);
+     return *aPrincipal ? NS_OK : NS_ERROR_FAILURE;
+diff --git a/dom/base/nsDocument.cpp b/dom/base/nsDocument.cpp
+index 8f084d0..0f49f30 100644
+--- a/dom/base/nsDocument.cpp
++++ b/dom/base/nsDocument.cpp
+@@ -2375,16 +2375,30 @@ nsDocument::ResetToURI(nsIURI *aURI, nsILoadGroup *aLoadGroup,
+ 
+       MOZ_ASSERT(loadContext,
+                  "must have a load context or pass in an explicit principal");
+ 
+       nsCOMPtr<nsIPrincipal> principal;
+       nsresult rv = securityManager->
+         GetLoadContextCodebasePrincipal(mDocumentURI, loadContext,
+                                         getter_AddRefs(principal));
++
++      // Re-create a principal if the channel is associated with a signed package.
++      nsCString packageId;
++      nsCOMPtr<nsIHttpChannelInternal> internal = do_QueryInterface(mChannel);
++      if (internal) {
++        internal->GetPackageId(packageId);
++      }
++      if (!packageId.IsEmpty()) {
++        mozilla::OriginAttributes attr =
++          BasePrincipal::Cast(principal)->OriginAttributesRef();;
++        attr.mSignedPkg = NS_ConvertUTF8toUTF16(packageId);
++        principal = BasePrincipal::CreateCodebasePrincipal(mDocumentURI, attr);
++      }
++
+       if (NS_SUCCEEDED(rv)) {
+         SetPrincipal(principal);
+       }
+     }
+   }
+ 
+   // Refresh the principal on the compartment.
+   nsPIDOMWindow* win = GetInnerWindow();
+diff --git a/netwerk/protocol/http/HttpBaseChannel.cpp b/netwerk/protocol/http/HttpBaseChannel.cpp
+index bd1a168..9615ef4 100644
+--- a/netwerk/protocol/http/HttpBaseChannel.cpp
++++ b/netwerk/protocol/http/HttpBaseChannel.cpp
+@@ -2192,16 +2192,30 @@ HttpBaseChannel::GetRedirectMode(uint32_t* aMode)
+ 
+ NS_IMETHODIMP
+ HttpBaseChannel::SetRedirectMode(uint32_t aMode)
+ {
+   mRedirectMode = aMode;
+   return NS_OK;
+ }
+ 
++NS_IMETHODIMP
++HttpBaseChannel::GetPackageId(nsACString& aPackageId)
++{
++  aPackageId = mPackageId;
++  return NS_OK;
++}
++
++NS_IMETHODIMP
++HttpBaseChannel::SetPackageId(const nsACString& aPackageId)
++{
++  mPackageId = aPackageId;
++  return NS_OK;
++}
++
+ //-----------------------------------------------------------------------------
+ // HttpBaseChannel::nsISupportsPriority
+ //-----------------------------------------------------------------------------
+ 
+ NS_IMETHODIMP
+ HttpBaseChannel::GetPriority(int32_t *value)
+ {
+   *value = mPriority;
+diff --git a/netwerk/protocol/http/HttpBaseChannel.h b/netwerk/protocol/http/HttpBaseChannel.h
+index 70600d2..709c3cb 100644
+--- a/netwerk/protocol/http/HttpBaseChannel.h
++++ b/netwerk/protocol/http/HttpBaseChannel.h
+@@ -202,16 +202,18 @@ public:
+   NS_IMETHOD SetCorsMode(uint32_t aCorsMode) override;
+   NS_IMETHOD GetRedirectMode(uint32_t* aRedirectMode) override;
+   NS_IMETHOD SetRedirectMode(uint32_t aRedirectMode) override;
+   NS_IMETHOD GetTopWindowURI(nsIURI **aTopWindowURI) override;
+   NS_IMETHOD GetProxyURI(nsIURI **proxyURI) override;
+   NS_IMETHOD SetCorsPreflightParameters(const nsTArray<nsCString>& unsafeHeaders,
+                                         bool aWithCredentials,
+                                         nsIPrincipal* aPrincipal) override;
++  NS_IMETHOD GetPackageId(nsACString& aPackageId) override;
++  NS_IMETHOD SetPackageId(const nsACString& aPackageId) override;
+ 
+   inline void CleanRedirectCacheChainIfNecessary()
+   {
+       mRedirectedCachekeys = nullptr;
+   }
+   NS_IMETHOD HTTPUpgrade(const nsACString & aProtocolName,
+                          nsIHttpUpgradeListener *aListener) override;
+ 
+@@ -459,16 +461,19 @@ protected:
+   bool EnsureSchedulingContextID();
+ 
+   bool                              mRequireCORSPreflight;
+   bool                              mWithCredentials;
+   nsTArray<nsCString>               mUnsafeHeaders;
+   nsCOMPtr<nsIPrincipal>            mPreflightPrincipal;
+ 
+   bool mForceMainDocumentChannel;
++
++  // The signed package id if the channel is associated with a signed package. 
++  nsCString mPackageId;
+ };
+ 
+ // Share some code while working around C++'s absurd inability to handle casting
+ // of member functions between base/derived types.
+ // - We want to store member function pointer to call at resume time, but one
+ //   such function--HandleAsyncAbort--we want to share between the
+ //   nsHttpChannel/HttpChannelChild.  Can't define it in base class, because
+ //   then we'd have to cast member function ptr between base/derived class
+diff --git a/netwerk/protocol/http/HttpChannelChild.cpp b/netwerk/protocol/http/HttpChannelChild.cpp
+index 9eb120b..29a535d 100644
+--- a/netwerk/protocol/http/HttpChannelChild.cpp
++++ b/netwerk/protocol/http/HttpChannelChild.cpp
+@@ -327,71 +327,75 @@ class StartRequestEvent : public ChannelEvent
+                     const nsHttpHeaderArray& requestHeaders,
+                     const bool& isFromCache,
+                     const bool& cacheEntryAvailable,
+                     const uint32_t& cacheExpirationTime,
+                     const nsCString& cachedCharset,
+                     const nsCString& securityInfoSerialization,
+                     const NetAddr& selfAddr,
+                     const NetAddr& peerAddr,
+-                    const uint32_t& cacheKey)
++                    const uint32_t& cacheKey,
++                    const nsCString& packageIdentifier)
+   : mChild(child)
+   , mChannelStatus(channelStatus)
+   , mResponseHead(responseHead)
+   , mRequestHeaders(requestHeaders)
+   , mUseResponseHead(useResponseHead)
+   , mIsFromCache(isFromCache)
+   , mCacheEntryAvailable(cacheEntryAvailable)
+   , mCacheExpirationTime(cacheExpirationTime)
+   , mCachedCharset(cachedCharset)
+   , mSecurityInfoSerialization(securityInfoSerialization)
+   , mSelfAddr(selfAddr)
+   , mPeerAddr(peerAddr)
+   , mCacheKey(cacheKey)
++  , mPackageIdentifier(packageIdentifier)
+   {}
+ 
+   void Run()
+   {
+     LOG(("StartRequestEvent [this=%p]\n", mChild));
+     mChild->OnStartRequest(mChannelStatus, mResponseHead, mUseResponseHead,
+                            mRequestHeaders, mIsFromCache, mCacheEntryAvailable,
+                            mCacheExpirationTime, mCachedCharset,
+                            mSecurityInfoSerialization, mSelfAddr, mPeerAddr,
+-                           mCacheKey);
++                           mCacheKey, mPackageIdentifier);
+   }
+  private:
+   HttpChannelChild* mChild;
+   nsresult mChannelStatus;
+   nsHttpResponseHead mResponseHead;
+   nsHttpHeaderArray mRequestHeaders;
+   bool mUseResponseHead;
+   bool mIsFromCache;
+   bool mCacheEntryAvailable;
+   uint32_t mCacheExpirationTime;
+   nsCString mCachedCharset;
+   nsCString mSecurityInfoSerialization;
+   NetAddr mSelfAddr;
+   NetAddr mPeerAddr;
+   uint32_t mCacheKey;
++  nsCString mPackageIdentifier;
+ };
+ 
+ bool
+ HttpChannelChild::RecvOnStartRequest(const nsresult& channelStatus,
+                                      const nsHttpResponseHead& responseHead,
+                                      const bool& useResponseHead,
+                                      const nsHttpHeaderArray& requestHeaders,
+                                      const bool& isFromCache,
+                                      const bool& cacheEntryAvailable,
+                                      const uint32_t& cacheExpirationTime,
+                                      const nsCString& cachedCharset,
+                                      const nsCString& securityInfoSerialization,
+                                      const NetAddr& selfAddr,
+                                      const NetAddr& peerAddr,
+                                      const int16_t& redirectCount,
+-                                     const uint32_t& cacheKey)
++                                     const uint32_t& cacheKey,
++                                     const nsCString& packageIdentifier)
+ {
+   LOG(("HttpChannelChild::RecvOnStartRequest [this=%p]\n", this));
+   // mFlushedForDiversion and mDivertingToParent should NEVER be set at this
+   // stage, as they are set in the listener's OnStartRequest.
+   MOZ_RELEASE_ASSERT(!mFlushedForDiversion,
+     "mFlushedForDiversion should be unset before OnStartRequest!");
+   MOZ_RELEASE_ASSERT(!mDivertingToParent,
+     "mDivertingToParent should be unset before OnStartRequest!");
+@@ -400,39 +404,40 @@ HttpChannelChild::RecvOnStartRequest(const nsresult& channelStatus,
+   mRedirectCount = redirectCount;
+ 
+   if (mEventQ->ShouldEnqueue()) {
+     mEventQ->Enqueue(new StartRequestEvent(this, channelStatus, responseHead,
+                                            useResponseHead, requestHeaders,
+                                            isFromCache, cacheEntryAvailable,
+                                            cacheExpirationTime, cachedCharset,
+                                            securityInfoSerialization, selfAddr,
+-                                           peerAddr, cacheKey));
++                                           peerAddr, cacheKey, packageIdentifier));
+   } else {
+     OnStartRequest(channelStatus, responseHead, useResponseHead, requestHeaders,
+                    isFromCache, cacheEntryAvailable, cacheExpirationTime,
+                    cachedCharset, securityInfoSerialization, selfAddr,
+-                   peerAddr, cacheKey);
++                   peerAddr, cacheKey, packageIdentifier);
+   }
+   return true;
+ }
+ 
+ void
+ HttpChannelChild::OnStartRequest(const nsresult& channelStatus,
+                                  const nsHttpResponseHead& responseHead,
+                                  const bool& useResponseHead,
+                                  const nsHttpHeaderArray& requestHeaders,
+                                  const bool& isFromCache,
+                                  const bool& cacheEntryAvailable,
+                                  const uint32_t& cacheExpirationTime,
+                                  const nsCString& cachedCharset,
+                                  const nsCString& securityInfoSerialization,
+                                  const NetAddr& selfAddr,
+                                  const NetAddr& peerAddr,
+-                                 const uint32_t& cacheKey)
++                                 const uint32_t& cacheKey,
++                                 const nsCString& packageIdentifier)
+ {
+   LOG(("HttpChannelChild::OnStartRequest [this=%p]\n", this));
+ 
+   // mFlushedForDiversion and mDivertingToParent should NEVER be set at this
+   // stage, as they are set in the listener's OnStartRequest.
+   MOZ_RELEASE_ASSERT(!mFlushedForDiversion,
+     "mFlushedForDiversion should be unset before OnStartRequest!");
+   MOZ_RELEASE_ASSERT(!mDivertingToParent,
+@@ -477,16 +482,19 @@ HttpChannelChild::OnStartRequest(const nsresult& channelStatus,
+ 
+   // Note: this is where we would notify "http-on-examine-response" observers.
+   // We have deliberately disabled this for child processes (see bug 806753)
+   //
+   // gHttpHandler->OnExamineResponse(this);
+ 
+   mTracingEnabled = false;
+ 
++  // Store packageIdentifier.
++  mPackageId = packageIdentifier;
++
+   DoOnStartRequest(this, mListenerContext);
+ 
+   mSelfAddr = selfAddr;
+   mPeerAddr = peerAddr;
+ }
+ 
+ void
+ HttpChannelChild::DoOnStartRequest(nsIRequest* aRequest, nsISupports* aContext)
+diff --git a/netwerk/protocol/http/HttpChannelChild.h b/netwerk/protocol/http/HttpChannelChild.h
+index 44b5834..df92349 100644
+--- a/netwerk/protocol/http/HttpChannelChild.h
++++ b/netwerk/protocol/http/HttpChannelChild.h
+@@ -116,17 +116,18 @@ protected:
+                           const bool& isFromCache,
+                           const bool& cacheEntryAvailable,
+                           const uint32_t& cacheExpirationTime,
+                           const nsCString& cachedCharset,
+                           const nsCString& securityInfoSerialization,
+                           const NetAddr& selfAddr,
+                           const NetAddr& peerAddr,
+                           const int16_t& redirectCount,
+-                          const uint32_t& cacheKey) override;
++                          const uint32_t& cacheKey,
++                          const nsCString& packageIdentifier) override;
+   bool RecvOnTransportAndData(const nsresult& channelStatus,
+                               const nsresult& status,
+                               const uint64_t& progress,
+                               const uint64_t& progressMax,
+                               const nsCString& data,
+                               const uint64_t& offset,
+                               const uint32_t& count) override;
+   bool RecvOnStopRequest(const nsresult& statusCode, const ResourceTimingStruct& timing) override;
+@@ -229,17 +230,18 @@ private:
+                       const nsHttpHeaderArray& requestHeaders,
+                       const bool& isFromCache,
+                       const bool& cacheEntryAvailable,
+                       const uint32_t& cacheExpirationTime,
+                       const nsCString& cachedCharset,
+                       const nsCString& securityInfoSerialization,
+                       const NetAddr& selfAddr,
+                       const NetAddr& peerAddr,
+-                      const uint32_t& cacheKey);
++                      const uint32_t& cacheKey,
++                      const nsCString& packageIdentifier);
+   void MaybeDivertOnData(const nsCString& data,
+                          const uint64_t& offset,
+                          const uint32_t& count);
+   void OnTransportAndData(const nsresult& channelStatus,
+                           const nsresult& status,
+                           const uint64_t progress,
+                           const uint64_t& progressMax,
+                           const nsCString& data,
+diff --git a/netwerk/protocol/http/HttpChannelParent.cpp b/netwerk/protocol/http/HttpChannelParent.cpp
+index e0fdb28..00e4ab2 100644
+--- a/netwerk/protocol/http/HttpChannelParent.cpp
++++ b/netwerk/protocol/http/HttpChannelParent.cpp
+@@ -1129,27 +1129,32 @@ HttpChannelParent::OnStartRequest(nsIRequest *aRequest, nsISupports *aContext)
+     }
+ 
+     nsresult rv = container->GetData(&cacheKeyValue);
+     if (NS_FAILED(rv)) {
+       return rv;
+     }
+   }
+ 
++  nsCString packageId;
++  mChannel->GetPackageId(packageId);
++  LOG(("HttpChannelParent::OnStartRequest: packageId: %s", packageId.get()));
++
+   if (mIPCClosed ||
+       !SendOnStartRequest(channelStatus,
+                           responseHead ? *responseHead : nsHttpResponseHead(),
+                           !!responseHead,
+                           requestHead->Headers(),
+                           isFromCache,
+                           mCacheEntry ? true : false,
+                           expirationTime, cachedCharset, secInfoSerialization,
+                           mChannel->GetSelfAddr(), mChannel->GetPeerAddr(),
+                           redirectCount,
+-                          cacheKeyValue))
++                          cacheKeyValue,
++                          packageId))
+   {
+     return NS_ERROR_UNEXPECTED;
+   }
+   return NS_OK;
+ }
+ 
+ NS_IMETHODIMP
+ HttpChannelParent::OnStopRequest(nsIRequest *aRequest,
+diff --git a/netwerk/protocol/http/PHttpChannel.ipdl b/netwerk/protocol/http/PHttpChannel.ipdl
+index 203e65c..17f1f00 100644
+--- a/netwerk/protocol/http/PHttpChannel.ipdl
++++ b/netwerk/protocol/http/PHttpChannel.ipdl
+@@ -95,17 +95,18 @@ child:
+                  bool                isFromCache,
+                  bool                cacheEntryAvailable,
+                  uint32_t            cacheExpirationTime,
+                  nsCString           cachedCharset,
+                  nsCString           securityInfoSerialization,
+                  NetAddr             selfAddr,
+                  NetAddr             peerAddr,
+                  int16_t             redirectCount,
+-                 uint32_t            cacheKey);
++                 uint32_t            cacheKey,
++                 nsCString           packageIdentifier);
+ 
+   // Combines a single OnDataAvailable and its associated OnProgress &
+   // OnStatus calls into one IPDL message
+   OnTransportAndData(nsresult  channelStatus,
+                      nsresult  transportStatus,
+                      uint64_t  progress,
+                      uint64_t  progressMax,
+                      nsCString data,
+diff --git a/netwerk/protocol/http/nsHttpChannel.cpp b/netwerk/protocol/http/nsHttpChannel.cpp
+index c21c8c1..d7a6764 100644
+--- a/netwerk/protocol/http/nsHttpChannel.cpp
++++ b/netwerk/protocol/http/nsHttpChannel.cpp
+@@ -5632,16 +5632,19 @@ nsHttpChannel::GetRequestMethod(nsACString& aMethod)
+ 
+ //-----------------------------------------------------------------------------
+ // nsHttpChannel::nsIPackagedAppChannelListener
+ //-----------------------------------------------------------------------------
+ 
+ NS_IMETHODIMP
+ nsHttpChannel::OnStartSignedPackageRequest(const nsACString& aPackageId)
+ {
++    // Update the packageId of this channel.
++    mPackageId = aPackageId;
++
+     nsCOMPtr<nsIPackagedAppChannelListener> listener;
+     NS_QueryNotificationCallbacks(this, listener);
+ 
+     if (listener) {
+         listener->OnStartSignedPackageRequest(aPackageId);
+     } else {
+         LOG(("nsHttpChannel::OnStartSignedPackageRequest [this=%p], no listener on %p", this, mListener.get()));
+     }
+diff --git a/netwerk/protocol/http/nsIHttpChannelInternal.idl b/netwerk/protocol/http/nsIHttpChannelInternal.idl
+index 5275805..3fd3597 100644
+--- a/netwerk/protocol/http/nsIHttpChannelInternal.idl
++++ b/netwerk/protocol/http/nsIHttpChannelInternal.idl
+@@ -34,17 +34,17 @@ interface nsIHttpUpgradeListener : nsISupports
+                               in nsIAsyncOutputStream aSocketOut);
+ };
+ 
+ /**
+  * Dumping ground for http.  This interface will never be frozen.  If you are
+  * using any feature exposed by this interface, be aware that this interface
+  * will change and you will be broken.  You have been warned.
+  */
+-[scriptable, uuid(99767aaf-937d-4f2f-8990-bc79bd7c0ece)]
++[scriptable, uuid(65209b0f-d7f4-4830-b89b-c96f44d845a2)]
+ interface nsIHttpChannelInternal : nsISupports
+ {
+     /**
+      * An http channel can own a reference to the document URI
+      */
+     attribute nsIURI documentURI;
+ 
+     /**
+@@ -260,16 +260,22 @@ interface nsIHttpChannelInternal : nsISupports
+     attribute ACString networkInterfaceId;
+ 
+     /**
+      * Read the proxy URI, which, if non-null, will be used to resolve
+      * proxies for this channel.
+      */
+     readonly attribute nsIURI proxyURI;
+ 
++    /*
++     * The package id for signed package when the channel is used to load
++     * signed pacakge; would be empty otherwise.
++     */
++    attribute ACString packageId;
++
+     /**
+      * Make cross-origin CORS loads happen with a CORS preflight, and specify
+      * the CORS preflight parameters.
+      */
+     [noscript]
+     void setCorsPreflightParameters(in StringArrayRef unsafeHeaders,
+                                     in boolean withCredentials,
+                                     in nsIPrincipal preflightPrincipal);
+diff --git a/netwerk/test/mochitests/mochitest.ini b/netwerk/test/mochitests/mochitest.ini
+index 375679a..1b96a04 100644
+--- a/netwerk/test/mochitests/mochitest.ini
++++ b/netwerk/test/mochitests/mochitest.ini
+@@ -19,9 +19,11 @@ skip-if = e10s
+ skip-if = e10s
+ [test_user_agent_updates.html]
+ skip-if = e10s
+ [test_user_agent_updates_reset.html]
+ [test_xhr_method_case.html]
+ skip-if = e10s
+ [test_signed_web_packaged_app.html]
+ skip-if = e10s || buildapp != 'browser'
++[test_signed_web_packaged_app_origin.html]
++skip-if = e10s || buildapp != 'browser'
+ [test_web_packaged_app.html]
+diff --git a/netwerk/test/mochitests/test_signed_web_packaged_app_origin.html b/netwerk/test/mochitests/test_signed_web_packaged_app_origin.html
+new file mode 100644
+index 0000000..2463cd9
+--- /dev/null
++++ b/netwerk/test/mochitests/test_signed_web_packaged_app_origin.html
+@@ -0,0 +1,81 @@
++<!DOCTYPE html>
++<html>
++<head>
++  <title> Web packaged app </title>
++  <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
++  <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
++</head>
++<body>
++
++<p id="display"></p>
++<div id="content" style="display: none">
++
++</div>
++<pre id="test">
++<script class="testbody" type="application/javascript;version=1.7">
++
++var Cc = SpecialPowers.Cc;
++var Ci = SpecialPowers.Ci;
++var Cu = SpecialPowers.Cu;
++var Cr = SpecialPowers.Cr;
++
++SpecialPowers.pushPrefEnv(
++  { "set": [["network.http.enable-packaged-apps", true],
++            ["network.http.packaged-signed-apps-enabled", true],
++            ["network.http.packaged-apps-developer-mode", true],,
++            ["dom.mozBrowserFramesEnabled", true]] },
++  () => SpecialPowers.pushPermissions([
++    { "type": "browser", "allow": 1, "context": document }
++  ], function() {
++    runTest();
++  }));
++
++SimpleTest.waitForExplicitFinish();
++
++function runTest() {
++  var iframe = document.createElement("iframe");
++  iframe.setAttribute('mozbrowser', 'true');
++  iframe.setAttribute('remote', 'true');
++  iframe.setAttribute("src", "http://example.org:80");
++
++  iframe.addEventListener("mozbrowserloadend", function loadend(e) {
++    iframe.removeEventListener("mozbrowserloadend", loadend);
++    ok(true, "Got mozbrowserloadend");
++
++    iframe.setAttribute("src", "http://mochi.test:8888/tests/netwerk/test/mochitests/signed_web_packaged_app.sjs!//index.html");
++
++    iframe.addEventListener("mozbrowserloadend", function loadend(e) {
++      iframe.removeEventListener("mozbrowserloadend", loadend);
++        var mm = SpecialPowers.wrap(iframe)
++                              .QueryInterface(Ci.nsIFrameLoaderOwner)
++                              .frameLoader
++                              .messageManager;
++
++        var fsl = mm.QueryInterface(Ci.nsIFrameScriptLoader);
++
++        mm.addMessageListener("my-e10s-extension-message", function(message) {
++          let contentOrigin = message.objects.origin;
++          // The expected signedPkg is defined in 'signed_web_packaged_app.sjs'.
++          let kExpectedOrigin =
++            'http://mochi.test:8888^inBrowser=1&signedPkg=611FC2FE-491D-4A47-B3B3-43FBDF6F404F';
++          is(contentOrigin, kExpectedOrigin, 'content origin check: ' + contentOrigin);
++          SimpleTest.finish();
++        });
++
++        let frameScript =
++`
++function getNodePrincipalOrigin() {
++  sendAsyncMessage("my-e10s-extension-message", {}, { origin: content.document.nodePrincipal.origin });
++}
++`;
++        fsl.loadFrameScript("data:,(" + frameScript + ")()", true);
++    });
++  });
++
++  document.body.appendChild(iframe);
++}
++
++</script>
++</pre>
++</body>
++</html>
+\ No newline at end of file
+-- 
+2.4.9 (Apple Git-60)
+

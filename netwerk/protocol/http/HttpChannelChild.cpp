@@ -332,7 +332,8 @@ class StartRequestEvent : public ChannelEvent
                     const nsCString& securityInfoSerialization,
                     const NetAddr& selfAddr,
                     const NetAddr& peerAddr,
-                    const uint32_t& cacheKey)
+                    const uint32_t& cacheKey,
+                    const nsCString& packageIdentifier)
   : mChild(child)
   , mChannelStatus(channelStatus)
   , mResponseHead(responseHead)
@@ -346,6 +347,7 @@ class StartRequestEvent : public ChannelEvent
   , mSelfAddr(selfAddr)
   , mPeerAddr(peerAddr)
   , mCacheKey(cacheKey)
+  , mPackageIdentifier(packageIdentifier)
   {}
 
   void Run()
@@ -355,7 +357,7 @@ class StartRequestEvent : public ChannelEvent
                            mRequestHeaders, mIsFromCache, mCacheEntryAvailable,
                            mCacheExpirationTime, mCachedCharset,
                            mSecurityInfoSerialization, mSelfAddr, mPeerAddr,
-                           mCacheKey);
+                           mCacheKey, mPackageIdentifier);
   }
  private:
   HttpChannelChild* mChild;
@@ -371,6 +373,7 @@ class StartRequestEvent : public ChannelEvent
   NetAddr mSelfAddr;
   NetAddr mPeerAddr;
   uint32_t mCacheKey;
+  nsCString mPackageIdentifier;
 };
 
 bool
@@ -386,7 +389,8 @@ HttpChannelChild::RecvOnStartRequest(const nsresult& channelStatus,
                                      const NetAddr& selfAddr,
                                      const NetAddr& peerAddr,
                                      const int16_t& redirectCount,
-                                     const uint32_t& cacheKey)
+                                     const uint32_t& cacheKey,
+                                     const nsCString& packageIdentifier)
 {
   LOG(("HttpChannelChild::RecvOnStartRequest [this=%p]\n", this));
   // mFlushedForDiversion and mDivertingToParent should NEVER be set at this
@@ -405,12 +409,12 @@ HttpChannelChild::RecvOnStartRequest(const nsresult& channelStatus,
                                            isFromCache, cacheEntryAvailable,
                                            cacheExpirationTime, cachedCharset,
                                            securityInfoSerialization, selfAddr,
-                                           peerAddr, cacheKey));
+                                           peerAddr, cacheKey, packageIdentifier));
   } else {
     OnStartRequest(channelStatus, responseHead, useResponseHead, requestHeaders,
                    isFromCache, cacheEntryAvailable, cacheExpirationTime,
                    cachedCharset, securityInfoSerialization, selfAddr,
-                   peerAddr, cacheKey);
+                   peerAddr, cacheKey, packageIdentifier);
   }
   return true;
 }
@@ -427,7 +431,8 @@ HttpChannelChild::OnStartRequest(const nsresult& channelStatus,
                                  const nsCString& securityInfoSerialization,
                                  const NetAddr& selfAddr,
                                  const NetAddr& peerAddr,
-                                 const uint32_t& cacheKey)
+                                 const uint32_t& cacheKey,
+                                 const nsCString& packageIdentifier)
 {
   LOG(("HttpChannelChild::OnStartRequest [this=%p]\n", this));
 
@@ -481,6 +486,9 @@ HttpChannelChild::OnStartRequest(const nsresult& channelStatus,
   // gHttpHandler->OnExamineResponse(this);
 
   mTracingEnabled = false;
+
+  // Store packageIdentifier.
+  mPackageId = packageIdentifier;
 
   DoOnStartRequest(this, mListenerContext);
 

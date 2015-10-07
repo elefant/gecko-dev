@@ -2380,6 +2380,20 @@ nsDocument::ResetToURI(nsIURI *aURI, nsILoadGroup *aLoadGroup,
       nsresult rv = securityManager->
         GetLoadContextCodebasePrincipal(mDocumentURI, loadContext,
                                         getter_AddRefs(principal));
+
+      // Re-create a principal if the channel is associated with a signed package.
+      nsCString packageId;
+      nsCOMPtr<nsIHttpChannelInternal> internal = do_QueryInterface(mChannel);
+      if (internal) {
+        internal->GetPackageId(packageId);
+      }
+      if (!packageId.IsEmpty()) {
+        mozilla::OriginAttributes attr =
+          BasePrincipal::Cast(principal)->OriginAttributesRef();;
+        attr.mSignedPkg = NS_ConvertUTF8toUTF16(packageId);
+        principal = BasePrincipal::CreateCodebasePrincipal(mDocumentURI, attr);
+      }
+
       if (NS_SUCCEEDED(rv)) {
         SetPrincipal(principal);
       }

@@ -207,6 +207,8 @@ public:
   NS_IMETHOD SetCorsPreflightParameters(const nsTArray<nsCString>& unsafeHeaders,
                                         bool aWithCredentials,
                                         nsIPrincipal* aPrincipal) override;
+  NS_IMETHOD GetPackageId(nsACString& aPackageId) override;
+  NS_IMETHOD SetPackageId(const nsACString& aPackageId) override;
 
   inline void CleanRedirectCacheChainIfNecessary()
   {
@@ -464,6 +466,9 @@ protected:
   nsCOMPtr<nsIPrincipal>            mPreflightPrincipal;
 
   bool mForceMainDocumentChannel;
+
+  // The signed package id if the channel is associated with a signed package. 
+  nsCString mPackageId;
 };
 
 // Share some code while working around C++'s absurd inability to handle casting

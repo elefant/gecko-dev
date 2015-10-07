@@ -68,6 +68,7 @@
 #include "nsJSUtils.h"
 #include "nsILoadInfo.h"
 #include "nsXPCOMStrings.h"
+#include "nsIHttpChannelInternal.h"
 
 // This should be probably defined on some other place... but I couldn't find it
 #define WEBAPPS_PERM_NAME "webapps-manage"
@@ -402,7 +403,25 @@ nsScriptSecurityManager::GetChannelURIPrincipal(nsIChannel* aChannel,
     NS_QueryNotificationCallbacks(aChannel, loadContext);
 
     if (loadContext) {
-        return GetLoadContextCodebasePrincipal(uri, loadContext, aPrincipal);
+      nsCOMPtr<nsIPrincipal> prin;
+      rv = GetLoadContextCodebasePrincipal(uri, loadContext, getter_AddRefs(prin));
+      NS_ENSURE_SUCCESS(rv, rv);
+
+      // Re-create a principal if the channel is associated with a signed package.
+      nsCString packageId;
+      nsCOMPtr<nsIHttpChannelInternal> internal = do_QueryInterface(aChannel);
+      if (internal) {
+        internal->GetPackageId(packageId);
+      }
+      if (!packageId.IsEmpty()) {
+        mozilla::OriginAttributes attr =
+          BasePrincipal::Cast(prin)->OriginAttributesRef();
+        attr.mSignedPkg = NS_ConvertUTF8toUTF16(packageId);
+        prin = BasePrincipal::CreateCodebasePrincipal(uri, attr);
+      }
+
+      prin.forget(aPrincipal);
+      return *aPrincipal ? NS_OK : NS_ERROR_FAILURE;
     }
 
     OriginAttributes attrs(UNKNOWN_APP_ID, false);
