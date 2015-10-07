@@ -39,7 +39,7 @@ interface nsIHttpUpgradeListener : nsISupports
  * using any feature exposed by this interface, be aware that this interface
  * will change and you will be broken.  You have been warned.
  */
-[scriptable, uuid(332d5f9c-991c-45e3-922f-99e6fe0deb60)]
+[scriptable, uuid(65209b0f-d7f4-4830-b89b-c96f44d845a2)]
 interface nsIHttpChannelInternal : nsISupports
 {
     /**
@@ -256,6 +256,11 @@ interface nsIHttpChannelInternal : nsISupports
      * proxies for this channel.
      */
     readonly attribute nsIURI proxyURI;
+
+    /*
+     * The packageId of a signed package this channel is loading a resource from.
+     */
+    attribute ACString packageId;
 
     /**
      * Make cross-origin CORS loads happen with a CORS preflight, and specify

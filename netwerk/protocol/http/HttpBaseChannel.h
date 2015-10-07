@@ -215,6 +215,8 @@ public:
   NS_IMETHOD GetTopWindowURI(nsIURI **aTopWindowURI) override;
   NS_IMETHOD GetProxyURI(nsIURI **proxyURI) override;
   virtual void SetCorsPreflightParameters(const nsTArray<nsCString>& unsafeHeaders) override;
+  NS_IMETHOD GetPackageId(nsACString& aPackageId) override;
+  NS_IMETHOD SetPackageId(const nsACString& aPackageId) override;
 
   inline void CleanRedirectCacheChainIfNecessary()
   {
@@ -496,6 +498,9 @@ protected:
   nsCOMPtr<nsIConsoleReportCollector> mReportCollector;
 
   bool mForceMainDocumentChannel;
+
+  // The signed package id if the channel is associated with a signed package. 
+  nsCString mPackageId;
 };
 
 // Share some code while working around C++'s absurd inability to handle casting
