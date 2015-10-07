@@ -32,22 +32,21 @@ NS_IMPL_ISUPPORTS(PackagedAppVerifier, nsIPackagedAppVerifier, nsIVerificationCa
 
 NS_IMPL_ISUPPORTS(PackagedAppVerifier::ResourceCacheInfo, nsISupports)
 
-const char* PackagedAppVerifier::kSignedPakOriginMetadataKey = "signed-pak-origin";
+const char* PackagedAppVerifier::kSignedPakIdMetadataKey = "package-id";
 
 PackagedAppVerifier::PackagedAppVerifier()
 {
   MOZ_RELEASE_ASSERT(NS_IsMainThread(),
                      "PackagedAppVerifier::OnResourceVerified must be on main thread");
 
-  Init(nullptr, EmptyCString(), EmptyCString(), nullptr);
+  Init(nullptr, EmptyCString(), nullptr);
 }
 
 PackagedAppVerifier::PackagedAppVerifier(nsIPackagedAppVerifierListener* aListener,
-                                         const nsACString& aPackageOrigin,
                                          const nsACString& aSignature,
                                          nsICacheEntry* aPackageCacheEntry)
 {
-  Init(aListener, aPackageOrigin, aSignature, aPackageCacheEntry);
+  Init(aListener, aSignature, aPackageCacheEntry);
 }
 
 PackagedAppVerifier::~PackagedAppVerifier()
@@ -61,7 +60,6 @@ PackagedAppVerifier::~PackagedAppVerifier()
 }
 
 NS_IMETHODIMP PackagedAppVerifier::Init(nsIPackagedAppVerifierListener* aListener,
-                                        const nsACString& aPackageOrigin,
                                         const nsACString& aSignature,
                                         nsICacheEntry* aPackageCacheEntry)
 {
@@ -74,11 +72,11 @@ NS_IMETHODIMP PackagedAppVerifier::Init(nsIPackagedAppVerifierListener* aListene
 
   mListener = aListener;
   mState = STATE_UNKNOWN;
-  mPackageOrigin = aPackageOrigin;
   mSignature = aSignature;
   mIsPackageSigned = false;
   mPackageCacheEntry = aPackageCacheEntry;
   mIsFirstResource = true;
+  mManifest = EmptyCString();
 
   nsresult rv;
   mPackagedAppUtils = do_CreateInstance(NS_PACKAGEDAPPUTILS_CONTRACTID, &rv);
@@ -268,12 +266,6 @@ PackagedAppVerifier::VerifyManifest(const ResourceCacheInfo* aInfo)
 
   mState = STATE_MANIFEST_VERIFYING;
 
-  if (gDeveloperMode) {
-    LOG(("Developer mode! Bypass verification."));
-    FireVerifiedEvent(true, true);
-    return;
-  }
-
   if (mSignature.IsEmpty()) {
     LOG(("No signature. No need to do verification."));
     FireVerifiedEvent(true, true);
@@ -349,6 +341,11 @@ PackagedAppVerifier::OnManifestVerified(bool aSuccess)
     return;
   }
 
+  if (!aSuccess && gDeveloperMode) {
+    aSuccess = true;
+    LOG(("Developer mode! Treat junk signature valid."));
+  }
+
   // Only when the manifest verified and package has signature would we
   // regard this package is signed.
   mIsPackageSigned = aSuccess && !mSignature.IsEmpty();
@@ -356,14 +353,18 @@ PackagedAppVerifier::OnManifestVerified(bool aSuccess)
   mState = aSuccess ? STATE_MANIFEST_VERIFIED_OK
                     : STATE_MANIFEST_VERIFIED_FAILED;
 
-  // TODO: Update mPackageOrigin.
+  // Obtain the package identifier from manifest if the package is signed.
+  if (mIsPackageSigned) {
+    mPackagedAppUtils->GetPackageIdentifier(mPackageIdentifer);
+    LOG(("PackageIdentifer is: %s", mPackageIdentifer.get()));
+  }
 
   // If the package is signed, add related info to the package cache.
   if (mIsPackageSigned && mPackageCacheEntry) {
     LOG(("This package is signed. Add this info to the cache channel."));
     if (mPackageCacheEntry) {
-      mPackageCacheEntry->SetMetaDataElement(kSignedPakOriginMetadataKey,
-                                             mPackageOrigin.get());
+      mPackageCacheEntry->SetMetaDataElement(kSignedPakIdMetadataKey,
+                                             mPackageIdentifer.get());
       mPackageCacheEntry = nullptr; // the cache entry is no longer needed.
     }
   }
@@ -423,9 +424,9 @@ PackagedAppVerifier::SetHasBrokenLastPart(nsresult aStatusCode)
 //---------------------------------------------------------------
 
 NS_IMETHODIMP
-PackagedAppVerifier::GetPackageOrigin(nsACString& aPackageOrigin)
+PackagedAppVerifier::GetPackageIdentifier(nsACString& aPackageIdentifier)
 {
-  aPackageOrigin = mPackageOrigin;
+  aPackageIdentifier = mPackageIdentifer;
   return NS_OK;
 }
 
