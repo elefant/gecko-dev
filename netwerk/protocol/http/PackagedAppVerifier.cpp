@@ -83,6 +83,7 @@ NS_IMETHODIMP PackagedAppVerifier::Init(nsIPackagedAppVerifierListener* aListene
   mIsPackageSigned = false;
   mPackageCacheEntry = aPackageCacheEntry;
   mIsFirstResource = true;
+  mManifest = EmptyCString();
 
   nsresult rv;
   mPackagedAppUtils = do_CreateInstance(NS_PACKAGEDAPPUTILS_CONTRACTID, &rv);
