@@ -69,6 +69,8 @@ NS_IMETHODIMP PackagedAppVerifier::Init(nsIPackagedAppVerifierListener* aListene
   if (!onceThru) {
     Preferences::AddBoolVarCache(&gDeveloperMode,
                                  "network.http.packaged-apps-developer-mode", false);
+    Preferences::AddBoolVarCache(&gSignedAppEnabled,
+                                 "network.http.packaged-signed-apps-enabled", false);
     onceThru = true;
   }
 
@@ -416,6 +418,12 @@ PackagedAppVerifier::SetHasBrokenLastPart(nsresult aStatusCode)
     = new ResourceCacheInfo(nullptr, nullptr, aStatusCode, true);
 
   mPendingResourceCacheInfoList.insertBack(info);
+}
+
+bool
+PackagedAppVerifier::WouldVerify() const
+{
+  return gSignedAppEnabled && !mSignature.IsEmpty();
 }
 
 //---------------------------------------------------------------

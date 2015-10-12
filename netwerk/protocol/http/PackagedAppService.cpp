@@ -479,6 +479,12 @@ PackagedAppService::PackagedAppDownloader::OnStartRequest(nsIRequest *aRequest,
   NS_WARN_IF(NS_FAILED(rv));
 
   EnsureVerifier(aRequest);
+
+  if (!mVerifier->WouldVerify()) {
+    // It means there's no signature or the signed app is disabled.
+    return NS_OK;
+  }
+
   mVerifier->OnStartRequest(nullptr, uri);
 
   // Since the header is considered as a part of the streaming data,
@@ -676,6 +682,12 @@ PackagedAppService::PackagedAppDownloader::OnStopRequest(nsIRequest *aRequest,
   nsRefPtr<ResourceCacheInfo> info =
     new ResourceCacheInfo(uri, entry, aStatusCode, lastPart);
 
+  if (!mVerifier->WouldVerify()) {
+    // No manifest at all. Everything is simply a resource.
+    OnResourceVerified(info, true);
+    return NS_OK;
+  }
+
   mVerifier->OnStopRequest(nullptr, info, aStatusCode);
 
   return NS_OK;
@@ -703,6 +715,11 @@ PackagedAppService::PackagedAppDownloader::ConsumeData(nsIInputStream *aStream,
   }
 
   self->mWriter->ConsumeData(aFromRawSegment, aCount, aWriteCount);
+
+  if (!self->mVerifier->WouldVerify()) {
+    // No signature or signed app support is disabled.
+    return NS_OK;
+  }
 
   if (self->mProcessingFirstRequest) {
     // mProcessingFirstRequest will be set to false on the first OnStopRequest.
