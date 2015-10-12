@@ -32,6 +32,14 @@ NS_IMPL_ISUPPORTS(PackagedAppService, nsIPackagedAppService)
 
 NS_IMPL_ISUPPORTS(PackagedAppService::CacheEntryWriter, nsIStreamListener)
 
+#undef LOG
+#ifdef MOZ_WIDGET_GONK
+  #define LOG(args) printf_stderr args
+#else
+  #define LOG(args) PR_LogPrint args
+#endif
+
+
 static void
 LogURI(const char *aFunctionName, void *self, nsIURI *aURI, nsILoadContextInfo *aInfo = nullptr)
 {
@@ -361,6 +369,13 @@ PackagedAppService::PackagedAppChannelListener::OnStartRequest(nsIRequest *aRequ
   // If the package is loaded from cache, check the meta data in the cache
   // to know if it's a signed package. Notify requesters if it's signed.
   if (isFromCache) {
+    if (!AssertPackageComplete()) {
+      mListener = nullptr;
+      nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(aRequest);
+      PackagedAppService::ReGetResource(mDownloader, httpChannel);
+      return NS_OK;
+    }
+
     bool isPackageSigned = false;
     nsCString signedPackageOrigin;
     nsCOMPtr<nsICacheEntry> packageCacheEntry = GetPackageCacheEntry(aRequest);
@@ -388,6 +403,9 @@ PackagedAppService::PackagedAppChannelListener::OnStopRequest(nsIRequest *aReque
                                                     nsISupports *aContext,
                                                     nsresult aStatusCode)
 {
+  if (!mListener) {
+    return NS_OK;
+  }
   return mListener->OnStopRequest(aRequest, aContext, aStatusCode);
 }
 
@@ -1202,6 +1220,80 @@ PackagedAppService::GetResource(nsIChannel *aChannel,
   }
 
   if (loadInfo && loadInfo->GetEnforceSecurity()) {
+    return channel->AsyncOpen2(listener);
+  }
+
+  return channel->AsyncOpen(listener, nullptr);
+}
+
+already_AddRefed<nsIChannel>
+CloneHttpChannel(nsIHttpChannel* aTemplateChannel)
+{
+  nsCOMPtr<nsILoadInfo> loadInfo = aTemplateChannel->GetLoadInfo();
+
+  nsCOMPtr<nsILoadContext> loadContext;
+  NS_QueryNotificationCallbacks(aTemplateChannel, loadContext);
+
+  nsLoadFlags loadFlags = 0;
+  aTemplateChannel->GetLoadFlags(&loadFlags);
+
+  nsCOMPtr<nsIURI> uri;
+  aTemplateChannel->GetURI(getter_AddRefs(uri));
+
+  nsCOMPtr<nsIChannel> channel;
+  rv = NS_NewChannelInternal(
+    getter_AddRefs(channel), packageURI,
+    aLoadInfo,
+    nullptr, nullptr, aLoadFlags);
+
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return nulltr;
+  }
+
+  return channel;
+}
+
+nsresult
+PackagedAppService::ReGetResource(PackagedAppDownloader* aDownloader,
+                                  nsIHttpChannel* aTemplateChannel)
+{
+  LOG(("[%p] PackagedAppService::ReGetResource(aDownloader: %p)\n", aDownloader));
+
+  nsCOMPtr<nsIChannel> channel = CloneHttpChannel(aTemplateChannel);
+  if (!channel) {
+    NS_WARNING("Unable to clone channel.");
+    return NS_ERROR_FAILUREl
+  }
+
+  nsCOMPtr<nsICachingChannel> cacheChan(do_QueryInterface(channel));
+  if (cacheChan) {
+    // Each resource in the package will be put in its own cache entry
+    // during the first load of the package, so we only want the channel to
+    // cache the response head, not the entire content of the package.
+    cacheChan->SetCacheOnlyMetadata(true);
+  }
+
+  nsCOMPtr<nsIStreamConverterService> streamconv =
+    do_GetService("@mozilla.org/streamConverters;1", &rv);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+  }
+
+  nsCOMPtr<nsIStreamListener> mimeConverter;
+  rv = streamconv->AsyncConvertData(APPLICATION_PACKAGE, "*/*", aDownloader, nullptr,
+                                    getter_AddRefs(mimeConverter));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+  }
+
+  nsRefPtr<PackagedAppChannelListener> listener =
+    new PackagedAppChannelListener(aDownloader, mimeConverter);
+
+  if (aLoadContext) {
+    channel->SetNotificationCallbacks(aLoadContext);
+  }
+
+  if (aLoadInfo && aLoadInfo->GetEnforceSecurity()) {
     return channel->AsyncOpen2(listener);
   }
 

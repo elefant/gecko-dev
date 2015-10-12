@@ -39,6 +39,9 @@ class PackagedAppService final
 private:
   ~PackagedAppService();
 
+  nsresult ReGetResource(PackagedAppDownloader* aDownloader,
+                         nsIHttpChannel* aTemplateChannel)
+
   // Called by PackageAppDownloader once the download has finished
   // (or encountered an error) to remove the package from mDownloadingPackages
   // Should be called on the main thread.
