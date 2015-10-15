@@ -35,6 +35,8 @@ class nsIPrincipal;
 
 namespace mozilla {
 
+#define LOG(args...) PR_LogPrintf(args);
+
 #ifdef MOZ_CHILD_PERMISSIONS
 
 static bool
@@ -123,7 +125,10 @@ AssertAppProcess(TabContext& aContext,
                  AssertAppProcessType aType,
                  const char* aCapability)
 {
-
+  mozilla::OriginAttribute attr = aContext.OriginAttributeRef();
+  nsCString packageId = NS_ConvertUTF16toUTF8(attr.mSignedPkg);
+  LOG("TabContext: %s, %s", aContext.SignedPkgOriginNoSuffix().get(),
+                            packageId.get());
   nsCOMPtr<mozIApplication> app = aContext.GetOwnOrContainingApp();
   return CheckAppTypeHelper(app, aType, aCapability, aContext.IsBrowserElement());
 }

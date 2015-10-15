@@ -143,7 +143,7 @@ public:
     return mOwnerContent ? mOwnerContent->GetPrimaryFrame() : nullptr;
   }
 
-  /** 
+  /**
    * Return the document that owns this, or null if we don't have
    * an owner.
    */
@@ -319,6 +319,7 @@ private:
   void InitializeBrowserAPI();
 
   nsresult GetNewTabContext(mozilla::dom::MutableTabContext* aTabContext,
+                            const nsACString& aSignedPkgNoSuffix = EmptyCString(),
                             const nsACString& aPackageId = EmptyCString());
 
   enum TabParentChange {
