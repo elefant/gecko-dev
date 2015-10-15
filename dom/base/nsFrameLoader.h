@@ -143,7 +143,7 @@ public:
     return mOwnerContent ? mOwnerContent->GetPrimaryFrame() : nullptr;
   }
 
-  /**
+  /** 
    * Return the document that owns this, or null if we don't have
    * an owner.
    */
@@ -194,7 +194,7 @@ public:
    * otherwise we'll discard the old presentation and set the detached
    * subdoc view to null. aContainerDoc is the document containing the
    * the subdoc frame. This enables us to detect when the containing
-   * document has changed during reframe, so we can discard the presentation
+   * document has changed during reframe, so we can discard the presentation 
    * in that case.
    */
   void SetDetachedSubdocView(nsView* aDetachedView,
