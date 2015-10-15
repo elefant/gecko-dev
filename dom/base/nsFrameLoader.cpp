@@ -278,13 +278,13 @@ nsFrameLoader::LoadURI(nsIURI* aURI)
 }
 
 NS_IMETHODIMP
-nsFrameLoader::SwitchProcessAndLoadURI(nsIURI* aURI)
+nsFrameLoader::SwitchProcessAndLoadURI(nsIURI* aURI, const nsACString& aPackageId)
 {
   nsCOMPtr<nsIURI> URIToLoad = aURI;
   nsRefPtr<TabParent> tp = nullptr;
 
   MutableTabContext context;
-  nsresult rv = GetNewTabContext(&context);
+  nsresult rv = GetNewTabContext(&context, aPackageId);
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsCOMPtr<Element> ownerElement = mOwnerContent;
@@ -3031,7 +3031,8 @@ nsFrameLoader::MaybeUpdatePrimaryTabParent(TabParentChange aChange)
 }
 
 nsresult
-nsFrameLoader::GetNewTabContext(MutableTabContext* aTabContext)
+nsFrameLoader::GetNewTabContext(MutableTabContext* aTabContext,
+                                const nsACString& aPackageId)
 {
   nsCOMPtr<mozIApplication> ownApp = GetOwnApp();
   nsCOMPtr<mozIApplication> containingApp = GetContainingApp();
@@ -3050,6 +3051,9 @@ nsFrameLoader::GetNewTabContext(MutableTabContext* aTabContext)
     NS_ENSURE_STATE(appId != nsIScriptSecurityManager::NO_APP_ID);
   }
   attrs.mAppId = appId;
+
+  // Populate packageId to signedPkg.
+  attrs.mSignedPkg = NS_ConvertUTF8toUTF16(aPackageId);
 
   bool tabContextUpdated = aTabContext->SetTabContext(ownApp, containingApp, attrs);
   NS_ENSURE_STATE(tabContextUpdated);

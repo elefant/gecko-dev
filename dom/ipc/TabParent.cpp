@@ -517,6 +517,20 @@ TabParent::ShouldSwitchProcess(nsIChannel* aChannel)
   return true;
 }
 
+static nsCString
+GetPackageIdFromChannel(nsIChannel* aChannel)
+{
+  nsCOMPtr<nsILoadContext> loadContext;
+  NS_QueryNotificationCallbacks(aChannel, loadContext);
+  NS_ENSURE_TRUE(loadContext, EmptyCString());
+
+  mozilla::OriginAttributes attr;
+  bool success = loadContext->GetOriginAttributes(attr);
+  NS_ENSURE_TRUE(success, EmptyCString());
+
+  return NS_ConvertUTF16toUTF8(attr.mSignedPkg);
+}
+
 void
 TabParent::OnStartSignedPackageRequest(nsIChannel* aChannel)
 {
@@ -537,7 +551,8 @@ TabParent::OnStartSignedPackageRequest(nsIChannel* aChannel)
   nsRefPtr<nsFrameLoader> frameLoader = GetFrameLoader();
   NS_ENSURE_TRUE_VOID(frameLoader);
 
-  nsresult rv = frameLoader->SwitchProcessAndLoadURI(uri);
+  nsCString packageId = GetPackageIdFromChannel(aChannel);
+  nsresult rv = frameLoader->SwitchProcessAndLoadURI(uri, packageId);
   if (NS_FAILED(rv)) {
     NS_WARNING("Failed to switch process.");
   }

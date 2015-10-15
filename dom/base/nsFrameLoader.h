@@ -194,7 +194,7 @@ public:
    * otherwise we'll discard the old presentation and set the detached
    * subdoc view to null. aContainerDoc is the document containing the
    * the subdoc frame. This enables us to detect when the containing
-   * document has changed during reframe, so we can discard the presentation 
+   * document has changed during reframe, so we can discard the presentation
    * in that case.
    */
   void SetDetachedSubdocView(nsView* aDetachedView,
@@ -318,7 +318,8 @@ private:
 
   void InitializeBrowserAPI();
 
-  nsresult GetNewTabContext(mozilla::dom::MutableTabContext* aTabContext);
+  nsresult GetNewTabContext(mozilla::dom::MutableTabContext* aTabContext,
+                            const nsACString& aPackageId = EmptyCString());
 
   enum TabParentChange {
     eTabParentRemoved,
