@@ -35,7 +35,7 @@ class nsIPrincipal;
 
 namespace mozilla {
 
-#define LOG(args...) PR_LogPrintf(args);
+#define LOG(args...) printf_stderr(args);
 
 #ifdef MOZ_CHILD_PERMISSIONS
 
@@ -120,15 +120,48 @@ AssertAppStatus(PBrowserParent* aActor,
   return CheckAppStatusHelper(app, aStatus);
 }
 
+static bool
+CheckSignedPkgPermission(const nsACString& aOrigin, const char* aPermission)
+{
+  LOG("CheckSignedPkgPermission: %s, %s", nsCString(aOrigin).get(), aPermission);
+
+  nsIScriptSecurityManager *securityManager =
+    nsContentUtils::GetSecurityManager();
+
+  nsCOMPtr<nsIPrincipal> principal;
+  securityManager->CreateCodebasePrincipalFromOrigin(aOrigin,
+                                                     getter_AddRefs(principal));
+
+  nsCOMPtr<nsIPermissionManager> permMgr = services::GetPermissionManager();
+  NS_ENSURE_TRUE(permMgr, false);
+
+  uint32_t perm;
+  nsresult rv = permMgr->TestExactPermissionFromPrincipal(principal, aPermission, &perm);
+  NS_ENSURE_SUCCESS(rv, false);
+
+  LOG("Permission %s for %s: %d", aPermission, nsCString(aOrigin).get(), perm);
+  return nsIPermissionManager::ALLOW_ACTION == perm;
+}
+
 bool
 AssertAppProcess(TabContext& aContext,
                  AssertAppProcessType aType,
                  const char* aCapability)
 {
-  mozilla::OriginAttribute attr = aContext.OriginAttributeRef();
-  nsCString packageId = NS_ConvertUTF16toUTF8(attr.mSignedPkg);
-  LOG("TabContext: %s, %s", aContext.SignedPkgOriginNoSuffix().get(),
-                            packageId.get());
+  const mozilla::OriginAttributes& attr = aContext.OriginAttributesRef();
+  nsCString suffix;
+  attr.CreateSuffix(suffix);
+
+  LOG("TabContext: signed package origin: %s, originAttr; %s",
+      nsCString(aContext.SignedPkgOriginNoSuffix()).get(),
+      suffix.get());
+
+  if (!aContext.SignedPkgOriginNoSuffix().IsEmpty() &&
+      (ASSERT_APP_HAS_PERMISSION == aType || ASSERT_APP_PROCESS_PERMISSION == aType)) {
+    nsCString origin = aContext.SignedPkgOriginNoSuffix() + suffix;
+    return CheckSignedPkgPermission(origin, aCapability);
+  }
+
   nsCOMPtr<mozIApplication> app = aContext.GetOwnOrContainingApp();
   return CheckAppTypeHelper(app, aType, aCapability, aContext.IsBrowserElement());
 }

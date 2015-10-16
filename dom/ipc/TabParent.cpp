@@ -532,7 +532,8 @@ GetPackageIdFromChannel(nsIChannel* aChannel)
 }
 
 void
-TabParent::OnStartSignedPackageRequest(nsIChannel* aChannel)
+TabParent::OnStartSignedPackageRequest(nsIChannel* aChannel,
+                                       const nsACString& aPackageId)
 {
   if (!ShouldSwitchProcess(aChannel)) {
     return;
@@ -552,7 +553,7 @@ TabParent::OnStartSignedPackageRequest(nsIChannel* aChannel)
   NS_ENSURE_TRUE_VOID(frameLoader);
 
   nsCString packageId = GetPackageIdFromChannel(aChannel);
-  nsresult rv = frameLoader->SwitchProcessAndLoadURI(uri, packageId);
+  nsresult rv = frameLoader->SwitchProcessAndLoadURI(uri, aPackageId);
   if (NS_FAILED(rv)) {
     NS_WARNING("Failed to switch process.");
   }
@@ -2624,7 +2625,7 @@ TabParent::RecvStartPluginIME(const WidgetKeyboardEvent& aKeyboardEvent,
     return true;
   }
   widget->StartPluginIME(aKeyboardEvent,
-                         (int32_t&)aPanelX, 
+                         (int32_t&)aPanelX,
                          (int32_t&)aPanelY,
                          *aCommitted);
   return true;
