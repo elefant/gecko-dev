@@ -2653,7 +2653,7 @@ nsFrameLoader::SwapRemoteBrowser(nsITabParent* aTabParent)
   }
   if (!OwnerIsBrowserOrAppFrame()) {
     NS_WARNING("Switching process for non-mozbrowser/app frame is not supported.");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    //return NS_ERROR_NOT_IMPLEMENTED;
   }
   if (newParent == mRemoteBrowser) {
     return NS_OK;
@@ -3062,7 +3062,7 @@ nsFrameLoader::GetNewTabContext(MutableTabContext* aTabContext,
 
   // Populate packageId to signedPkg.
   // TODO: PackagedAppVerifier should update packageOrigin based on packageId.
-  //attrs.mSignedPkg = NS_ConvertUTF8toUTF16(aPackageId);
+  // attrs.mSignedPkg = NS_ConvertUTF8toUTF16(aPackageId);
 
   bool tabContextUpdated = aTabContext->SetTabContext(ownApp, containingApp,
                                                       attrs, aSignedPkgOriginNoSuffix);

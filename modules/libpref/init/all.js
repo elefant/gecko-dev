@@ -19,6 +19,8 @@
  *  - Computed values (e.g. 50 * 1024) don't work.
  */
 
+pref("dom.mozTCPSocket.enabled", true);
+
 pref("keyword.enabled", false);
 pref("general.useragent.locale", "chrome://global/locale/intl.properties");
 pref("general.useragent.compatMode.firefox", false);
@@ -1447,16 +1449,16 @@ pref("network.http.enforce-framing.soft", true);
 // resources from a package when directed to a URL
 // such as http://domain.com/package.pak!//resource.html
 // See http://www.w3.org/TR/web-packaging/#streamable-package-format
-pref("network.http.enable-packaged-apps", false);
+pref("network.http.enable-packaged-apps", true);
 
 // Enable this to bring in the signature verification if the signature exists.
 // Set to false if you don't need the signed packaged web app support (i.e. NSec).
-pref("network.http.packaged-signed-apps-enabled", false);
+pref("network.http.packaged-signed-apps-enabled", true);
 
 // Enable this pref to skip verification process. The packaged app
 // will be considered signed no matter the package has a valid/invalid
 // signature or no signature.
-pref("network.http.packaged-apps-developer-mode", false);
+pref("network.http.packaged-apps-developer-mode", true);
 
 // default values for FTP
 // in a DSCP environment this should be 40 (0x28, or AF11), per RFC-4594,

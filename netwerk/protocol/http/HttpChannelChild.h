@@ -237,6 +237,9 @@ private:
                       const NetAddr& peerAddr,
                       const uint32_t& cacheKey,
                       const nsCString& packageIdentifier);
+  void MaybeDivertOnData(const nsCString& data,
+                         const uint64_t& offset,
+                         const uint32_t& count);
   void OnTransportAndData(const nsresult& channelStatus,
                           const nsresult& status,
                           const uint64_t progress,

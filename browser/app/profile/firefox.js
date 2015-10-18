@@ -1457,7 +1457,7 @@ pref("geo.provider.ms-windows-location", false);
 
 // Necko IPC security checks only needed for app isolation for cookies/cache/etc:
 // currently irrelevant for desktop e10s
-pref("network.disable.ipc.security", true);
+pref("network.disable.ipc.security", false);
 
 // CustomizableUI debug logging.
 pref("browser.uiCustomization.debug", false);

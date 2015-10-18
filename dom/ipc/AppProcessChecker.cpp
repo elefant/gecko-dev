@@ -4,6 +4,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#define MOZ_CHILD_PERMISSIONS
+
 #include "AppProcessChecker.h"
 #include "nsIPermissionManager.h"
 #ifdef MOZ_CHILD_PERMISSIONS
@@ -35,7 +37,7 @@ class nsIPrincipal;
 
 namespace mozilla {
 
-#define LOG(args...) printf_stderr(args);
+#define LOG(args...) PR_LogPrint(args);
 
 #ifdef MOZ_CHILD_PERMISSIONS
 
@@ -123,7 +125,7 @@ AssertAppStatus(PBrowserParent* aActor,
 static bool
 CheckSignedPkgPermission(const nsACString& aOrigin, const char* aPermission)
 {
-  LOG("CheckSignedPkgPermission: %s, %s", nsCString(aOrigin).get(), aPermission);
+  LOG("CheckSignedPkgPermission: %s, %s\n", nsCString(aOrigin).get(), aPermission);
 
   nsIScriptSecurityManager *securityManager =
     nsContentUtils::GetSecurityManager();
@@ -139,7 +141,7 @@ CheckSignedPkgPermission(const nsACString& aOrigin, const char* aPermission)
   nsresult rv = permMgr->TestExactPermissionFromPrincipal(principal, aPermission, &perm);
   NS_ENSURE_SUCCESS(rv, false);
 
-  LOG("Permission %s for %s: %d", aPermission, nsCString(aOrigin).get(), perm);
+  LOG("Permission %s for %s: %d\n", aPermission, nsCString(aOrigin).get(), perm);
   return nsIPermissionManager::ALLOW_ACTION == perm;
 }
 
@@ -152,15 +154,17 @@ AssertAppProcess(TabContext& aContext,
   nsCString suffix;
   attr.CreateSuffix(suffix);
 
-  LOG("TabContext: signed package origin: %s, originAttr; %s",
+  LOG("TabContext: signed package origin: %s, originAttr; %s\n",
       nsCString(aContext.SignedPkgOriginNoSuffix()).get(),
       suffix.get());
 
+#if 1
   if (!aContext.SignedPkgOriginNoSuffix().IsEmpty() &&
       (ASSERT_APP_HAS_PERMISSION == aType || ASSERT_APP_PROCESS_PERMISSION == aType)) {
     nsCString origin = aContext.SignedPkgOriginNoSuffix() + suffix;
     return CheckSignedPkgPermission(origin, aCapability);
   }
+#endif
 
   nsCOMPtr<mozIApplication> app = aContext.GetOwnOrContainingApp();
   return CheckAppTypeHelper(app, aType, aCapability, aContext.IsBrowserElement());
