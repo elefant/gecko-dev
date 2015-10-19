@@ -110,6 +110,12 @@ public:
    */
   const OriginAttributes& OriginAttributesRef() const;
 
+  /**
+   * Returns the origin associated with the tab (w/o suffix) if this tab owns 
+   * a signed packaged content.
+   */
+  const nsACString& SignedPkgOriginNoSuffix() const;
+
 protected:
   friend class MaybeInvalidTabContext;
 
@@ -136,7 +142,8 @@ protected:
    */
   bool SetTabContext(mozIApplication* aOwnApp,
                      mozIApplication* aAppFrameOwnerApp,
-                     const OriginAttributes& aOriginAttributes);
+                     const OriginAttributes& aOriginAttributes,
+                     const nsACString& aSignedPkgOriginNoSuffix);
 
 private:
   /**
@@ -167,6 +174,12 @@ private:
    */
   OriginAttributes mOriginAttributes;
 
+  /**
+   * The signed package origin without suffix. Since the signed packaged
+   * web content is always loaded in a separate process, it makes sense
+   * that we store this immutable value in TabContext.
+   */
+  nsCString mSignedPkgOriginNoSuffix;
 };
 
 /**
@@ -184,11 +197,13 @@ public:
 
   bool SetTabContext(mozIApplication* aOwnApp,
                      mozIApplication* aAppFrameOwnerApp,
-                     const OriginAttributes& aOriginAttributes)
+                     const OriginAttributes& aOriginAttributes,
+                     const nsACString& aSignedPkgOriginNoSuffix = EmptyCString())
   {
     return TabContext::SetTabContext(aOwnApp,
                                      aAppFrameOwnerApp,
-                                     aOriginAttributes);
+                                     aOriginAttributes,
+                                     aSignedPkgOriginNoSuffix);
   }
 };
 
