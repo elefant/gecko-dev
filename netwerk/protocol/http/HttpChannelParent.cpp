@@ -370,12 +370,31 @@ HttpChannelParent::DoAsyncOpen(  const URIParams&           aURI,
                                  const OptionalCorsPreflightArgs& aCorsPreflightArgs,
                                  const uint32_t&            aInitialRwin)
 {
+  nsresult rv;
+
+  nsCOMPtr<nsILoadInfo> loadInfo;
+  rv = mozilla::ipc::LoadInfoArgsToLoadInfo(aLoadInfoArgs,
+                                            getter_AddRefs(loadInfo));
+  if (NS_FAILED(rv)) {
+    return SendFailedAsyncOpen(rv);
+  }
+
   nsCOMPtr<nsIURI> uri = DeserializeURI(aURI);
   if (!uri) {
     // URIParams does MOZ_ASSERT if null, but we need to protect opt builds from
     // null deref here.
     return false;
   }
+
+  if (mTabParent && !mTabParent->OriginAttributesRef().mSignedPkg.IsEmpty()) {
+    // Loading content by a tab which loaded a signed package before.
+    if (mTabParent->OnLoadingFromSignedPackage(loadInfo, uri)) {
+      // Do nothing and a new identifcal request will be made to
+      // a new process.
+      return true;
+    }
+  }
+
   nsCOMPtr<nsIURI> originalUri = DeserializeURI(aOriginalURI);
   nsCOMPtr<nsIURI> docUri = DeserializeURI(aDocURI);
   nsCOMPtr<nsIURI> referrerUri = DeserializeURI(aReferrerURI);
@@ -386,8 +405,6 @@ HttpChannelParent::DoAsyncOpen(  const URIParams&           aURI,
   uri->GetSpec(uriSpec);
   LOG(("HttpChannelParent RecvAsyncOpen [this=%p uri=%s]\n",
        this, uriSpec.get()));
-
-  nsresult rv;
 
   nsCOMPtr<nsIIOService> ios(do_GetIOService(&rv));
   if (NS_FAILED(rv))
@@ -405,13 +422,6 @@ HttpChannelParent::DoAsyncOpen(  const URIParams&           aURI,
     loadFlags |= nsICachingChannel::LOAD_ONLY_FROM_CACHE;
     loadFlags |= nsIRequest::LOAD_FROM_CACHE;
     loadFlags |= nsICachingChannel::LOAD_NO_NETWORK_IO;
-  }
-
-  nsCOMPtr<nsILoadInfo> loadInfo;
-  rv = mozilla::ipc::LoadInfoArgsToLoadInfo(aLoadInfoArgs,
-                                            getter_AddRefs(loadInfo));
-  if (NS_FAILED(rv)) {
-    return SendFailedAsyncOpen(rv);
   }
 
   nsCOMPtr<nsIChannel> channel;

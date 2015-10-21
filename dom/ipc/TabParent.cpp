@@ -539,6 +539,53 @@ TabParent::OnStartSignedPackageRequest(nsIChannel* aChannel,
   }
 }
 
+bool
+TabParent::OnLoadingFromSignedPackage(nsILoadInfo* aLoadInfo, nsIURI* aURI)
+{
+  // We need to switch process except aURI has the same origin (w/o suffix)
+  // as aLoadInfo.originNoSuffix. If the origin (with suffix) associated with
+  // aURI is a signed and has different origin from loading origin,
+  // a process switch will still be triggered in OnStartSignedPackageRequest.
+
+  nsresult rv;
+
+  nsCOMPtr<nsIPrincipal> loadingPrincipal;
+  rv = aLoadInfo->GetLoadingPrincipal(getter_AddRefs(loadingPrincipal));
+  NS_ENSURE_TRUE(loadingPrincipal, false);
+
+  nsAutoCString loadingOriginNoSuffix;
+  rv = loadingPrincipal->GetOriginNoSuffix(loadingOriginNoSuffix);
+  NS_ENSURE_SUCCESS(rv, false);
+
+  nsAutoCString originForURI;
+  rv = nsPrincipal::GetOriginForURI(aURI, originForURI);
+  NS_ENSURE_SUCCESS(rv, false);
+
+  RefPtr<nsFrameLoader> frameLoader = GetFrameLoader();
+  if (!frameLoader) {
+    return false;
+  }
+
+  if (loadingOriginNoSuffix.EqualsLiteral("moz-safe-about:blank")) {
+    // The tab is just created for loading a signed package. No need to switch again.
+    return false;
+  }
+
+  if (loadingOriginNoSuffix == originForURI) {
+    // We are navigating within the same origin. Just assume they are in the same package.
+    // If not, a process switch will still be triggered in OnStartSignedPackageRequest.
+    return false;
+  }
+
+  if (nsIContentPolicy::TYPE_DOCUMENT != aLoadInfo->InternalContentPolicyType()) {
+    // No switch process for non-top-level document. 
+    return false;
+  }
+
+  rv = frameLoader->SwitchProcessAndLoadURI(aURI, EmptyCString());
+  return NS_SUCCEEDED(rv);
+}
+
 void
 TabParent::DestroyInternal()
 {

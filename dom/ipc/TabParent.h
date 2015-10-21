@@ -456,6 +456,10 @@ public:
     void OnStartSignedPackageRequest(nsIChannel* aChannel,
                                      const nsACString& aPackageId);
 
+    // Called by HttpChannelParent::RecvAsyncOpen. Returns true if a process
+    // switch is triggered.
+    bool OnLoadingFromSignedPackage(nsILoadInfo* aLoadInfo, nsIURI* aURI);
+
 protected:
     bool ReceiveMessage(const nsString& aMessage,
                         bool aSync,

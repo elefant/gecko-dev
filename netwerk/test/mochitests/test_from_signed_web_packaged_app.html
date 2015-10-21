@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title> Web packaged app </title>
+  <script type="text/javascript" src="/tests/SimpleTest/SimpleTest.js"></script>
+  <link rel="stylesheet" type="text/css" href="/tests/SimpleTest/test.css" />
+</head>
+<body>
+
+<p id="display"></p>
+<div id="content" style="display: none">
+
+</div>
+<pre id="test">
+<script class="testbody" type="application/javascript;version=1.7">
+
+var Cc = SpecialPowers.Cc;
+var Ci = SpecialPowers.Ci;
+var Cu = SpecialPowers.Cu;
+var Cr = SpecialPowers.Cr;
+
+SpecialPowers.pushPrefEnv(
+  { "set": [["network.http.enable-packaged-apps", true],
+            ["network.http.signed-packages.enabled", true],
+            ["dom.ipc.processPriorityManager.testMode", true],
+            ["dom.ipc.processPriorityManager.enabled", true],
+            ["dom.ipc.tabs.disabled", false],
+            ["dom.ipc.processCount", 3],
+            ["dom.mozBrowserFramesEnabled", true]] },
+  () => SpecialPowers.pushPermissions([
+    { "type": "browser", "allow": 1, "context": document }
+  ], function() {
+    runTest();
+  }));
+
+SimpleTest.waitForExplicitFinish();
+
+var nodePrincipalTestResult = undefined;
+
+// Listen for and count process-created event. The expected new processes are
+// 1) When opening a remote browser by '<iframe remote="true" ...>'
+// 2) When navigating to a signed package
+// 3) When navigating outside of signed package (to http://example.org)
+var kProcessCreatedTopic = "process-priority-manager:TEST-ONLY:process-created";
+var processCreatedCnt = 0;
+SpecialPowers.addObserver(() => {
+  processCreatedCnt++;
+  if (processCreatedCnt < 3) {
+    ok(true, "We have more processes to create: " + (3 - processCreatedCnt));
+  } else if (processCreatedCnt == 3 && nodePrincipalTestResult === true) {
+    // Considering the case that 'my-e10s-extension-message' is recevied earlier
+    // than this test, we check the test result in both event handler.
+    SimpleTest.finish();
+  }
+}, kProcessCreatedTopic, /* weak = */ false);
+
+function runTest() {
+  var iframe = document.createElement("iframe");
+  iframe.setAttribute('mozbrowser', 'true');
+  iframe.setAttribute('remote', 'true');
+  iframe.setAttribute("src", "http://example.org:80");
+
+  iframe.addEventListener("mozbrowserloadend", function loadend(e) {
+    iframe.removeEventListener("mozbrowserloadend", loadend);
+    ok(true, "Got mozbrowserloadend 1");
+    iframe.setAttribute("src", "http://mochi.test:8888/tests/netwerk/test/mochitests/signed_web_packaged_app.sjs!//scripts/app.js");
+
+    iframe.addEventListener("mozbrowserloadend", function loadend(e) {
+      ok(true, "Got mozbrowserloadend 2");
+      iframe.removeEventListener("mozbrowserloadend", loadend);
+      iframe.setAttribute("src", "http://example.org:80");
+
+      iframe.addEventListener("mozbrowserloadend", function loadend(e) {
+        iframe.removeEventListener("mozbrowserloadend", loadend);
+        ok(true, "Got mozbrowserloadend 3");
+        testNodePrincipal(iframe);
+      });
+
+    })
+  });
+
+  document.body.appendChild(iframe);
+}
+
+function testNodePrincipal(iframe) {
+  var mm = SpecialPowers.wrap(iframe)
+                            .QueryInterface(Ci.nsIFrameLoaderOwner)
+                            .frameLoader
+                            .messageManager;
+
+  var fsl = mm.QueryInterface(Ci.nsIFrameScriptLoader);
+
+  mm.addMessageListener("node-principal-info", function(message) {
+    let contentOrigin = message.objects.origin;
+
+    // The expected origin shouldn't have signedPkg.
+    let kExpectedOrigin = 'http://example.org^inBrowser=1';
+    is(contentOrigin, kExpectedOrigin, 'content origin check: ' + contentOrigin);
+    nodePrincipalTestResult = (contentOrigin === kExpectedOrigin);
+    ok(nodePrincipalTestResult, true);
+    // Considering the case that kProcessCreatedTopic is recevied earlier
+    // than this test, we check the test result in both event handler.
+    if (processCreatedCnt === 3) {
+      SimpleTest.finish();
+    }
+  });
+
+  let frameScript =
+`
+function getNodePrincipalOrigin() {
+  sendAsyncMessage("node-principal-info", {}, { origin: content.document.nodePrincipal.origin });
+}
+`;
+
+  fsl.loadFrameScript("data:,(" + frameScript + ")()", true);
+}
+
+</script>
+</pre>
+</body>
+</html>
