@@ -43,7 +43,7 @@ interface nsITabParent;
 
 typedef unsigned long nsLoadFlags;
 
-[scriptable, builtinclass, uuid(539bce70-8261-462f-bbd0-40ee90b7d636)]
+[scriptable, builtinclass, uuid(63adb599-6dc9-4746-972e-c22e9018020b)]
 interface nsIDocShell : nsIDocShellTreeItem
 {
   /**
@@ -814,6 +814,12 @@ interface nsIDocShell : nsIDocShellTreeItem
     * hack, so be careful.
     */
    void setIsBrowserInsideApp(in unsigned long containingAppId);
+
+   /**
+    * Indicate that this docshell corresponds to a signed package with
+    * the given packageId.
+    */
+   void setIsSignedPackage(in AString packageId);
 
   /**
    * Returns the id of the app associated with this docshell.  If this docshell
