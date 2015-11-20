@@ -22,6 +22,7 @@ CCC			= g++
 RANLIB			= ranlib
 
 DEFAULT_COMPILER = gcc
+OS_TARGET = Linux
 
 ifeq ($(OS_TARGET),Android)
 ifndef ANDROID_NDK
