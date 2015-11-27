@@ -184,7 +184,7 @@ GonkDiskSpaceWatcher::DoStart()
       // in opt builds.
       printf_stderr("Warning: No fanotify support in this device's kernel.\n");
 #if ANDROID_VERSION >= 19
-      MOZ_CRASH("Fanotify support must be enabled in the kernel.");
+      // MOZ_CRASH("Fanotify support must be enabled in the kernel.");
 #endif
     } else {
       printf_stderr("Error calling fanotify_init()");
