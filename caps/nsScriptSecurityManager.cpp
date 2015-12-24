@@ -68,6 +68,7 @@
 #include "nsJSUtils.h"
 #include "nsILoadInfo.h"
 #include "nsXPCOMStrings.h"
+#include "nsIHttpChannelInternal.h"
 
 // This should be probably defined on some other place... but I couldn't find it
 #define WEBAPPS_PERM_NAME "webapps-manage"
@@ -418,6 +419,13 @@ nsScriptSecurityManager::GetChannelURIPrincipal(nsIChannel* aChannel,
       if (loadingPrincipal) {
         attrs = BasePrincipal::Cast(loadingPrincipal)->OriginAttributesRef();
       }
+    }
+
+    nsCOMPtr<nsIHttpChannelInternal> internal = do_QueryInterface(aChannel);
+    if (internal) {
+      nsCString packageId;
+      internal->GetPackageId(packageId);
+      attrs.mSignedPkg = NS_ConvertUTF8toUTF16(packageId);
     }
 
     rv = MaybeSetAddonIdFromURI(attrs, uri);
