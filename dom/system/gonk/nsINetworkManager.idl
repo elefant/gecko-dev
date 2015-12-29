@@ -10,7 +10,7 @@ interface nsINetworkInterface;
 /**
  * Manage network interfaces.
  */
-[scriptable, uuid(e5ffe335-078e-4b25-87f1-02429bd2e458)]
+[scriptable, uuid(8f9ab9e0-72c1-4874-80c7-8143353b979f)]
 interface nsINetworkManager : nsISupports
 {
   /**
@@ -61,6 +61,15 @@ interface nsINetworkManager : nsISupports
    * non-mobile network types, sub-id is always 'device'.
    */
   readonly attribute jsval allNetworkInfo;
+
+  /**
+   * Priority list of network types. An array of
+   * nsINetworkInterface::NETWORK_TYPE_* constants.
+   *
+   * The piror position of the type indicates the higher priority. The priority
+   * is used to determine route when there are multiple connected networks.
+   */
+  attribute jsval networkTypePriorityList;
 
   /**
    * The preferred network type. One of the
