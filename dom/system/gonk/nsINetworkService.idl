@@ -157,7 +157,7 @@ interface nsIDhcpRequestCallback : nsISupports
 /**
  * Provide network services.
  */
-[scriptable, uuid(bb929ae3-4a42-4a63-8388-97c4de69200e)]
+[scriptable, uuid(b16a07d2-496c-4cc6-aa0b-e30ad9e385ab)]
 interface nsINetworkService : nsISupports
 {
   const long MODIFY_ROUTE_ADD    = 0;

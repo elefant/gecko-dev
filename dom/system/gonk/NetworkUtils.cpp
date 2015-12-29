@@ -268,6 +268,21 @@ const CommandFunc NetworkUtils::sNetworkInterfaceSetAlarmChain[] = {
   NetworkUtils::networkInterfaceAlarmSuccess
 };
 
+const CommandFunc NetworkUtils::sGetInterfacesChain[] = {
+  NetworkUtils::getInterfaceList,
+  NetworkUtils::getInterfacesSuccess
+};
+
+const CommandFunc NetworkUtils::sGetInterfaceConfigChain[] = {
+  NetworkUtils::getConfig,
+  NetworkUtils::getInterfaceConfigSuccess
+};
+
+const CommandFunc NetworkUtils::sSetInterfaceConfigChain[] = {
+  NetworkUtils::setConfig,
+  NetworkUtils::setInterfaceConfigSuccess
+};
+
 const CommandFunc NetworkUtils::sTetheringInterfaceSetAlarmChain[] = {
   NetworkUtils::setGlobalAlarm,
   NetworkUtils::removeAlarm,
@@ -766,27 +781,6 @@ void NetworkUtils::removeGlobalAlarm(CommandChain* aChain,
   char command[MAX_COMMAND_SIZE];
 
   PR_snprintf(command, MAX_COMMAND_SIZE - 1, "bandwidth removeglobalalert");
-  doCommand(command, aChain, aCallback);
-}
-
-void NetworkUtils::setInterfaceUp(CommandChain* aChain,
-                                  CommandCallback aCallback,
-                                  NetworkResultOptions& aResult)
-{
-  char command[MAX_COMMAND_SIZE];
-  if (SDK_VERSION >= 16) {
-    PR_snprintf(command, MAX_COMMAND_SIZE - 1, "interface setcfg %s %s %s %s",
-                     GET_CHAR(mIfname),
-                     GET_CHAR(mIp),
-                     GET_CHAR(mPrefix),
-                     GET_CHAR(mLink));
-  } else {
-    PR_snprintf(command, MAX_COMMAND_SIZE - 1, "interface setcfg %s %s %s [%s]",
-                     GET_CHAR(mIfname),
-                     GET_CHAR(mIp),
-                     GET_CHAR(mPrefix),
-                     GET_CHAR(mLink));
-  }
   doCommand(command, aChain, aCallback);
 }
 
@@ -1688,6 +1682,9 @@ void NetworkUtils::ExecuteCommand(NetworkParams aOptions)
     BUILD_ENTRY(destroyNetwork),
     BUILD_ENTRY(getNetId),
     BUILD_ENTRY(setMtu),
+    BUILD_ENTRY(getInterfaces),
+    BUILD_ENTRY(getInterfaceConfig),
+    BUILD_ENTRY(setInterfaceConfig),
 
     #undef BUILD_ENTRY
   };
@@ -2725,6 +2722,34 @@ CommandResult NetworkUtils::getNetId(NetworkParams& aOptions)
   result.mNetId.AppendInt(netIdInfo.mNetId, 10);
   return result;
 }
+
+/**
+ * Get existing network interfaces.
+ */
+CommandResult NetworkUtils::getInterfaces(NetworkParams& aOptions)
+{
+  runChain(aOptions, sGetInterfacesChain, getInterfacesFail);
+  return CommandResult::Pending();
+}
+
+/**
+ * Get network config of a specified interface.
+ */
+CommandResult NetworkUtils::getInterfaceConfig(NetworkParams& aOptions)
+{
+  runChain(aOptions, sGetInterfaceConfigChain, getInterfaceConfigFail);
+  return CommandResult::Pending();
+}
+
+/**
+ * Set network config for a specified interface.
+ */
+CommandResult NetworkUtils::setInterfaceConfig(NetworkParams& aOptions)
+{
+  runChain(aOptions, sSetInterfaceConfigChain, setInterfaceConfigFail);
+  return CommandResult::Pending();
+}
+
 
 CommandResult NetworkUtils::setMtu(NetworkParams& aOptions)
 {

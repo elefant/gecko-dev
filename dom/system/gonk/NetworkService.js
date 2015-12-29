@@ -692,6 +692,48 @@ NetworkService.prototype = {
     });
   },
 
+  getInterfaces: function(callback) {
+    let params = {
+      cmd: "getInterfaces",
+      isAsync: true
+    };
+
+    this.controlMessage(params, function(data) {
+      debug("getInterfaces result: " + JSON.stringify(data));
+      let success = !isError(data.resultCode);
+      callback.getInterfacesResult(success, data.interfaceList);
+    });
+  },
+
+  getInterfaceConfig: function(ifname, callback) {
+    let params = {
+      cmd: "getInterfaceConfig",
+      ifname: ifname,
+      isAsync: true
+    };
+
+    this.controlMessage(params, function(data) {
+      debug("getInterfaceConfig result: " + JSON.stringify(data));
+      let success = !isError(data.resultCode);
+      let result = { ip: data.ipAddr,
+                     prefix: data.prefixLength,
+                     link: data.flag,
+                     mac: data.macAddr };
+      callback.getInterfaceConfigResult(success, result);
+    });
+  },
+
+  setInterfaceConfig: function(config, callback) {
+    config.cmd = "setInterfaceConfig";
+    config.isAsync = true;
+
+    this.controlMessage(config, function(data) {
+      debug("setInterfaceConfig result: " + JSON.stringify(data));
+      let success = !isError(data.resultCode);
+      callback.setInterfaceConfigResult(success);
+    });
+  },
+
   configureInterface: function(aConfig, aCallback) {
     let params = {
       cmd: "configureInterface",
