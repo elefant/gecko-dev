@@ -21,6 +21,7 @@
 #include <cutils/properties.h>
 #include <limits>
 #include "mozilla/dom/network/NetUtils.h"
+#include "mozilla/fallible.h"
 
 #include <errno.h>
 #include <string.h>
@@ -1681,7 +1682,7 @@ void NetworkUtils::getInterfacesSuccess(CommandChain* aChain,
 
   aResult.mInterfaceList.Construct();
   for (uint32_t i = 0; i < length; i++) {
-    aResult.mInterfaceList.Value().AppendElement(interfaceList[i]);
+    aResult.mInterfaceList.Value().AppendElement(interfaceList[i], fallible_t());
   }
 
   postMessage(aChain->getParams(), aResult);
