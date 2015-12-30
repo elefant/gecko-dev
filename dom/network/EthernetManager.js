@@ -41,7 +41,7 @@ function updateDebug() {
     debugPref = debugPref || Services.prefs.getBoolPref(PREF_NETWORK_DEBUG_ENABLED);
   } catch (e) {}
 
-  if (debugPref) {
+  if (true) {
     debug = function(s) {
       dump("-*- EthernetManager: " + s + "\n");
     };
@@ -54,16 +54,16 @@ updateDebug();
 // nsINetworkInterface
 
 function EthernetInterface(attr) {
-  this.state = attr.state;
-  this.type = attr.type;
-  this.name = attr.name;
-  this.ipMode = attr.ipMode;
-  this.ips = [attr.ip];
-  this.prefixLengths = [attr.prefixLength];
-  this.gateways = [attr.gateway];
-  this.dnses = attr.dnses;
-  this.httpProxyHost = "";
-  this.httpProxyPort = 0;
+  this.info.state = attr.state;
+  this.info.type = attr.type;
+  this.info.name = attr.name;
+  this.info.ipMode = attr.ipMode;
+  this.info.ips = [attr.ip];
+  this.info.prefixLengths = [attr.prefixLength];
+  this.info.gateways = [attr.gateway];
+  this.info.dnses = attr.dnses;
+  this.info.httpProxyHost = "";
+  this.info.httpProxyPort = 0;
 }
 EthernetInterface.prototype = {
   QueryInterface: XPCOMUtils.generateQI([Ci.nsINetworkInterface]),
@@ -86,25 +86,27 @@ EthernetInterface.prototype = {
                    config.ipMode : this.ipMode;
   },
 
-  getAddresses: function(ips, prefixLengths) {
-    ips.value = this.ips.slice();
-    prefixLengths.value = this.prefixLengths.slice();
+  info: {
+    getAddresses: function(ips, prefixLengths) {
+      ips.value = this.ips.slice();
+      prefixLengths.value = this.prefixLengths.slice();
 
-    return this.ips.length;
-  },
+      return this.ips.length;
+    },
 
-  getGateways: function(count) {
-    if (count) {
-      count.value = this.gateways.length;
+    getGateways: function(count) {
+      if (count) {
+        count.value = this.gateways.length;
+      }
+      return this.gateways.slice();
+    },
+
+    getDnses: function(count) {
+      if (count) {
+        count.value = this.dnses.length;
+      }
+      return this.dnses.slice();
     }
-    return this.gateways.slice();
-  },
-
-  getDnses: function(count) {
-    if (count) {
-      count.value = this.dnses.length;
-    }
-    return this.dnses.slice();
   }
 };
 

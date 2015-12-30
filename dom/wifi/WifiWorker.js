@@ -17,7 +17,7 @@ Cu.import("resource://gre/modules/WifiNetUtil.jsm");
 Cu.import("resource://gre/modules/WifiP2pManager.jsm");
 Cu.import("resource://gre/modules/WifiP2pWorkerObserver.jsm");
 
-var DEBUG = false; // set to true to show debug messages.
+var DEBUG = true; // set to true to show debug messages.
 
 const WIFIWORKER_CONTRACTID = "@mozilla.org/wifi/worker;1";
 const WIFIWORKER_CID        = Components.ID("{a14e8977-d259-433a-a88d-58dd44657e5b}");
@@ -951,6 +951,19 @@ var WifiManager = (function() {
       });
     }
   }
+
+  let ethernetService = Cc["@mozilla.org/ethernetManager;1"].
+                           getService(Ci.nsIEthernetManager);
+
+  ethernetService.addInterface("eth0", function(success, message) {
+    debug("ethernetService.addInterface => " + success + ": " + message);
+    ethernetService.enable("eth0", function(success, message) {
+      debug("ethernetService.enable => " + success + ": " + message);
+      ethernetService.connect("eth0", function(success, message) {
+        debug("ethernetService.connect => " + success + ": " + message);
+      });
+    });
+  });
 
   // Initial state.
   manager.state = "UNINITIALIZED";
@@ -3916,7 +3929,7 @@ this.NSGetFactory = XPCOMUtils.generateNSGetFactory([WifiWorker]);
 
 var debug;
 function updateDebug() {
-  if (DEBUG) {
+  if (true) {
     debug = function (s) {
       dump("-*- WifiWorker component: " + s + "\n");
     };

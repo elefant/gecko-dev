@@ -72,7 +72,7 @@ function updateDebug() {
     debugPref = debugPref || Services.prefs.getBoolPref(PREF_NETWORK_DEBUG_ENABLED);
   } catch (e) {}
 
-  if (debugPref) {
+  if (true) {
     debug = function(s) {
       dump("-*- NetworkManager: " + s + "\n");
     };
