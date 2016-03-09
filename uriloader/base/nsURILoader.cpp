@@ -943,7 +943,7 @@ NS_IMETHODIMP nsURILoader::Stop(nsISupports* aLoadCookie)
 
   docLoader = do_GetInterface(aLoadCookie, &rv);
   if (docLoader) {
-    rv = docLoader->Stop();
+    rv = docLoader->Stop(NS_BINDING_ABORTED, 1);
   }
   return rv;
 }

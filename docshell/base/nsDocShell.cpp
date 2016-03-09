@@ -5405,7 +5405,7 @@ nsDocShell::Stop(uint32_t aStopFlags)
     // XXXbz We could also pass |this| to nsIURILoader::Stop.  That will
     // just call Stop() on us as an nsIDocumentLoader... We need fewer
     // redundant apis!
-    Stop();
+    StopInternal(NS_BINDING_ABORTED);
   }
 
   nsTObserverArray<nsDocLoader*>::ForwardIterator iter(mChildList);
@@ -7913,7 +7913,7 @@ nsDocShell::CreateAboutBlankContentViewer(nsIPrincipal* aPrincipal,
 
     // Stop any in-progress loading, so that we don't accidentally trigger any
     // PageShow notifications from Embed() interrupting our loading below.
-    Stop();
+    StopInternal(NS_BINDING_ABORTED);
 
     // Notify the current document that it is about to be unloaded!!
     //
@@ -8458,7 +8458,7 @@ nsDocShell::RestoreFromHistory()
 
   RefPtr<RestorePresentationEvent> currentPresentationRestoration =
     mRestorePresentationEvent.get();
-  Stop();
+  StopInternal(NS_BINDING_ABORTED);
   // Make sure we're still restoring the same presentation.
   // If we aren't, docshell is in process doing another load already.
   NS_ENSURE_STATE(currentPresentationRestoration ==

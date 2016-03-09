@@ -182,11 +182,11 @@ public:
   NS_DECL_NSIDEPRECATIONWARNER
   NS_FORWARD_SAFE_NSIDOMSTORAGEMANAGER(TopSessionStorageManager())
 
-  NS_IMETHOD Stop() override
+  NS_IMETHOD Stop(nsresult aReason, uint8_t aOptionalArgc) override
   {
     // Need this here because otherwise nsIWebNavigation::Stop
     // overrides the docloader's Stop()
-    return nsDocLoader::Stop();
+    return nsDocLoader::Stop(aReason, aOptionalArgc);
   }
 
   // Need to implement (and forward) nsISecurityEventSink, because

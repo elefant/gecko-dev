@@ -229,17 +229,23 @@ nsDocLoader::AddDocLoaderAsChildOfRoot(nsDocLoader* aDocLoader)
 }
 
 NS_IMETHODIMP
-nsDocLoader::Stop(void)
+nsDocLoader::Stop(nsresult aReason, uint8_t aOptionalArgc)
+{
+  return StopInternal(aOptionalArgc ? aReason : NS_BINDING_ABORTED);
+}
+
+nsresult
+nsDocLoader::StopInternal(nsresult aReason)
 {
   nsresult rv = NS_OK;
 
   MOZ_LOG(gDocLoaderLog, LogLevel::Debug,
          ("DocLoader:%p: Stop() called\n", this));
 
-  NS_OBSERVER_ARRAY_NOTIFY_XPCOM_OBSERVERS(mChildList, nsDocLoader, Stop, ());
+  NS_OBSERVER_ARRAY_NOTIFY_XPCOM_OBSERVERS(mChildList, nsDocLoader, StopInternal, (NS_BINDING_ABORTED));
 
   if (mLoadGroup)
-    rv = mLoadGroup->Cancel(NS_BINDING_ABORTED);
+    rv = mLoadGroup->Cancel(aReason);
 
   // Don't report that we're flushing layout so IsBusy returns false after a
   // Stop call.
@@ -340,7 +346,7 @@ nsDocLoader::GetLoadGroup(nsILoadGroup** aResult)
 void
 nsDocLoader::Destroy()
 {
-  Stop();
+  StopInternal(NS_BINDING_ABORTED);
 
   // Remove the document loader from the parent list of loaders...
   if (mParent)
