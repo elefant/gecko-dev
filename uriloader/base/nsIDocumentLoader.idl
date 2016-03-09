@@ -21,7 +21,8 @@ interface nsIRequest;
 interface nsIDocumentLoader : nsISupports
 {
   // Stop all loads in the loadgroup of this docloader
-  void stop();
+  [optional_argc]
+    void stop([optional] in nsresult aReason);
 
   // XXXbz is this needed?  For embedding?  What this does is does is not
   // defined by this interface!

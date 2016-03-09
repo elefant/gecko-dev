@@ -201,6 +201,8 @@ protected:
         DocLoaderIsEmpty(true);
     }
 
+    nsresult StopInternal(nsresult aReason);
+
 protected:
     struct nsStatusInfo : public mozilla::LinkedListElement<nsStatusInfo>
     {
