@@ -28,7 +28,9 @@ enum ReferrerPolicy {
   RP_Unsafe_URL                  = nsIHttpChannel::REFERRER_POLICY_UNSAFE_URL,
 
   /* referrer policy is not set */
-  RP_Unset                       = nsIHttpChannel::REFERRER_POLICY_NO_REFERRER_WHEN_DOWNGRADE
+  // Using the same enum as RP_No_Referrer_When_Downgrade would let us
+  // unable to tell if we need to overrule the document wide policy.
+  RP_Unset                       = -1,
 };
 
 /* spec tokens: never no-referrer */
@@ -96,10 +98,10 @@ IsValidReferrerPolicy(const nsAString& content)
 inline bool
 IsValidAttributeReferrerPolicy(const nsAString& aContent)
 {
-  // Spec allows only these three policies at the moment
-  // See bug 1178337
   return aContent.LowerCaseEqualsLiteral(kRPS_No_Referrer)
       || aContent.LowerCaseEqualsLiteral(kRPS_Origin)
+      || aContent.LowerCaseEqualsLiteral(kRPS_No_Referrer_When_Downgrade)
+      || aContent.LowerCaseEqualsLiteral(kRPS_Origin_When_Cross_Origin)
       || aContent.LowerCaseEqualsLiteral(kRPS_Unsafe_URL);
 }
 
