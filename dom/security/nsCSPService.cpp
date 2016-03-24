@@ -21,6 +21,7 @@
 #include "nsContentUtils.h"
 #include "nsContentPolicyUtils.h"
 #include "nsPrincipal.h"
+#include "nsIDocumentLoader.h"
 
 using namespace mozilla;
 
@@ -101,6 +102,73 @@ subjectToCSP(nsIURI* aURI, nsContentPolicyType aContentType) {
   return true;
 }
 
+static bool ShouldEnforceContentPolicy(nsIDocument* aDocument)
+{
+  NS_ENSURE_TRUE(aDocument, false);
+
+  nsIChannel* channel = aDocument->GetChannel();
+  NS_ENSURE_TRUE(channel, false);
+
+  nsCOMPtr<nsILoadInfo> loadInfo = channel->GetLoadInfo();
+  NS_ENSURE_TRUE(loadInfo, false);
+
+  return loadInfo->GetVerifySignedContent();
+}
+
+static bool HasContentPolicy(nsIDocument* aDocument)
+{
+  NS_ENSURE_TRUE(aDocument, false);
+
+  nsCOMPtr<nsIContentSecurityPolicy> csp;
+  aDocument->NodePrincipal()->GetCsp(getter_AddRefs(csp));
+  NS_ENSURE_TRUE(csp, false);
+
+  uint32_t policyCount;
+  csp->GetPolicyCount(&policyCount);
+
+  return policyCount > 0;
+}
+
+static already_AddRefed<nsIDocument>
+GetDocumentFromContext(nsISupports* aContext)
+{
+  nsCOMPtr<nsIDocument> doc;
+  nsCOMPtr<nsIContent> node = do_QueryInterface(aContext);
+  if (node) {
+      doc = node->OwnerDoc();
+  }
+  if (!doc) {
+      doc = do_QueryInterface(aContext);
+  }
+  if (!doc) {
+    return nullptr;
+  }
+  return doc.forget();
+}
+
+static bool MaybeCheckEnforcement(uint32_t aContentType,
+                                  nsISupports *aRequestContext)
+{
+  nsCOMPtr<nsIDocument> doc = GetDocumentFromContext(aRequestContext);
+
+  // Check if CSP needs to be enforced and handle the error.
+  if (!nsContentUtils::IsPreloadType(aContentType) &&
+      ShouldEnforceContentPolicy(doc) && !HasContentPolicy(doc)) {
+    nsIDocShell* docShell = doc->GetDocShell();
+    nsCOMPtr<nsIDocumentLoader> docLoader;
+    if (docShell) {
+      docLoader = do_QueryInterface(docShell);
+    }
+    if (docLoader) {
+      // Reject and stop doc loading.
+      docLoader->Stop(NS_ERROR_CSP_NOT_ENFORCED, 1);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /* nsIContentPolicy implementation */
 NS_IMETHODIMP
 CSPService::ShouldLoad(uint32_t aContentType,
@@ -133,6 +201,15 @@ CSPService::ShouldLoad(uint32_t aContentType,
   // that are whitelistet in subjectToCSP()
   if (!sCSPEnabled || !subjectToCSP(aContentLocation, aContentType)) {
     return NS_OK;
+  }
+
+  // Do CSP enforcement check whenever needed.
+  if (!MaybeCheckEnforcement(aContentType, aRequestContext)) {
+    nsCString contentURL;
+    aContentLocation->GetAsciiSpec(contentURL);
+    printf_stderr("CSP should be enforced! %s\n", contentURL.get());
+    *aDecision = nsIContentPolicy::REJECT_OTHER;
+    return NS_ERROR_CSP_NOT_ENFORCED;
   }
 
   // query the principal of the document; if no document is passed, then
