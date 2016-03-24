@@ -25,6 +25,7 @@
 #include "nsCOMArray.h"
 #include "nsContentUtils.h"
 #include "mozilla/dom/nsMixedContentBlocker.h"
+#include "nsIDocumentLoader.h"
 
 using mozilla::LogLevel;
 
@@ -68,6 +69,50 @@ nsContentPolicy::~nsContentPolicy()
 
 #endif // defined(DEBUG)
 
+static bool ShouldEnforceContentPolicy(nsIDocument* aDocument)
+{
+  NS_ENSURE_TRUE(aDocument, false);
+
+  nsIChannel* channel = aDocument->GetChannel();
+  NS_ENSURE_TRUE(channel, false);
+
+  nsCOMPtr<nsILoadInfo> loadInfo = channel->GetLoadInfo();
+  NS_ENSURE_TRUE(loadInfo, false);
+
+  return loadInfo->GetVerifySignedContent();
+}
+
+static bool HasContentPolicy(nsIDocument* aDocument)
+{
+  NS_ENSURE_TRUE(aDocument, false);
+
+  nsCOMPtr<nsIContentSecurityPolicy> csp;
+  aDocument->NodePrincipal()->GetCsp(getter_AddRefs(csp));
+  NS_ENSURE_TRUE(csp, false);
+
+  uint32_t policyCount;
+  csp->GetPolicyCount(&policyCount);
+
+  return policyCount > 0;
+}
+
+static already_AddRefed<nsIDocument>
+GetDocumentFromContext(nsISupports* aContext)
+{
+  nsCOMPtr<nsIDocument> doc;
+  nsCOMPtr<nsIContent> node = do_QueryInterface(aContext);
+  if (node) {
+      doc = node->OwnerDoc();
+  }
+  if (!doc) {
+      doc = do_QueryInterface(aContext);
+  }
+  if (!doc) {
+    return nullptr;
+  }
+  return doc.forget();
+}
+
 inline nsresult
 nsContentPolicy::CheckPolicy(CPMethod          policyMethod,
                              SCPMethod         simplePolicyMethod,
@@ -94,23 +139,36 @@ nsContentPolicy::CheckPolicy(CPMethod          policyMethod,
     }
 #endif
 
+    nsCOMPtr<nsIDocument> doc = GetDocumentFromContext(requestingContext);
+
+    // Check if CSP needs to be enforced and handle the error.
+    if (!nsContentUtils::IsPreloadType(contentType) &&
+         ShouldEnforceContentPolicy(doc) && !HasContentPolicy(doc)) {
+      nsIDocShell* docShell = doc->GetDocShell();
+      nsCOMPtr<nsIDocumentLoader> docLoader;
+      if (docShell) {
+        docLoader = do_QueryInterface(docShell);
+      }
+      if (docLoader) {
+        nsCString contentURL;
+        contentLocation->GetAsciiSpec(contentURL);
+        MOZ_LOG(gConPolLog, LogLevel::Debug,
+               ("CSP should be enforced! %s\n", contentURL.get()));
+
+        // Reject and stop doc loading.
+        docLoader->Stop(NS_ERROR_CSP_NOT_ENFORCED, 1);
+        *decision = nsIContentPolicy::REJECT_OTHER;
+        return NS_OK;
+      }
+    }
+
     /*
      * There might not be a requestinglocation. This can happen for
      * iframes with an image as src. Get the uri from the dom node.
      * See bug 254510
      */
-    if (!requestingLocation) {
-        nsCOMPtr<nsIDocument> doc;
-        nsCOMPtr<nsIContent> node = do_QueryInterface(requestingContext);
-        if (node) {
-            doc = node->OwnerDoc();
-        }
-        if (!doc) {
-            doc = do_QueryInterface(requestingContext);
-        }
-        if (doc) {
-            requestingLocation = doc->GetDocumentURI();
-        }
+    if (!requestingLocation && doc) {
+        requestingLocation = doc->GetDocumentURI();
     }
 
     nsContentPolicyType externalType =
@@ -122,7 +180,7 @@ nsContentPolicy::CheckPolicy(CPMethod          policyMethod,
     nsCOMPtr<nsIContentPolicy> cspService =
       do_GetService(CSPSERVICE_CONTRACTID);
 
-    /* 
+    /*
      * Enumerate mPolicies and ask each of them, taking the logical AND of
      * their permissions.
      */

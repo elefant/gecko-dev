@@ -4826,6 +4826,17 @@ nsDocShell::DisplayLoadError(nsresult aError, nsIURI* aURI,
     // CSP error
     cssClass.AssignLiteral("neterror");
     error.AssignLiteral("cspBlocked");
+  } else if (NS_ERROR_CSP_NOT_ENFORCED == aError) {
+    // NS_ERROR_CSP_NOT_ENFORCED indicates the CSP-is-not-enforced error.
+    // This currently only happens in case a remote about page fails.
+    // We have to load a fallback in this case.
+    // XXX: We always load about blank here, firefox has to overwrite this if
+    // it wants to display something else.
+    return LoadURI(MOZ_UTF16("about:blank"),  // URI string
+                   nsIChannel::LOAD_NORMAL,   // Load flags
+                   nullptr,                   // Referring URI
+                   nullptr,                   // Post data stream
+                   nullptr);                  // Headers stream
   } else if (NS_ERROR_GET_MODULE(aError) == NS_ERROR_MODULE_SECURITY) {
     nsCOMPtr<nsINSSErrorsService> nsserr =
       do_GetService(NS_NSS_ERRORS_SERVICE_CONTRACTID);

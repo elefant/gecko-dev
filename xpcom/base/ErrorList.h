@@ -667,6 +667,7 @@
   /* Error code for CSP */
   ERROR(NS_ERROR_CSP_FORM_ACTION_VIOLATION,        FAILURE(98)),
   ERROR(NS_ERROR_CSP_FRAME_ANCESTOR_VIOLATION,     FAILURE(99)),
+  ERROR(NS_ERROR_CSP_NOT_ENFORCED,                 FAILURE(100)),
 
   /* Error code for Sub-Resource Integrity */
   ERROR(NS_ERROR_SRI_CORRUPT,                      FAILURE(200)),
