@@ -47,6 +47,8 @@ const URI_CLEANUP = BASE + "cleanup=true";
 const CLEANUP_DONE = "Done";
 
 const URI_SRI = BASE + "sig=sri&key=good&file=sri&header=good";
+const URI_SRI_NO_CSP = BASE + "sig=sri-no-csp&key=good&file=sri-no-csp&header=good";
+
 const STYLESHEET_WITHOUT_SRI_BLOCKED = "Stylesheet without SRI blocked";
 const STYLESHEET_WITH_SRI_BLOCKED = "Stylesheet with SRI blocked";
 const STYLESHEET_WITH_SRI_LOADED = "Stylesheet with SRI loaded";
@@ -76,6 +78,7 @@ const TESTS = [
     SCRIPT_WITHOUT_SRI_BLOCKED,
     SCRIPT_WITH_SRI_LOADED,
     ]},
+  { "aboutURI" : URI_SRI_NO_CSP, "testStrings" : [ABOUT_BLANK] },
   { "url" : URI_CLEANUP, "testStrings" : [CLEANUP_DONE] },
 ];
 
@@ -206,7 +209,7 @@ add_task(function * test() {
     if (testCase.aboutURI) {
       url = ABOUT_NEWTAB_URI;
       aNewTabPref = testCase.aboutURI;
-      if (aNewTabPref == URI_GOOD || aNewTabPref == URI_SRI) {
+      if (aNewTabPref == URI_GOOD || aNewTabPref == URI_SRI || aNewTabPref == URI_SRI_NO_CSP) {
         reload = true;
       }
     } else {

@@ -24,6 +24,9 @@ const badKeyId = "OldRemoteNewTabKey";
 const sriFile = path + "file_about_newtab_sri.html";
 const sriSignature = path + "file_about_newtab_sri_signature";
 
+const sriNoCspFile = path + "file_about_newtab_sri_no_csp.html";
+const sriNoCspSignature = path + "file_about_newtab_sri_no_csp_signature";
+
 const tempFileNames = [goodFileName, scriptFileName, cssFileName];
 
 // we copy the file to serve as newtab to a temp directory because
@@ -195,11 +198,15 @@ function handleRequest(request, response) {
     signature = brokenSignature;
   } else if (signatureType == "sri") {
     signature = sriSignature;
+  } else if (signatureType == "sri-no-csp") {
+    signature = sriNoCspSignature;
   }
   if (fileType == "bad") {
     file = getFileName(badFile, "CurWorkD");
   } else if (fileType == "sri") {
     file = getFileName(sriFile, "CurWorkD");
+  } else if (fileType == "sri-no-csp") {
+    file = getFileName(sriNoCspFile, "CurWorkD");
   }
 
   if (headerType == "good") {
