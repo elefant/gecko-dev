@@ -19,6 +19,7 @@
 #include "nsIDocShell.h"
 #include "nsRuleWalker.h"
 #include "nsGlobalWindow.h"
+#include "nsIContentSecurityPolicy.h"
 
 NS_IMPL_NS_NEW_HTML_ELEMENT(Body)
 
@@ -337,6 +338,51 @@ HTMLBodyElement::ParseAttribute(int32_t aNamespaceID,
                                                         aResult) ||
          nsGenericHTMLElement::ParseAttribute(aNamespaceID, aAttribute, aValue,
                                               aResult);
+}
+
+static bool ShouldEnforceContentPolicy(nsIDocument* aDocument)
+{
+  NS_ENSURE_TRUE(aDocument, false);
+
+  nsIChannel* channel = aDocument->GetChannel();
+  NS_ENSURE_TRUE(channel, false);
+
+  nsCOMPtr<nsILoadInfo> loadInfo = channel->GetLoadInfo();
+  NS_ENSURE_TRUE(loadInfo, false);
+
+  return loadInfo->GetVerifySignedContent();
+}
+
+static bool HasContentPolicy(nsIDocument* aDocument)
+{
+  NS_ENSURE_TRUE(aDocument, false);
+
+  nsCOMPtr<nsIContentSecurityPolicy> csp;
+  aDocument->NodePrincipal()->GetCsp(getter_AddRefs(csp));
+  NS_ENSURE_TRUE(csp, false);
+
+  uint32_t policyCount;
+  csp->GetPolicyCount(&policyCount);
+
+  return policyCount > 0;
+}
+
+nsresult
+HTMLBodyElement::BindToTree(nsIDocument* aDocument,
+                            nsIContent* aParent,
+                            nsIContent* aBindingParent,
+                            bool aCompileEventHandlers)
+{
+  // Check if CSP needs to be enforced and handle the error.
+  if (ShouldEnforceContentPolicy(aDocument) && !HasContentPolicy(aDocument)) {
+    printf_stderr("CSP: aDocument has no CSP but it should have!\n");
+    return NS_ERROR_CSP_NOT_ENFORCED;
+  }
+
+  nsresult rv = nsGenericHTMLElement::BindToTree(aDocument, aParent,
+                                                 aBindingParent,
+                                                 aCompileEventHandlers);
+  return rv;
 }
 
 void

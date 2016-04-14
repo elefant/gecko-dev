@@ -41,6 +41,8 @@
 #include "nsIHTMLDocument.h"
 #include "mozilla/Likely.h"
 #include "nsTextNode.h"
+#include "nsIDocumentLoader.h"
+#include "nsIDocShell.h"
 
 using namespace mozilla;
 
@@ -182,7 +184,27 @@ nsHtml5TreeOperation::Append(nsIContent* aNode,
   if (NS_SUCCEEDED(rv)) {
     aNode->SetParserHasNotified();
     nsNodeUtils::ContentAppended(aParent, aNode, childCount);
+    return rv;
   }
+
+  // We got node appending error. Stop the document loading
+  // and load the error page.
+  if (rv == NS_ERROR_CSP_NOT_ENFORCED) {
+    printf_stderr("CSP: Failed to append node to document.\n");
+    nsIDocument* doc = aBuilder->GetDocument();
+    nsIDocShell* docShell = doc->GetDocShell();
+    nsCOMPtr<nsIDocumentLoader> docLoader;
+    if (docShell) {
+      docLoader = do_QueryInterface(docShell);
+    }
+    if (docLoader) {
+      // Reject and stop doc loading.
+      printf_stderr("CSP: Stop document loading.\n");
+      docLoader->Stop(NS_ERROR_CSP_NOT_ENFORCED, 1);
+      return NS_ERROR_CSP_NOT_ENFORCED;
+    }
+  }
+
   return rv;
 }
 
