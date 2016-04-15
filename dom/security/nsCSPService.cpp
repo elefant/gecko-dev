@@ -102,7 +102,7 @@ subjectToCSP(nsIURI* aURI, nsContentPolicyType aContentType) {
   return true;
 }
 
-static bool ShouldEnforceContentPolicy(nsIDocument* aDocument)
+static bool ShouldEnforceCsp(nsIDocument* aDocument)
 {
   NS_ENSURE_TRUE(aDocument, false);
 
@@ -115,12 +115,17 @@ static bool ShouldEnforceContentPolicy(nsIDocument* aDocument)
   return loadInfo->GetVerifySignedContent();
 }
 
-static bool HasContentPolicy(nsIDocument* aDocument)
+static bool HasCsp(nsIDocument* aDocument, bool aIsPreload)
 {
   NS_ENSURE_TRUE(aDocument, false);
 
   nsCOMPtr<nsIContentSecurityPolicy> csp;
-  aDocument->NodePrincipal()->GetCsp(getter_AddRefs(csp));
+  if (aIsPreload) {
+    aDocument->NodePrincipal()->GetPreloadCsp(getter_AddRefs(csp));
+  } else {
+    aDocument->NodePrincipal()->GetCsp(getter_AddRefs(csp));
+  }
+
   NS_ENSURE_TRUE(csp, false);
 
   uint32_t policyCount;
@@ -150,23 +155,26 @@ static bool MaybeCheckEnforcement(uint32_t aContentType,
                                   nsISupports *aRequestContext)
 {
   nsCOMPtr<nsIDocument> doc = GetDocumentFromContext(aRequestContext);
-
-  // Check if CSP needs to be enforced and handle the error.
-  if (!nsContentUtils::IsPreloadType(aContentType) &&
-      ShouldEnforceContentPolicy(doc) && !HasContentPolicy(doc)) {
-    nsIDocShell* docShell = doc->GetDocShell();
-    nsCOMPtr<nsIDocumentLoader> docLoader;
-    if (docShell) {
-      docLoader = do_QueryInterface(docShell);
-    }
-    if (docLoader) {
-      // Reject and stop doc loading.
-      docLoader->Stop(NS_ERROR_CSP_NOT_ENFORCED, 1);
-      return false;
-    }
+  if (!doc) {
+    return true;
   }
 
-  return true;
+  if (!ShouldEnforceCsp(doc)) {
+    // CSP enforcement is not needed.
+    return true;
+  }
+  bool isPreloadType = nsContentUtils::IsPreloadType(aContentType);
+  if (HasCsp(doc, isPreloadType)) {
+    // The document is required CSP and it does have.
+    return true;
+  }
+
+  nsCOMPtr<nsIDocumentLoader> docLoader = do_QueryInterface(doc->GetDocShell());
+  if (docLoader) {
+    docLoader->Stop(NS_ERROR_CSP_NOT_ENFORCED, 1);
+  }
+
+  return false;
 }
 
 /* nsIContentPolicy implementation */
