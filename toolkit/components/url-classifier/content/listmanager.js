@@ -100,7 +100,7 @@ PROT_ListManager.prototype.registerTable = function(tableName,
                                                     providerName,
                                                     updateUrl,
                                                     gethashUrl) {
-  log("registering " + tableName + " with " + updateUrl);
+  log("registering " + tableName + " with " + this.removeSensitiveQuery(updateUrl));
   if (!updateUrl) {
     log("Can't register table " + tableName + " without updateUrl");
     return false;
@@ -117,7 +117,7 @@ PROT_ListManager.prototype.registerTable = function(tableName,
     var backoffInterval = 30 * 60 * 1000;
     backoffInterval += Math.floor(Math.random() * (30 * 60 * 1000));
 
-    log("Creating request backoff for " + updateUrl);
+    log("Creating request backoff for " + this.removeSensitiveQuery(updateUrl));
     this.requestBackoffs_[updateUrl] = new RequestBackoff(2 /* max errors */,
                                       60*1000 /* retry interval, 1 min */,
                                             4 /* num requests */,
@@ -206,7 +206,15 @@ PROT_ListManager.prototype.kickoffUpdate_ = function (onDiskTableData)
   initialUpdateDelay += Math.floor(Math.random() * (5 * 60 * 1000));
 
   // If the user has never downloaded tables, do the check now.
-  log("needsUpdate: " + JSON.stringify(this.needsUpdate_, undefined, 2));
+  let trimmedUpdateInfo = "";
+  Object.keys(this.needsUpdate_).forEach((url) => {
+    // The key of |this.needsUpdate_| is the "updateUrl".
+    let tables = this.needsUpdate_[url];
+    trimmedUpdateInfo += this.removeSensitiveQuery(url) + ": \n" +
+                         JSON.stringify(tables, undefined, 2) + "\n";
+  });
+  log("needsUpdate: " + trimmedUpdateInfo);
+
   for (var updateUrl in this.needsUpdate_) {
     // If we haven't already kicked off updates for this updateUrl, set a
     // non-repeating timer for it. The timer delay will be reset either on
@@ -227,7 +235,7 @@ PROT_ListManager.prototype.kickoffUpdate_ = function (onDiskTableData)
           }
         }
       }, this);
-      log("Initializing update checker for " + updateUrl
+      log("Initializing update checker for " + this.removeSensitiveQuery(updateUrl)
           + " provided by " + provider);
 
       // Use the initialUpdateDelay + fuzz unless we had previous updates
@@ -255,7 +263,7 @@ PROT_ListManager.prototype.kickoffUpdate_ = function (onDiskTableData)
         new G_Alarm(BindToObject(this.checkForUpdates, this, updateUrl),
                     updateDelay, false /* repeating */);
     } else {
-      log("No updates needed or already initialized for " + updateUrl);
+      log("No updates needed or already initialized for " + this.removeSensitiveQuery(updateUrl));
     }
   }
 }
@@ -324,7 +332,7 @@ PROT_ListManager.prototype.safeLookup = function(key, callback) {
  * for all tables if the url is empty.
  */
 PROT_ListManager.prototype.checkForUpdates = function(updateUrl) {
-  log("checkForUpdates with " + updateUrl);
+  log("checkForUpdates with " + this.removeSensitiveQuery(updateUrl));
   // See if we've triggered the request backoff logic.
   if (!updateUrl) {
     return false;
@@ -385,7 +393,19 @@ PROT_ListManager.prototype.removeSensitiveQuery = function(aUrl) {
  *        tablename;<chunk ranges>\n
  */
 PROT_ListManager.prototype.makeUpdateRequest_ = function(updateUrl, tableData) {
-  log("this.tablesData: " + JSON.stringify(this.tablesData, undefined, 2));
+  // Trim sensitive info from tablesData for dumping logs.
+  let trimmedTablesData = "";
+  Object.keys(this.tablesData).forEach(tableName => {
+    trimmedTablesData += "  " + tableName + ":\n";
+    let perTableData = this.tablesData[tableName];
+    Object.keys(perTableData).forEach(i => {
+      trimmedTablesData += "    " + i + ": " +
+                           this.removeSensitiveQuery(perTableData[i]) + ",\n";
+    });
+    trimmedTablesData += "\n";
+  });
+
+  log("this.tablesData: \n" + trimmedTablesData);
   log("existing chunks: " + tableData + "\n");
   // Disallow blank updateUrls
   if (!updateUrl) {
@@ -444,7 +464,8 @@ PROT_ListManager.prototype.makeUpdateRequestForEntry_ = function(updateUrl,
                                                                  tableList,
                                                                  request) {
   log("makeUpdateRequestForEntry_: request " + request +
-      " update: " + updateUrl + " tablelist: " + tableList + "\n");
+      " update: " + this.removeSensitiveQuery(updateUrl) +
+      " tablelist: " + tableList + "\n");
   var streamer = Cc["@mozilla.org/url-classifier/streamupdater;1"]
                  .getService(Ci.nsIUrlClassifierStreamUpdater);
 
@@ -469,7 +490,7 @@ PROT_ListManager.prototype.makeUpdateRequestForEntry_ = function(updateUrl,
  */
 PROT_ListManager.prototype.updateSuccess_ = function(tableList, updateUrl,
                                                      waitForUpdate) {
-  log("update success for " + tableList + " from " + updateUrl + ": " +
+  log("update success for " + tableList + " from " + this.removeSensitiveQuery(updateUrl) + ": " +
       waitForUpdate + "\n");
   var delay = 0;
   if (waitForUpdate) {

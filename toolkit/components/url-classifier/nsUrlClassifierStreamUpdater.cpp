@@ -22,6 +22,7 @@
 #include "mozilla/LoadContext.h"
 #include "mozilla/Telemetry.h"
 #include "nsContentUtils.h"
+#include "nsIUrlListManager.h"
 
 static const char* gQuitApplicationMessage = "quit-application";
 
@@ -33,6 +34,18 @@ const uint32_t MAX_FILE_SIZE = (32 * 1024 * 1024);
 // NSPR_LOG_MODULES=UrlClassifierStreamUpdater:5
 static mozilla::LazyLogModule gUrlClassifierStreamUpdaterLog("UrlClassifierStreamUpdater");
 #define LOG(args) MOZ_LOG(gUrlClassifierStreamUpdaterLog, mozilla::LogLevel::Debug, args)
+
+// Call nsIUrlListManager::RemoveSensitveQuery to trim URL for
+// dumping debug message.
+static nsCString RemoveSensitiveQuery(const nsACString& aUrl)
+{
+  nsCString trimmedUrl;
+  nsCOMPtr<nsIUrlListManager> listManager =
+    do_GetService("@mozilla.org/url-classifier/listmanager;1");
+  nsresult rv = listManager->RemoveSensitiveQuery(aUrl, trimmedUrl);
+  NS_ENSURE_SUCCESS(rv, EmptyCString());
+  return trimmedUrl;
+}
 
 // This class does absolutely nothing, except pass requests onto the DBService.
 
@@ -153,7 +166,7 @@ nsUrlClassifierStreamUpdater::FetchUpdate(const nsACString & aUpdateUrl,
                                           const nsACString & aRequestBody,
                                           const nsACString & aStreamTable)
 {
-  LOG(("(pre) Fetching update from %s\n", PromiseFlatCString(aUpdateUrl).get()));
+  LOG(("(pre) Fetching update from %s\n", RemoveSensitiveQuery(PromiseFlatCString(aUpdateUrl)).get()));
 
   nsCOMPtr<nsIURI> uri;
   nsresult rv = NS_NewURI(getter_AddRefs(uri), aUpdateUrl);
@@ -162,7 +175,7 @@ nsUrlClassifierStreamUpdater::FetchUpdate(const nsACString & aUpdateUrl,
   nsAutoCString urlSpec;
   uri->GetAsciiSpec(urlSpec);
 
-  LOG(("(post) Fetching update from %s\n", urlSpec.get()));
+  LOG(("(post) Fetching update from %s\n", RemoveSensitiveQuery(urlSpec).get()));
 
   return FetchUpdate(uri, aRequestBody, aStreamTable);
 }
@@ -245,7 +258,7 @@ nsUrlClassifierStreamUpdater::DownloadUpdates(
   mIsUpdating = true;
   *_retval = true;
 
-  LOG(("FetchUpdate: %s", aUpdateUrl.Data()));
+  LOG(("FetchUpdate: %s", RemoveSensitiveQuery(aUpdateUrl).Data()));
   //LOG(("requestBody: %s", aRequestBody.Data()));
 
   return FetchUpdate(aUpdateUrl, aRequestBody, EmptyCString());
@@ -291,11 +304,11 @@ nsUrlClassifierStreamUpdater::FetchNext()
   }
 
   PendingUpdate &update = mPendingUpdates[0];
-  LOG(("Fetching update url: %s\n", update.mUrl.get()));
+  LOG(("Fetching update url: %s\n", RemoveSensitiveQuery(update.mUrl).get()));
   nsresult rv = FetchUpdate(update.mUrl, EmptyCString(),
                             update.mTable);
   if (NS_FAILED(rv)) {
-    LOG(("Error fetching update url: %s\n", update.mUrl.get()));
+    LOG(("Error fetching update url: %s\n", RemoveSensitiveQuery(update.mUrl).get()));
     // We can commit the urls that we've applied so far.  This is
     // probably a transient server problem, so trigger backoff.
     mDownloadErrorCallback->HandleEvent(EmptyCString());
@@ -583,7 +596,7 @@ nsUrlClassifierStreamUpdater::OnStartRequest(nsIRequest *request,
       }
       LOG(("nsUrlClassifierStreamUpdater::OnStartRequest "
            "(status=%s, uri=%s, this=%p)", errorName.get(),
-           spec.get(), this));
+           RemoveSensitiveQuery(spec).get(), this));
     }
 
     if (NS_FAILED(status)) {

@@ -29,6 +29,9 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/NetUtil.jsm");
 
+XPCOMUtils.defineLazyServiceGetter(this, "gListManager",
+                                   "@mozilla.org/url-classifier/listmanager;1",
+                                   "nsIUrlListManager");
 
 // Log only if browser.safebrowsing.debug is true
 function log(...stuff) {
@@ -313,7 +316,8 @@ HashCompleterRequest.prototype = {
   // begin.
   begin: function HCR_begin() {
     if (!this._completer.canMakeRequest(this.gethashUrl)) {
-      dump("hashcompleter: Can't make request to " + this.gethashUrl + "\n");
+      dump("hashcompleter: Can't make request to " +
+            gListManager.removeSensitiveQuery(this.gethashUrl) + "\n");
       this.notifyFailure(Cr.NS_ERROR_ABORT);
       return;
     }
@@ -337,7 +341,8 @@ HashCompleterRequest.prototype = {
     // with onStopRequest since we implement nsIStreamListener on the
     // channel.
     if (this._channel && this._channel.isPending()) {
-      dump("hashcompleter: cancelling request to " + this.gethashUrl + "\n");
+      dump("hashcompleter: cancelling request to " +
+            gListManager.removeSensitiveQuery(this.gethashUrl) + "\n");
       Services.telemetry.getHistogramById("URLCLASSIFIER_COMPLETE_TIMEOUT").add(1);
       this._channel.cancel(Cr.NS_BINDING_ABORTED);
     }

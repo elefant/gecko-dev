@@ -220,8 +220,11 @@ this.SafeBrowsing = {
       updateURL = updateURL.replace("SAFEBROWSING_ID", clientID);
       gethashURL = gethashURL.replace("SAFEBROWSING_ID", clientID);
 
-      log("Provider: " + provider + " updateURL=" + updateURL);
-      log("Provider: " + provider + " gethashURL=" + gethashURL);
+      let listManager = Cc["@mozilla.org/url-classifier/listmanager;1"].
+                          getService(Ci.nsIUrlListManager);
+
+      log("Provider: " + provider + " updateURL=" + listManager.removeSensitiveQuery(updateURL));
+      log("Provider: " + provider + " gethashURL=" + listManager.removeSensitiveQuery(gethashURL));
 
       // Urls used to update DB
       this.providers[provider].updateURL  = updateURL;
