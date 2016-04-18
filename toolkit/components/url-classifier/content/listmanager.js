@@ -341,6 +341,44 @@ PROT_ListManager.prototype.checkForUpdates = function(updateUrl) {
 }
 
 /**
+ * Remove all the sensitive query from the given URL.
+ *
+ * @param aUrl: a string of URL which might contain sensitive info in
+ * the query string.
+ */
+PROT_ListManager.prototype.removeSensitiveQuery = function(aUrl) {
+  let fragment = aUrl.split("#");
+  let urlParts = fragment[0].split("?");
+  if (urlParts.length < 2) {
+    return aUrl; // No query string at all. Just return the original url.
+  }
+
+  // E.g. https://foo.bar.com?a=x&b=y#ref
+  //
+  // fragment[0]: https://foo.bar.com?abc=xyz
+  // fragment[1]: ref
+  // urlParts[0]: https://foo.bar.com
+  // urlParts[1]: a=x&b=y
+
+  // Remove sensitive query from urlParts[1] (query string).
+  let trimmedQueryParts = [];
+  urlParts[1].split("&").forEach(function(v) {
+    if (!v.startsWith("key=")) {
+      trimmedQueryParts.push(v);
+    }
+  });
+  urlParts[1] = trimmedQueryParts.join("&");
+
+  // Re-assemble URL from parts.
+  if (!urlParts[1]) {
+    urlParts.pop(); // To avoid trailing "?" if no resulted query.
+  }
+  fragment[0] = urlParts.join("?");
+
+  return fragment.join("#");
+};
+
+/**
  * Method that fires the actual HTTP update request.
  * First we reset any tables that have disappeared.
  * @param tableData List of table data already in the database, in the form

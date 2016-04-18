@@ -64,4 +64,10 @@ interface nsIUrlListManager : nsISupports
      */
     void safeLookup(in nsIPrincipal key,
                     in nsIUrlListManagerCallback cb);
+
+    /**
+     * Remove all of the sensitive query string parameters from the given URL.
+     * Usually used to dump debug messages.
+     */
+    ACString removeSensitiveQuery(in ACString url);
 };
