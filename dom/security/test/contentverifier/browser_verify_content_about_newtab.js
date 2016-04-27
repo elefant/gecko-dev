@@ -54,6 +54,9 @@ const SCRIPT_WITHOUT_SRI_BLOCKED = "Script without SRI blocked";
 const SCRIPT_WITH_SRI_BLOCKED = "Script with SRI blocked";
 const SCRIPT_WITH_SRI_LOADED = "Script with SRI loaded";
 
+// Needs to sync with pref "security.signed_content.CSP.default".
+const SIGNED_CONTENT_CSP = `{"csp-policies":[{"report-only":false,"script-src":["https://example.com","'unsafe-inline'"],"style-src":["https://example.com"]}]}`;
+
 const TESTS = [
   // { newtab (aboutURI) or regular load (url) : url,
   //   testStrings : expected strings in the loaded page }
@@ -132,6 +135,18 @@ function doTest(aExpectedStrings, reload, aUrl, aNewTabPref) {
         is(aboutNewTabService.newTabURL, aNewTabPref,
             "sanity check: default URL for about:newtab should return the new URL");
       }
+
+      // If the original URL is about:newtab and the will be redirected to
+      // a well-signed content, the document should have a default CSP applied.
+      // (Check pref: "security.signed_content.CSP.default")
+      let shouldHaveCSP = ((aUrl === ABOUT_NEWTAB_URI) &&
+                          (aNewTabPref === URI_GOOD || aNewTabPref === URI_SRI));
+
+      if (shouldHaveCSP) {
+        is(browser.contentDocument.nodePrincipal.cspJSON, SIGNED_CONTENT_CSP,
+           "CSP should be applied");
+      }
+
       yield ContentTask.spawn(
           browser, aExpectedStrings, function * (aExpectedStrings) {
             for (let expectedString of aExpectedStrings) {
