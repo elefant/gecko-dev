@@ -2746,6 +2746,13 @@ nsDocument::ApplySettingsFromCSP(bool aSpeculative)
   }
 }
 
+// Check if the channel is opened from a signed content.
+static bool IsSignedContent(nsIChannel* aChannel)
+{
+  nsCOMPtr<nsILoadInfo> loadInfo = aChannel->GetLoadInfo();
+  return loadInfo && loadInfo->GetVerifySignedContent();
+}
+
 nsresult
 nsDocument::InitCSP(nsIChannel* aChannel)
 {
@@ -2813,11 +2820,15 @@ nsDocument::InitCSP(nsIChannel* aChannel)
   // Check if this is part of the Loop/Hello service
   bool applyLoopCSP = IsLoopDocument(aChannel);
 
+ // Check if we need to apply default signed content CSP.
+ bool applySignedContentCSP = IsSignedContent(aChannel);
+
   // If there's no CSP to apply, go ahead and return early
   if (!applyAppDefaultCSP &&
       !applyAppManifestCSP &&
       !applyAddonCSP &&
       !applyLoopCSP &&
+      !applySignedContentCSP &&
       cspHeaderValue.IsEmpty() &&
       cspROHeaderValue.IsEmpty()) {
     if (MOZ_LOG_TEST(gCspPRLog, LogLevel::Debug)) {
@@ -2887,6 +2898,17 @@ nsDocument::InitCSP(nsIChannel* aChannel)
     rv = aps->GetAddonCSP(addonId, addonCSP);
     if (NS_SUCCEEDED(rv)) {
       csp->AppendPolicy(addonCSP, false, false);
+    }
+  }
+
+  // ----- if the doc is a signed content, apply the default CSP in the pref.
+  if (applySignedContentCSP) {
+    nsCOMPtr<nsIPrefBranch> prefs(do_GetService(NS_PREFSERVICE_CONTRACTID));
+    nsAutoCString signedContentCSP;
+    rv = prefs->GetCharPref("security.signed_content.CSP.default",
+                            getter_Copies(signedContentCSP));
+    if (NS_SUCCEEDED(rv)) {
+      csp->AppendPolicy(NS_ConvertUTF8toUTF16(signedContentCSP), false, false);
     }
   }
 
