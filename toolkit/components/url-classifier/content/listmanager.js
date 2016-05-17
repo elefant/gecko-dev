@@ -12,7 +12,7 @@ Cu.import("resource://gre/modules/Services.jsm");
 //
 // There is a single listmanager for the whole application.
 //
-// TODO more comprehensive update tests, for example add unittest check 
+// TODO more comprehensive update tests, for example add unittest check
 //      that the listmanagers tables are properly written on updates
 
 // Lower and upper limits on the server-provided polling frequency
@@ -78,6 +78,9 @@ this.PROT_ListManager = function PROT_ListManager() {
 
   this.hashCompleter_ = Cc["@mozilla.org/url-classifier/hashcompleter;1"]
                         .getService(Ci.nsIUrlClassifierHashCompleter);
+
+  this.urlUtil = Cc["@mozilla.org/url-classifier/utils;1"]
+                   .getService(Ci.nsIUrlClassifierUtils);
 }
 
 /**
@@ -360,11 +363,19 @@ PROT_ListManager.prototype.makeUpdateRequest_ = function(updateUrl, tableData) {
   //   request: list of tables and existing chunk ranges from tableData
   // }
   var streamerMap = { tableList: null, tableNames: {}, request: "" };
+  var provider = null;
   for (var tableName in this.tablesData) {
     // Skip tables not matching this update url
     if (this.tablesData[tableName].updateUrl != updateUrl) {
       continue;
     }
+
+    // Verify the provider consistency.
+    if (provider && provider !== this.tablesData[tableName].provider) {
+      log("Multiple tables for the same updateURL have a different provider?!");
+    }
+    provider = this.tablesData[tableName].provider;
+
     if (this.needsUpdate_[this.tablesData[tableName].updateUrl][tableName]) {
       streamerMap.tableNames[tableName] = true;
     }
@@ -374,21 +385,34 @@ PROT_ListManager.prototype.makeUpdateRequest_ = function(updateUrl, tableData) {
       streamerMap.tableList += "," + tableName;
     }
   }
-  // Build the request. For each table already in the database, include the
-  // chunk data from the database
-  var lines = tableData.split("\n");
-  for (var i = 0; i < lines.length; i++) {
-    var fields = lines[i].split(";");
-    var name = fields[0];
-    if (streamerMap.tableNames[name]) {
-      streamerMap.request += lines[i] + "\n";
-      delete streamerMap.tableNames[name];
+
+  // Build the request based on provider's protocol version.
+  let protocolVersion = this.urlUtil.getProtocolVersion(provider);
+  if (protocolVersion === "2.2") {
+    // For each table already in the database, include the
+    // chunk data from the database
+    var lines = tableData.split("\n");
+    for (var i = 0; i < lines.length; i++) {
+      var fields = lines[i].split(";");
+      var name = fields[0];
+      if (streamerMap.tableNames[name]) {
+        streamerMap.request += lines[i] + "\n";
+        delete streamerMap.tableNames[name];
+      }
     }
-  }
-  // For each requested table that didn't have chunk data in the database,
-  // request it fresh
-  for (let tableName in streamerMap.tableNames) {
-    streamerMap.request += tableName + ";\n";
+    // For each requested table that didn't have chunk data in the database,
+    // request it fresh
+    for (let tableName in streamerMap.tableNames) {
+      streamerMap.request += tableName + ";\n";
+    }
+  } else if (protocolVersion === "4.1") {
+    streamerMap.request = this.buildRequestV4_(tableData);
+  } else {
+    log("Unsupported protocol version " + protocolVersion +
+        " for provider " + provider);
+    // Use v4 as fallback.
+    streamerMap.request = this.buildRequestV4_(tableData);
+    return;
   }
 
   log("update request: " + JSON.stringify(streamerMap, undefined, 2) + "\n");
@@ -402,6 +426,16 @@ PROT_ListManager.prototype.makeUpdateRequest_ = function(updateUrl, tableData) {
     log("Not sending empty request");
   }
 }
+
+/**
+ * Build update request for v4.
+ * @param aOnDiskTableData - the table name list obtained from the database.
+ * @returns string for the HTTP request.
+ */
+PROT_ListManager.prototype.buildRequestV4_ = function(aOnDiskTableData) {
+  // TODO: Bug 1274112 Implement Safe Browsing v4 update request.
+  return "Not implemented yet.";
+};
 
 PROT_ListManager.prototype.makeUpdateRequestForEntry_ = function(updateUrl,
                                                                  tableList,

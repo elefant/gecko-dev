@@ -101,6 +101,23 @@ const SERVER_INVOLVED_TEST_CASE_LIST = [
     forceTableUpdate();
   },
 
+  // - Do table0 update with protocol v4 (not supported yet).
+  // - The expected request is "Not implemented yet." (defined in listmanager.js)
+  function test_update_table0_v4() {
+    prefBranch.setCharPref("browser.safebrowsing.provider.google.pver", "4.1");
+
+    disableAllUpdates();
+
+    gListManager.enableUpdate(TEST_TABLE_DATA_LIST[0].tableName);
+
+    // TODO: Bug 1274112 Implement Safe Browsing v4 update request.
+    gExpectedUpdateRequest = "Not implemented yet.";
+
+    gUpdateResponse = "n:1000\n";
+
+    forceTableUpdate();
+  },
+
   // - Do all-table update.
   // - Server would respond no chunk control.
   //
@@ -108,6 +125,8 @@ const SERVER_INVOLVED_TEST_CASE_LIST = [
   // the number of sever-involved test case to synchronize the racing last
   // two udpates for different URL.
   function test_update_all_tables() {
+    prefBranch.setCharPref("browser.safebrowsing.provider.google.pver", "2.2");
+
     disableAllUpdates();
 
     // Enable all tables including TEST_TABLE_DATA_ANOTHER!
