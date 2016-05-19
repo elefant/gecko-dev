@@ -117,17 +117,39 @@ PROT_ListManager.prototype.registerTable = function(tableName,
   // Keep track of all of our update URLs.
   if (!this.needsUpdate_[updateUrl]) {
     this.needsUpdate_[updateUrl] = {};
+
+    // A random number (0~1) to determine the timeout increment.
+    let rand = Math.random();
+
     /* Backoff interval should be between 30 and 60 minutes. */
-    var backoffInterval = 30 * 60 * 1000;
-    backoffInterval += Math.floor(Math.random() * (30 * 60 * 1000));
+    let backoffInterval = 30 * 60 * 1000;
+    backoffInterval += Math.floor(rand * (30 * 60 * 1000));
+
+    let protocolVersion = urlUtil.getProtocolVersion(providerName);
+
+    // retryInterval and maxBackoff is different for v2 and v4.
+    let retryInterval;
+    let maxBackoff;
+    if (protocolVersion === "2.2") {
+      retryInterval = 60 * 1000;       // 1 min.
+      maxBackoff = 8 * 60 * 60 * 1000; // 8 hrs.
+    } else if (protocolVersion === "4.1") {
+      retryInterval = Math.floor(15 * 60 * 1000 * (rand + 1)); // 15 ~ 30 min.
+      maxBackoff = 24 * 60 * 60 * 1000; // 24 hr.
+    } else {
+      log("Unknown protocol version: " + protocolVersion +
+          ". Use v4 configuration.");
+      retryInterval = Math.floor(15 * 60 * 1000 * (rand + 1)); // 15 ~ 30 min.
+      maxBackoff = 24 * 60 * 60 * 1000; // 24 hr.
+    }
 
     log("Creating request backoff for " + updateUrl);
     this.requestBackoffs_[updateUrl] = new RequestBackoff(2 /* max errors */,
-                                      60*1000 /* retry interval, 1 min */,
+                                retryInterval /* 1 min (v2) or 15~30 min (v4) */,
                                             4 /* num requests */,
                                    60*60*1000 /* request time, 60 min */,
                               backoffInterval /* backoff interval, 60 min */,
-                                 8*60*60*1000 /* max backoff, 8hr */);
+                                   maxBackoff /* 8 hr (v2) or 24 hr (v4) */);
 
   }
   this.needsUpdate_[updateUrl][tableName] = false;
