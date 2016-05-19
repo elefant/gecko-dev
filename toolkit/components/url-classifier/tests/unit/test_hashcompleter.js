@@ -116,6 +116,14 @@ var multipleResponsesCompletionSet = [
   }
 ];
 
+function buildCompletionRequest(aCompletionSet) {
+  let prefixes = [];
+  aCompletionSet.forEach(s => {
+    prefixes.push(s.hash.substring(0, 4));
+  });
+  return 4 + ":" + (4 * prefixes.length) + "\n" + prefixes.join("");
+}
+
 // The fifth completion set is added at runtime by getRandomCompletionSet.
 // Each completion in the set only has one response and its purpose is to
 // provide an easy way to test the HashCompleter handling an arbitrarily large
@@ -255,6 +263,10 @@ function hashCompleterServer(aRequest, aResponse) {
 
   let len = stream.available();
   let data = wrapperStream.readBytes(len);
+
+  // Check if we got the expected completion request.
+  let expectedRequest = buildCompletionRequest(completionSets[currentCompletionSet]);
+  equal(JSON.stringify(data), JSON.stringify(expectedRequest));
 
   // To avoid a response with duplicate hash completions, we keep track of all
   // completed hash prefixes so far.
