@@ -17,6 +17,9 @@ XPIDL_SOURCES += [
 
 XPIDL_MODULE = 'url-classifier'
 
+# Disable RTTI in google protocol buffer
+DEFINES['GOOGLE_PROTOBUF_NO_RTTI'] = True
+
 UNIFIED_SOURCES += [
     'ChunkSet.cpp',
     'Classifier.cpp',
@@ -25,7 +28,10 @@ UNIFIED_SOURCES += [
     'nsUrlClassifierDBService.cpp',
     'nsUrlClassifierProxies.cpp',
     'nsUrlClassifierUtils.cpp',
+    'protobuf/duration.pb.cc',
     'ProtocolParser.cpp',
+    'safebrowsing.pb.wrapped.cc' # Use the wrapped one to get around the
+                                 # error caused by pre-defined "LINUX".
 ]
 
 # define conflicting LOG() macros
@@ -58,6 +64,9 @@ EXPORTS += [
     'Entries.h',
     'LookupCache.h',
     'nsUrlClassifierPrefixSet.h',
+    'protobuf/duration.pb.h',
+    'safebrowsing.pb.wrapped.h' # Export the wrapped header to get around the
+                                # error caused by pre-defined "LINUX".
 ]
 
 FINAL_LIBRARY = 'xul'
