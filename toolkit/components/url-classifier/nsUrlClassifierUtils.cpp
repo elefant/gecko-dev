@@ -11,6 +11,7 @@
 #include "plbase64.h"
 #include "prprf.h"
 #include "nsPrintfCString.h"
+#include "safebrowsing.pb.h"
 
 #define DEFAULT_PROTOCOL_VERSION "2.2"
 
@@ -71,6 +72,127 @@ IsOctal(const nsACString & num)
 
   return true;
 }
+
+/////////////////////////////////////////////////////////////////
+// SafeBrowsing V4 related utits.
+
+namespace mozilla {
+namespace safebrowsing {
+
+static PlatformType
+GetPlatformType()
+{
+  //////////////////////////////////////////////////////////
+  // The following macro is copied from build_config.h
+
+// A set of macros to use for platform detection.
+#if defined(__APPLE__)
+#define OS_MACOSX 1
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#define OS_IOS 1
+#endif  // defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#elif defined(ANDROID)
+#define OS_ANDROID 1
+#elif defined(__native_client__)
+#define OS_NACL 1
+#elif defined(__linux__)
+#define OS_LINUX 1
+// Use TOOLKIT_GTK on linux if TOOLKIT_VIEWS isn't defined.
+#if !defined(TOOLKIT_VIEWS)
+#define TOOLKIT_GTK
+#endif
+#elif defined(_WIN32)
+#define OS_WIN 1
+#define TOOLKIT_VIEWS 1
+#elif defined(__DragonFly__)
+#define OS_DRAGONFLY 1
+#define TOOLKIT_GTK
+#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+#define OS_FREEBSD 1
+#define TOOLKIT_GTK
+#elif defined(__NetBSD__)
+#define OS_NETBSD 1
+#define TOOLKIT_GTK
+#elif defined(__OpenBSD__)
+#define OS_OPENBSD 1
+#define TOOLKIT_GTK
+#elif defined(__sun)
+#define OS_SOLARIS 1
+#define TOOLKIT_GTK
+#else
+#error Please add support for your platform in build/build_config.h
+#endif
+  ////////////////////////////////////////////////////////////
+
+#ifdef OS_WIN
+  return WINDOWS_PLATFORM;
+#endif
+
+#ifdef OS_LINUX
+  return LINUX_PLATFORM;
+#endif
+
+#ifdef OS_ANDROID
+  return ANDROID_PLATFORM;
+#endif
+
+#ifdef OS_MACOSX
+  return OSX_PLATFORM;
+#endif
+
+#ifdef OS_IOS
+  return IOS_PLATFORM;
+#endif
+
+  return PLATFORM_TYPE_UNSPECIFIED;
+}
+
+typedef FetchThreatListUpdatesRequest_ListUpdateRequest ListUpdateRequest;
+typedef FetchThreatListUpdatesRequest_ListUpdateRequest_Constraints Constraints;
+
+static void
+InitListUpdateRequest(ThreatType aThreatType,
+                      const char* aState,
+                      ListUpdateRequest* aListUpdateRequest)
+{
+  aListUpdateRequest->set_threat_type(aThreatType);
+  aListUpdateRequest->set_platform_type(GetPlatformType());
+  aListUpdateRequest->set_threat_entry_type(URL);
+
+  // Only RAW data is supported. TODO: Rice-Golomb encoded data.
+  Constraints* contraints = new Constraints();
+  contraints->add_supported_compressions(RAW);
+  aListUpdateRequest->set_allocated_constraints(contraints);
+
+  // Only set non-empty state.
+  if (aState[0] != '\0') {
+    aListUpdateRequest->set_state(aState);
+  }
+}
+
+static ClientInfo*
+CreateClientInfo()
+{
+  ClientInfo* c = new ClientInfo();
+
+  nsCOMPtr<nsIPrefBranch> prefBranch =
+    do_GetService(NS_PREFSERVICE_CONTRACTID);
+
+  nsXPIDLCString clientId;
+  nsresult rv = prefBranch->GetCharPref("browser.safebrowsing.id",
+                                        getter_Copies(clientId));
+
+  if (NS_FAILED(rv)) {
+    clientId = "Firefox"; // Use "Firefox" as fallback.
+  }
+
+  c->set_client_id(clientId.get());
+
+  return c;
+}
+
+} // end of namespace safebrowsing.
+} // end of namespace mozilla.
 
 nsUrlClassifierUtils::nsUrlClassifierUtils() : mEscapeCharmap(nullptr)
 {
@@ -142,6 +264,40 @@ nsUrlClassifierUtils::GetProtocolVersion(const nsACString& aProvider,
 
   aVersion = NS_SUCCEEDED(rv) ? version
                               : DEFAULT_PROTOCOL_VERSION;
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsUrlClassifierUtils::MakeUpdateRequestV4(const char** aListNames,
+                                          const char** aStates,
+                                          uint32_t aCount,
+                                          nsACString &aRequest)
+{
+  using namespace mozilla::safebrowsing;
+
+  FetchThreatListUpdatesRequest r;
+  r.set_allocated_client(CreateClientInfo());
+
+  for (uint32_t i = 0; i < aCount; i++) {
+    nsCString listName(aListNames[i]);
+    uint32_t threatType;
+    nsresult rv = ConvertListNameToThreatType(listName, &threatType);
+    if (NS_FAILED(rv)) {
+      continue; // Unknown list name.
+    }
+    auto lur = r.mutable_list_update_requests()->Add();
+    InitListUpdateRequest(static_cast<ThreatType>(threatType), aStates[i], lur);
+  }
+
+  // Then serialize.
+  std::string s;
+  r.SerializeToString(&s);
+
+  nsXPIDLCString out; // A non-null-terminated string to return the output.
+  out.Assign(s.c_str(), s.size());
+
+  aRequest = out;
 
   return NS_OK;
 }
