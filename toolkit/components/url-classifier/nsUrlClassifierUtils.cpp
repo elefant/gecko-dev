@@ -11,6 +11,7 @@
 #include "plbase64.h"
 #include "prprf.h"
 #include "nsPrintfCString.h"
+#include "safebrowsing.pb.h"
 
 #define DEFAULT_PROTOCOL_VERSION "2.2"
 
@@ -125,6 +126,46 @@ nsUrlClassifierUtils::GetKeyForURI(nsIURI * uri, nsACString & _retval)
   _retval.Append(temp);
 
   return NS_OK;
+}
+
+// We will use "goog4-*-proto" as the list name for v4, where "goog4"
+// is for the provider and "proto" means it's updated (as well as hash
+// completion) via protobuf.
+static const struct {
+  const char* mListName;
+  uint32_t mThreatType;
+} THREAT_TYPE_CONV_TABLE[] = {
+  { "goog4-phish-proto",    SOCIAL_ENGINEERING_PUBLIC},
+  { "goog4-malware-proto",  MALWARE_THREAT},
+  { "goog4-unwanted-proto", UNWANTED_SOFTWARE},
+};
+
+NS_IMETHODIMP
+nsUrlClassifierUtils::ConvertThreatTypeToListName(uint32_t aThreatType,
+                                                  nsACString& aListName)
+{
+  for (uint32_t i = 0; i < ArrayLength(THREAT_TYPE_CONV_TABLE); i++) {
+    if (aThreatType == THREAT_TYPE_CONV_TABLE[i].mThreatType) {
+      aListName = THREAT_TYPE_CONV_TABLE[i].mListName;
+      return NS_OK;
+    }
+  }
+
+  return NS_ERROR_FAILURE;
+}
+
+NS_IMETHODIMP
+nsUrlClassifierUtils::ConvertListNameToThreatType(const nsACString& aListName,
+                                                  uint32_t* aThreatType)
+{
+  for (uint32_t i = 0; i < ArrayLength(THREAT_TYPE_CONV_TABLE); i++) {
+    if (aListName.EqualsASCII(THREAT_TYPE_CONV_TABLE[i].mListName)) {
+      *aThreatType = THREAT_TYPE_CONV_TABLE[i].mThreatType;
+      return NS_OK;
+    }
+  }
+
+  return NS_ERROR_FAILURE;
 }
 
 NS_IMETHODIMP
