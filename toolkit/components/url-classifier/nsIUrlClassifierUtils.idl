@@ -3,11 +3,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsISupports.idl"
-/**
- * Some utility methods used by the url classifier.
- */
+#include "nsIStringStream.idl"
 
 interface nsIURI;
+interface nsIArray;
 
 [scriptable, uuid(e4f0e59c-b922-48b0-a7b6-1735c1f96fed)]
 interface nsIUrlClassifierUtils : nsISupports
@@ -61,4 +60,13 @@ interface nsIUrlClassifierUtils : nsISupports
   ACString makeUpdateRequestV4([array, size_is(aCount)] in string aListNames,
                                [array, size_is(aCount)] in string aStates,
                                in uint32_t aCount);
+
+  /**
+   * Parse update response.
+   *
+   * @ param aResponse A nsIStringInputStream of the response.
+   *
+   * @ returns An array of nsISafeBrowsingUpdateResponse.
+   */
+  nsIArray parseUpdateResponseV4(in nsIStringInputStream aResponse);
 };

@@ -13,6 +13,8 @@
 #include "nsPrintfCString.h"
 #include "safebrowsing.pb.h"
 
+#include "v4/nsSBUpdateResponse.h"
+
 #define DEFAULT_PROTOCOL_VERSION "2.2"
 
 static char int_to_hex_digit(int32_t i)
@@ -339,6 +341,50 @@ nsUrlClassifierUtils::MakeUpdateRequestV4(const char** aListNames,
   out.Assign(s.c_str(), s.size());
 
   aRequest = out;
+
+  return NS_OK;
+}
+
+nsresult
+nsUrlClassifierUtils::ParseUpdateResponseInternal(nsIInputStream*,
+                                                  void* aClosure,
+                                                  const char* aFromSegment,
+                                                  uint32_t aOffset,
+                                                  uint32_t aCount,
+                                                  uint32_t* aWriteCount)
+{
+  FetchThreatListUpdatesResponse response;
+
+  if (!response.ParseFromArray(aFromSegment, aCount)) {
+    return NS_ERROR_FAILURE;
+  }
+
+  nsUrlClassifierUtils* self = reinterpret_cast<nsUrlClassifierUtils*>(aClosure);
+
+  self->mResponses = do_CreateInstance(NS_ARRAY_CONTRACTID);
+  for (int i = 0; i < response.list_update_responses_size(); i++) {
+    auto r = response.list_update_responses(i);
+    self->mResponses->AppendElement(new nsSBUpdateResponse(r), false);
+  }
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsUrlClassifierUtils::ParseUpdateResponseV4(nsIStringInputStream* aResponse,
+                                            nsIArray** aRet)
+{
+  FetchThreatListUpdatesResponse response;
+
+  uint32_t bytesRead;
+  nsresult rv = aResponse->ReadSegments(ParseUpdateResponseInternal,
+                                        this,
+                                        -1,
+                                        &bytesRead);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  NS_IF_ADDREF(*aRet = mResponses);
+  mResponses = nullptr;
 
   return NS_OK;
 }

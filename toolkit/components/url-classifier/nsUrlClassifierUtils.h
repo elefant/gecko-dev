@@ -7,6 +7,7 @@
 
 #include "nsAutoPtr.h"
 #include "nsIUrlClassifierUtils.h"
+#include "nsIMutableArray.h"
 
 class nsUrlClassifierUtils final : public nsIUrlClassifierUtils
 {
@@ -80,7 +81,16 @@ private:
 
   void CleanupHostname(const nsACString & host, nsACString & _retval);
 
+  static nsresult ParseUpdateResponseInternal(nsIInputStream*,
+                                              void* aClosure,
+                                              const char* aFromSegment,
+                                              uint32_t aOffset,
+                                              uint32_t aCount,
+                                              uint32_t* aWriteCount);
+
   nsAutoPtr<Charmap> mEscapeCharmap;
+
+  nsCOMPtr<nsIMutableArray> mResponses;
 };
 
 #endif // nsUrlClassifierUtils_h_

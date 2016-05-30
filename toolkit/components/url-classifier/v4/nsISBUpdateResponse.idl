@@ -1,0 +1,35 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsISupports.idl"
+#include "nsIArray.idl"
+
+[scriptable, uuid(382c14f0-d8bd-4a23-8b21-384de3795ae4)]
+interface nsISBUpdateResponse : nsISupports
+{
+  // The list name of this response.
+  readonly attribute ACString listName;
+
+  // If true, we need to clear its database before applying update.
+  readonly attribute boolean isFullUpdate;
+
+  // The client's new state after the upate. Opaue to clients.
+  readonly attribute ACString newState;
+
+  // The expected SHA256 hash of the client state; that is, of the sorted list
+  // of all hashes present in the database after applying the provided update.
+  // If the client state doesn't match the expected state, the client must
+  // disregard this update and retry later.
+  readonly attribute ACString newChecksum;
+
+  // 4-byte prefixes all concatenated into one long string.
+  // Null if no additions.
+  readonly attribute ACString fixedLengthAdditions;
+
+  // An array of string to store variable-length prefixes to add.
+  readonly attribute nsIArray variableLengthAdditions;
+
+  // An array of 0-based indices to remove. Null if no removal indices.
+  readonly attribute ACString removalIndices;
+};

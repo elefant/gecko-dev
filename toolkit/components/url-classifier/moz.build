@@ -13,6 +13,7 @@ XPIDL_SOURCES += [
     'nsIUrlClassifierStreamUpdater.idl',
     'nsIUrlClassifierUtils.idl',
     'nsIUrlListManager.idl',
+    'v4/nsISBUpdateResponse.idl',
 ]
 
 XPIDL_MODULE = 'url-classifier'
@@ -30,6 +31,7 @@ UNIFIED_SOURCES += [
     'nsUrlClassifierUtils.cpp',
     'protobuf/safebrowsing.pb.cc',
     'ProtocolParser.cpp',
+    'v4/nsSBUpdateResponse.cpp',
 ]
 
 # define conflicting LOG() macros
