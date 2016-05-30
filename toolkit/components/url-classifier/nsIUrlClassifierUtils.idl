@@ -32,6 +32,24 @@ interface nsIUrlClassifierUtils : nsISupports
   ACString getProtocolVersion(in ACString provider);
 
   /**
+   * Convert threat type to list name.
+   *
+   * @param Integer to indicate threat type.
+   *
+   * @returns The list name.
+   */
+  ACString convertThreatTypeToListName(in uint32_t threatType);
+
+  /**
+   * Convert list name to threat type.
+   *
+   * @param The list name.
+   *
+   * @returns The threat type in integer.
+   */
+  uint32_t convertListNameToThreatType(in ACString listName);
+
+  /**
    * Make update request for given lists and their states.
    *
    * @param aListNames An array of list name represented in string.

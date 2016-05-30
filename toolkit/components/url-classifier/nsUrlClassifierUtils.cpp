@@ -250,6 +250,47 @@ nsUrlClassifierUtils::GetKeyForURI(nsIURI * uri, nsACString & _retval)
 }
 
 NS_IMETHODIMP
+nsUrlClassifierUtils::ConvertThreatTypeToListName(uint32_t aThreatType,
+                                                  nsACString& aListName)
+{
+  const char* MAPPING_TABLE[] = {
+    "",                     // THREAT_TYPE_UNSPECIFIED (0)
+    "goog-malware-shavar",  // MALWARE_THREAT (1)
+    "goog-phish-shavar",    // SOCIAL_ENGINEERING_PUBLIC (2)
+    "goog-unwanted-shavar", // UNWANTED_SOFTWARE (3)
+  };
+
+  NS_ENSURE_TRUE(aThreatType > 0, NS_ERROR_FAILURE);
+  NS_ENSURE_TRUE(aThreatType < ArrayLength(MAPPING_TABLE), NS_ERROR_FAILURE);
+
+  aListName = MAPPING_TABLE[aThreatType];
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsUrlClassifierUtils::ConvertListNameToThreatType(const nsACString& aListName,
+                                                  uint32_t* aThreatType)
+{
+  const struct {
+    const char* mListName;
+    uint32_t mThreatType;
+  } MAPPING_TABLE[] = {
+    { "goog-phish-shavar",    SOCIAL_ENGINEERING_PUBLIC},
+    { "goog-malware-shavar",  MALWARE_THREAT},
+    { "goog-unwanted-shavar", UNWANTED_SOFTWARE},
+  };
+
+  for (uint32_t i = 0; i < ArrayLength(MAPPING_TABLE); i++) {
+    if (aListName.EqualsASCII(MAPPING_TABLE[i].mListName)) {
+      *aThreatType = MAPPING_TABLE[i].mThreatType;
+      return NS_OK;
+    }
+  }
+
+  return NS_ERROR_FAILURE;
+}
+
+NS_IMETHODIMP
 nsUrlClassifierUtils::GetProtocolVersion(const nsACString& aProvider,
                                          nsACString& aVersion)
 {
