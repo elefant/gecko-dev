@@ -64,4 +64,11 @@ interface nsIUrlListManager : nsISupports
      */
     void safeLookup(in nsIPrincipal key,
                     in nsIUrlListManagerCallback cb);
+
+    /**
+     * Get provider by table. This function reduces the effort of
+     * passing provider around because we would only have table name
+     * most of the time.
+     */
+    ACString getProvider(in ACString tableName);
 };

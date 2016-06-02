@@ -138,6 +138,17 @@ add_test(function test_getGethashUrl() {
   run_next_test();
 });
 
+// Test nsIUrlListManager.getProvider.
+add_test(function test_getProvider() {
+  TEST_TABLE_DATA_LIST.forEach(function (t) {
+    equal(gListManager.getProvider(t.tableName), 'google');
+  });
+
+  ok(!gListManager.getProvider('bad-table-name'));
+
+  run_next_test();
+});
+
 function run_test() {
   // Setup primary testing server.
   gHttpServ = new HttpServer();

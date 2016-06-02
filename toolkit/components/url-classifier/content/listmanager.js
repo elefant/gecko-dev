@@ -12,7 +12,7 @@ Cu.import("resource://gre/modules/Services.jsm");
 //
 // There is a single listmanager for the whole application.
 //
-// TODO more comprehensive update tests, for example add unittest check 
+// TODO more comprehensive update tests, for example add unittest check
 //      that the listmanagers tables are properly written on updates
 
 // Lower and upper limits on the server-provided polling frequency
@@ -130,6 +130,11 @@ PROT_ListManager.prototype.registerTable = function(tableName,
   this.needsUpdate_[updateUrl][tableName] = false;
 
   return true;
+}
+
+PROT_ListManager.prototype.getProvider = function(tableName) {
+  let data = this.tablesData[tableName];
+  return data ? data.provider : "";
 }
 
 PROT_ListManager.prototype.getGethashUrl = function(tableName) {
