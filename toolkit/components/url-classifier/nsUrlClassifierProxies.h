@@ -91,9 +91,11 @@ public:
   {
   public:
     BeginStreamRunnable(nsUrlClassifierDBServiceWorker* aTarget,
-                        const nsACString& aTable)
+                        const nsACString& aTable,
+                        const nsACString& aProtocolVer)
       : mTarget(aTarget)
       , mTable(aTable)
+      , mProtocolVer(aProtocolVer)
     { }
 
     NS_DECL_NSIRUNNABLE
@@ -101,6 +103,7 @@ public:
   private:
     RefPtr<nsUrlClassifierDBServiceWorker> mTarget;
     nsCString mTable;
+    nsCString mProtocolVer;
   };
 
   class UpdateStreamRunnable : public mozilla::Runnable

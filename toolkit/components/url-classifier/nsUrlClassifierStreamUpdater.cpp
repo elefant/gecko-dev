@@ -23,6 +23,8 @@
 #include "mozilla/Telemetry.h"
 #include "nsContentUtils.h"
 #include "nsIURLFormatter.h"
+#include "nsIUrlListManager.h"
+#include "nsIUrlClassifierUtils.h"
 
 static const char* gQuitApplicationMessage = "quit-application";
 
@@ -581,6 +583,29 @@ static uint32_t HTTPStatusToBucket(uint32_t status)
   return statusBucket;
 }
 
+// Get protocol version by table name.
+static nsCString
+GetProtocolVersion(const nsACString& aTableName)
+{
+  nsresult rv;
+
+  // Get the provider first.
+  nsCOMPtr<nsIUrlListManager> listManager =
+    do_GetService("@mozilla.org/url-classifier/listmanager;1");
+  nsAutoCString provider;
+  rv = listManager->GetProvider(aTableName, provider);
+  NS_ENSURE_SUCCESS(rv, EmptyCString());
+
+  // Get the protocol version by provider.
+  nsCOMPtr<nsIUrlClassifierUtils> utilsService =
+    do_GetService(NS_URLCLASSIFIERUTILS_CONTRACTID);
+  nsAutoCString pver;
+  rv = utilsService->GetProtocolVersion(provider, pver);
+  NS_ENSURE_SUCCESS(rv, EmptyCString());
+
+  return pver;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // nsIStreamListenerObserver implementation
 
@@ -652,7 +677,7 @@ nsUrlClassifierStreamUpdater::OnStartRequest(nsIRequest *request,
     MOZ_ASSERT(mDownloadErrorCallback);
     mBeganStream = true;
     LOG(("nsUrlClassifierStreamUpdater::Beginning stream [this=%p]", this));
-    rv = mDBService->BeginStream(mStreamTable);
+    rv = mDBService->BeginStream(mStreamTable, GetProtocolVersion(mStreamTable));
     NS_ENSURE_SUCCESS(rv, rv);
   }
 

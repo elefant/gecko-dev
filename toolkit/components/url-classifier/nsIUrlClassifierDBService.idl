@@ -148,8 +148,10 @@ interface nsIUrlClassifierDBService : nsISupports
    *
    * @param table The table the contents of this stream will be associated
    *              with, or empty for the initial stream.
+   * @param procolVer The protocol version being for this table.
+   *
    */
-  void beginStream(in ACString table);
+  void beginStream(in ACString table, in ACString protocolVer);
 
   /**
    * Update the table incrementally.

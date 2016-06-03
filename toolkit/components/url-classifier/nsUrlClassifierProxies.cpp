@@ -81,17 +81,18 @@ UrlClassifierDBServiceWorkerProxy::BeginUpdateRunnable::Run()
 }
 
 NS_IMETHODIMP
-UrlClassifierDBServiceWorkerProxy::BeginStream(const nsACString& aTable)
+UrlClassifierDBServiceWorkerProxy::BeginStream(const nsACString& aTable,
+                                               const nsACString& aProtocolVer)
 {
   nsCOMPtr<nsIRunnable> r =
-    new BeginStreamRunnable(mTarget, aTable);
+    new BeginStreamRunnable(mTarget, aTable, aProtocolVer);
   return DispatchToWorkerThread(r);
 }
 
 NS_IMETHODIMP
 UrlClassifierDBServiceWorkerProxy::BeginStreamRunnable::Run()
 {
-  mTarget->BeginStream(mTable);
+  mTarget->BeginStream(mTable, mProtocolVer);
   return NS_OK;
 }
 

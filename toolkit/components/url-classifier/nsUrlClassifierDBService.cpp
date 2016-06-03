@@ -433,7 +433,8 @@ nsUrlClassifierDBServiceWorker::BeginUpdate(nsIUrlClassifierUpdateObserver *obse
 
 // Called from the stream updater.
 NS_IMETHODIMP
-nsUrlClassifierDBServiceWorker::BeginStream(const nsACString &table)
+nsUrlClassifierDBServiceWorker::BeginStream(const nsACString &table,
+                                            const nsACString &aProtocolVer)
 {
   LOG(("nsUrlClassifierDBServiceWorker::BeginStream"));
   MOZ_ASSERT(!NS_IsMainThread(), "Streaming must be on the background thread");
@@ -448,7 +449,8 @@ nsUrlClassifierDBServiceWorker::BeginStream(const nsACString &table)
 
   NS_ASSERTION(!mProtocolParser, "Should not have a protocol parser.");
 
-  mProtocolParser = new ProtocolParser();
+  mProtocolParser = aProtocolVer.EqualsLiteral("2.2") ? new ProtocolParser()
+                                                      : new ProtocolParserV4();
   if (!mProtocolParser)
     return NS_ERROR_OUT_OF_MEMORY;
 
@@ -516,6 +518,8 @@ nsUrlClassifierDBServiceWorker::FinishStream()
 
   NS_ENSURE_STATE(mInStream);
   NS_ENSURE_STATE(mUpdateObserver);
+
+  mProtocolParser->End();
 
   mInStream = false;
 
@@ -1542,11 +1546,12 @@ nsUrlClassifierDBService::BeginUpdate(nsIUrlClassifierUpdateObserver *observer,
 }
 
 NS_IMETHODIMP
-nsUrlClassifierDBService::BeginStream(const nsACString &table)
+nsUrlClassifierDBService::BeginStream(const nsACString &table,
+                                      const nsACString &aProtocolVer)
 {
   NS_ENSURE_TRUE(gDbBackgroundThread, NS_ERROR_NOT_INITIALIZED);
 
-  return mWorkerProxy->BeginStream(table);
+  return mWorkerProxy->BeginStream(table, aProtocolVer);
 }
 
 NS_IMETHODIMP

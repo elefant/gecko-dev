@@ -694,5 +694,36 @@ ProtocolParser::GetTableUpdate(const nsACString& aTable)
   return update;
 }
 
+///////////////////////////////////////////////////////////////////////
+// ProtocolParserV4
+
+ProtocolParserV4::ProtocolParserV4()
+{
+}
+
+ProtocolParserV4::~ProtocolParserV4()
+{
+}
+
+nsresult
+ProtocolParserV4::AppendStream(const nsACString& aData)
+{
+  mBuffer.Append(aData);
+  return NS_OK;
+}
+
+void
+ProtocolParserV4::End()
+{
+  ProcessUpdate();
+}
+
+nsresult
+ProtocolParserV4::ProcessUpdate()
+{
+  // Processing mBuffer.
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
 } // namespace safebrowsing
 } // namespace mozilla

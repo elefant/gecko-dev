@@ -23,7 +23,7 @@ public:
   };
 
   ProtocolParser();
-  ~ProtocolParser();
+  virtual ~ProtocolParser();
 
   nsresult Status() const { return mUpdateStatus; }
 
@@ -32,7 +32,8 @@ public:
   void SetCurrentTable(const nsACString& aTable);
 
   nsresult Begin();
-  nsresult AppendStream(const nsACString& aData);
+  virtual nsresult AppendStream(const nsACString& aData);
+  virtual void End() {}; // A hook for sub-class.
 
   // Forget the table updates that were created by this pass.  It
   // becomes the caller's responsibility to free them.  This is shitty.
@@ -111,6 +112,22 @@ private:
   nsTArray<TableUpdate*> mTableUpdates;
   // Updates to apply to the current table being parsed.
   TableUpdate *mTableUpdate;
+};
+
+// Parsing data for v4.
+class ProtocolParserV4 final : public ProtocolParser {
+public:
+  ProtocolParserV4();
+
+  virtual nsresult AppendStream(const nsACString& aData);
+  virtual void End();
+
+private:
+  nsresult ProcessUpdate();
+
+  ~ProtocolParserV4();
+
+  nsXPIDLCString mBuffer;
 };
 
 } // namespace safebrowsing
