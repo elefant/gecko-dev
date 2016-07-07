@@ -17,14 +17,47 @@
 namespace mozilla {
 namespace safebrowsing {
 
+// The abstract class of TableUpdateV2 and TableUpdateV4. This
+// is convenient for passing the TableUpdate* around associated
+// with v2 and v4 instance.
+class TableUpdate {
+public:
+  TableUpdate(const nsACString& aTable)
+    : mTable(aTable)
+    , mLocalUpdate(false)
+  {
+  }
+
+  virtual ~TableUpdate() {}
+
+  // To be overriden.
+  virtual bool Empty() const = 0;
+  virtual int Tag() const = 0;
+
+  // Common interfaces.
+  void SetLocalUpdate(void) { mLocalUpdate = true; }
+  bool IsLocalUpdate(void) { return mLocalUpdate; }
+  const nsCString& TableName() const { return mTable; }
+
+  template<typename T>
+  static T* Cast(TableUpdate* aThat) {
+    return (T::TAG == aThat->Tag() ? reinterpret_cast<T*>(aThat) : nullptr);
+  }
+
+private:
+  nsCString mTable;
+
+  // Update not from the remote server (no freshness)
+  bool mLocalUpdate;
+};
+
 // A table update is built from a single update chunk from the server. As the
 // protocol parser processes each chunk, it constructs a table update with the
 // new hashes.
-class TableUpdate {
+class TableUpdateV2 : public TableUpdate {
 public:
-  explicit TableUpdate(const nsACString& aTable)
-      : mTable(aTable), mLocalUpdate(false) {}
-  const nsCString& TableName() const { return mTable; }
+  explicit TableUpdateV2(const nsACString& aTable)
+    : TableUpdate(aTable) {}
 
   bool Empty() const {
     return mAddChunks.Length() == 0 &&
@@ -60,8 +93,6 @@ public:
   MOZ_MUST_USE nsresult NewSubComplete(uint32_t aAddChunk,
                                        const Completion& aCompletion,
                                        uint32_t aSubChunk);
-  void SetLocalUpdate(void) { mLocalUpdate = true; }
-  bool IsLocalUpdate(void) { return mLocalUpdate; }
 
   ChunkSet& AddChunks() { return mAddChunks; }
   ChunkSet& SubChunks() { return mSubChunks; }
@@ -76,10 +107,10 @@ public:
   AddCompleteArray& AddCompletes() { return mAddCompletes; }
   SubCompleteArray& SubCompletes() { return mSubCompletes; }
 
+  // For downcasting.
+  static const int TAG = 2;
+
 private:
-  nsCString mTable;
-  // Update not from the remote server (no freshness)
-  bool mLocalUpdate;
 
   // The list of chunk numbers that we have for each of the type of chunks.
   ChunkSet mAddChunks;
@@ -94,6 +125,25 @@ private:
   // 32-byte hashes.
   AddCompleteArray mAddCompletes;
   SubCompleteArray mSubCompletes;
+
+  virtual int Tag() const override { return TAG; }
+};
+
+// For v4 table update.
+//
+// TODO: Interfaces for DBService/HashStore/Classifiers to udpate.
+class TableUpdateV4 : public TableUpdate {
+public:
+  TableUpdateV4(const nsACString& aTable)
+    : TableUpdate(aTable)
+  {
+  }
+
+  // For downcasting.
+  static const int TAG = 4;
+
+private:
+  virtual int Tag() const override { return TAG; }
 };
 
 // There is one hash store per table.

@@ -110,7 +110,7 @@ private:
   // Keep track of updates to apply before passing them to the DBServiceWorkers.
   nsTArray<TableUpdate*> mTableUpdates;
   // Updates to apply to the current table being parsed.
-  TableUpdate *mTableUpdate;
+  TableUpdateV2 *mTableUpdate;
 };
 
 } // namespace safebrowsing

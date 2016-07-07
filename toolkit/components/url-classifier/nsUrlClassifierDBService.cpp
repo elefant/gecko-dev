@@ -692,21 +692,27 @@ nsUrlClassifierDBServiceWorker::CacheCompletions(CacheResultArray *results)
     }
     if (activeTable) {
       TableUpdate * tu = pParse->GetTableUpdate(resultsPtr->ElementAt(i).table);
+
+      TableUpdateV2* tuV2 = TableUpdate::Cast<TableUpdateV2>(tu);
+      if (!tuV2) {
+        return NS_ERROR_FAILURE;
+      }
+
       LOG(("CacheCompletion Addchunk %d hash %X", resultsPtr->ElementAt(i).entry.addChunk,
            resultsPtr->ElementAt(i).entry.ToUint32()));
-      rv = tu->NewAddComplete(resultsPtr->ElementAt(i).entry.addChunk,
+      rv = tuV2->NewAddComplete(resultsPtr->ElementAt(i).entry.addChunk,
                               resultsPtr->ElementAt(i).entry.complete);
       if (NS_FAILED(rv)) {
         // We can bail without leaking here because ForgetTableUpdates
         // hasn't been called yet.
         return rv;
       }
-      rv = tu->NewAddChunk(resultsPtr->ElementAt(i).entry.addChunk);
+      rv = tuV2->NewAddChunk(resultsPtr->ElementAt(i).entry.addChunk);
       if (NS_FAILED(rv)) {
         return rv;
       }
-      tu->SetLocalUpdate();
-      updates.AppendElement(tu);
+      tuV2->SetLocalUpdate();
+      updates.AppendElement(tuV2);
       pParse->ForgetTableUpdates();
     } else {
       LOG(("Completion received, but table is not active, so not caching."));

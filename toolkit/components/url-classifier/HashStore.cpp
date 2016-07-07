@@ -120,7 +120,7 @@ const uint32_t STORE_MAGIC = 0x1231af3b;
 const uint32_t CURRENT_VERSION = 3;
 
 nsresult
-TableUpdate::NewAddPrefix(uint32_t aAddChunk, const Prefix& aHash)
+TableUpdateV2::NewAddPrefix(uint32_t aAddChunk, const Prefix& aHash)
 {
   AddPrefix *add = mAddPrefixes.AppendElement(fallible);
   if (!add) return NS_ERROR_OUT_OF_MEMORY;
@@ -130,7 +130,7 @@ TableUpdate::NewAddPrefix(uint32_t aAddChunk, const Prefix& aHash)
 }
 
 nsresult
-TableUpdate::NewSubPrefix(uint32_t aAddChunk, const Prefix& aHash, uint32_t aSubChunk)
+TableUpdateV2::NewSubPrefix(uint32_t aAddChunk, const Prefix& aHash, uint32_t aSubChunk)
 {
   SubPrefix *sub = mSubPrefixes.AppendElement(fallible);
   if (!sub) return NS_ERROR_OUT_OF_MEMORY;
@@ -141,7 +141,7 @@ TableUpdate::NewSubPrefix(uint32_t aAddChunk, const Prefix& aHash, uint32_t aSub
 }
 
 nsresult
-TableUpdate::NewAddComplete(uint32_t aAddChunk, const Completion& aHash)
+TableUpdateV2::NewAddComplete(uint32_t aAddChunk, const Completion& aHash)
 {
   AddComplete *add = mAddCompletes.AppendElement(fallible);
   if (!add) return NS_ERROR_OUT_OF_MEMORY;
@@ -151,7 +151,7 @@ TableUpdate::NewAddComplete(uint32_t aAddChunk, const Completion& aHash)
 }
 
 nsresult
-TableUpdate::NewSubComplete(uint32_t aAddChunk, const Completion& aHash, uint32_t aSubChunk)
+TableUpdateV2::NewSubComplete(uint32_t aAddChunk, const Completion& aHash, uint32_t aSubChunk)
 {
   SubComplete *sub = mSubCompletes.AppendElement(fallible);
   if (!sub) return NS_ERROR_OUT_OF_MEMORY;
@@ -483,8 +483,20 @@ Merge(ChunkSet* aStoreChunks,
 }
 
 nsresult
-HashStore::ApplyUpdate(TableUpdate &update)
+HashStore::ApplyUpdate(TableUpdate &aUpdate)
 {
+  auto updateV4 = TableUpdate::Cast<TableUpdateV4>(&aUpdate);
+  if (updateV4) {
+    // TODO: Return ApplyUpdateV4;
+    return NS_ERROR_NOT_IMPLEMENTED;
+  }
+
+  auto updateV2 = TableUpdate::Cast<TableUpdateV2>(&aUpdate);
+  if (!updateV2) {
+    return NS_ERROR_FAILURE;
+  }
+  TableUpdateV2& update = *updateV2;
+
   nsresult rv = mAddExpirations.Merge(update.AddExpirations());
   NS_ENSURE_SUCCESS(rv, rv);
 

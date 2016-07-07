@@ -84,7 +84,8 @@ ProtocolParser::Init(nsICryptoHash* aHasher)
 void
 ProtocolParser::SetCurrentTable(const nsACString& aTable)
 {
-  mTableUpdate = GetTableUpdate(aTable);
+  auto update = GetTableUpdate(aTable);
+  mTableUpdate = TableUpdate::Cast<TableUpdateV2>(update);
 }
 
 nsresult
@@ -689,7 +690,7 @@ ProtocolParser::GetTableUpdate(const nsACString& aTable)
   // updates can be transferred to DBServiceWorker, which passes
   // them back to Classifier when doing the updates, and that
   // will free them.
-  TableUpdate *update = new TableUpdate(aTable);
+  TableUpdate *update = new TableUpdateV2(aTable);
   mTableUpdates.AppendElement(update);
   return update;
 }
