@@ -54,11 +54,13 @@ private:
 
   // Fetches an update for a single table.
   nsresult FetchUpdate(nsIURI *aURI,
-                       const nsACString &aRequestBody,
+                       const nsACString &aRequest,
+                       bool aIsPostRequest,
                        const nsACString &aTable);
   // Dumb wrapper so we don't have to create URIs.
   nsresult FetchUpdate(const nsACString &aURI,
-                       const nsACString &aRequestBody,
+                       const nsACString &aRequest,
+                       bool aIsPostRequest,
                        const nsACString &aTable);
 
   // Fetches the next table, from mPendingUpdates.
@@ -79,6 +81,7 @@ private:
   struct PendingRequest {
     nsCString mTables;
     nsCString mRequest;
+    bool mIsPostRequest;
     nsCString mUrl;
     nsCOMPtr<nsIUrlClassifierCallback> mSuccessCallback;
     nsCOMPtr<nsIUrlClassifierCallback> mUpdateErrorCallback;

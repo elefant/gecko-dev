@@ -12,7 +12,7 @@ Cu.import("resource://gre/modules/Services.jsm");
 //
 // There is a single listmanager for the whole application.
 //
-// TODO more comprehensive update tests, for example add unittest check 
+// TODO more comprehensive update tests, for example add unittest check
 //      that the listmanagers tables are properly written on updates
 
 // Lower and upper limits on the server-provided polling frequency
@@ -352,7 +352,11 @@ PROT_ListManager.prototype.makeUpdateRequest_ = function(updateUrl, tableData) {
   //   tableNames: map of tables that need updating,
   //   request: list of tables and existing chunk ranges from tableData
   // }
-  var streamerMap = { tableList: null, tableNames: {}, request: "" };
+  var streamerMap = { tableList: null,
+                      tableNames: {},
+                      request: "",
+                      isPostRequest: "" };
+
   let useProtobuf = false;
   for (var tableName in this.tablesData) {
     // Skip tables not matching this update url
@@ -381,8 +385,17 @@ PROT_ListManager.prototype.makeUpdateRequest_ = function(updateUrl, tableData) {
   }
 
   if (useProtobuf) {
-    // TODO: Bug 1275507 - XPCOM API to build v4 update request.
-    streamerMap.request = "";
+    let tableArray = streamerMap.tableList.split(',');
+    let stateArray = [];
+    tableArray.forEach(() => stateArray.push(''));
+
+    let urlUtils = Cc["@mozilla.org/url-classifier/utils;1"]
+                     .getService(Ci.nsIUrlClassifierUtils);
+    let request =  urlUtils.makeUpdateRequestV4(tableArray,
+                                                stateArray,
+                                                tableArray.length);
+    streamerMap.request = btoa(request); // Use a base64-encoded request.
+    streamerMap.isPostRequest = false;
   } else {
     // Build the request. For each table already in the database, include the
     // chunk data from the database
@@ -400,6 +413,8 @@ PROT_ListManager.prototype.makeUpdateRequest_ = function(updateUrl, tableData) {
     for (let tableName in streamerMap.tableNames) {
       streamerMap.request += tableName + ";\n";
     }
+
+    streamerMap.isPostRequest = true;
   }
 
   log("update request: " + JSON.stringify(streamerMap, undefined, 2) + "\n");
@@ -407,7 +422,8 @@ PROT_ListManager.prototype.makeUpdateRequest_ = function(updateUrl, tableData) {
   // Don't send an empty request.
   if (streamerMap.request.length > 0) {
     this.makeUpdateRequestForEntry_(updateUrl, streamerMap.tableList,
-                                    streamerMap.request);
+                                    streamerMap.request,
+                                    streamerMap.isPostRequest);
   } else {
     // We were disabled between kicking off getTables and now.
     log("Not sending empty request");
@@ -416,7 +432,8 @@ PROT_ListManager.prototype.makeUpdateRequest_ = function(updateUrl, tableData) {
 
 PROT_ListManager.prototype.makeUpdateRequestForEntry_ = function(updateUrl,
                                                                  tableList,
-                                                                 request) {
+                                                                 request,
+                                                                 isPostRequest) {
   log("makeUpdateRequestForEntry_: request " + request +
       " update: " + updateUrl + " tablelist: " + tableList + "\n");
   var streamer = Cc["@mozilla.org/url-classifier/streamupdater;1"]
@@ -427,6 +444,7 @@ PROT_ListManager.prototype.makeUpdateRequestForEntry_ = function(updateUrl,
   if (!streamer.downloadUpdates(
         tableList,
         request,
+        isPostRequest,
         updateUrl,
         BindToObject(this.updateSuccess_, this, tableList, updateUrl),
         BindToObject(this.updateError_, this, tableList, updateUrl),
