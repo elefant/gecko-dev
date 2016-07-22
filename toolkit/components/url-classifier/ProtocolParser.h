@@ -8,6 +8,7 @@
 
 #include "HashStore.h"
 #include "nsICryptoHMAC.h"
+#include "safebrowsing.pb.h"
 
 namespace mozilla {
 namespace safebrowsing {
@@ -23,7 +24,7 @@ public:
   };
 
   ProtocolParser();
-  ~ProtocolParser();
+  virtual ~ProtocolParser();
 
   nsresult Status() const { return mUpdateStatus; }
 
@@ -32,7 +33,11 @@ public:
   void SetCurrentTable(const nsACString& aTable);
 
   nsresult Begin();
-  nsresult AppendStream(const nsACString& aData);
+  virtual nsresult AppendStream(const nsACString& aData);
+
+  // Notify that the inbound data is ready for parsing if progressive
+  // parsing is not supported.
+  virtual nsresult End();
 
   // Forget the table updates that were created by this pass.  It
   // becomes the caller's responsibility to free them.  This is shitty.
@@ -73,6 +78,10 @@ private:
 
   void CleanupUpdates();
 
+protected:
+  nsCString mPending;
+
+private:
   enum ParserState {
     PROTOCOL_STATE_CONTROL,
     PROTOCOL_STATE_CHUNK
@@ -101,7 +110,6 @@ private:
   nsCOMPtr<nsICryptoHash> mCryptoHash;
 
   nsresult mUpdateStatus;
-  nsCString mPending;
 
   uint32_t mUpdateWait;
   bool mResetRequested;
@@ -111,6 +119,29 @@ private:
   nsTArray<TableUpdate*> mTableUpdates;
   // Updates to apply to the current table being parsed.
   TableUpdate *mTableUpdate;
+};
+
+// For parsing protobuf data.
+class ProtocolParserProtobuf final : public ProtocolParser {
+public:
+  typedef FetchThreatListUpdatesResponse_ListUpdateResponse ListUpdateResponse;
+  typedef google::protobuf::RepeatedPtrField<ThreatEntrySet> ThreatEntrySetList;
+
+public:
+  ProtocolParserProtobuf();
+
+  virtual nsresult AppendStream(const nsACString& aData);
+  virtual nsresult End();
+
+private:
+  virtual ~ProtocolParserProtobuf();
+
+  // For parsing update info.
+  nsresult ProcessOneResponse(const ListUpdateResponse& aResponse);
+  nsresult ProcessAdditionOrRemoval(const ThreatEntrySetList& aUpdate,
+                                    bool aIsAddition);
+  nsresult ProcessRawAddition(const ThreatEntrySet& aAddition);
+  nsresult ProcessRawRemoval(const ThreatEntrySet& aRemoval);
 };
 
 } // namespace safebrowsing

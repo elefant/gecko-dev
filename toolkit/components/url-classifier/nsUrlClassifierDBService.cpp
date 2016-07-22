@@ -441,7 +441,21 @@ nsUrlClassifierDBServiceWorker::BeginStream(const nsACString &table)
 
   NS_ASSERTION(!mProtocolParser, "Should not have a protocol parser.");
 
-  mProtocolParser = new ProtocolParser();
+  // See if all table names in |mUpdateTables| are all "-proto".
+  bool useProtobuf = false;
+  for (size_t i = 0; i < mUpdateTables.Length(); i++) {
+    bool isCurProtobuf =
+      StringEndsWith(mUpdateTables[i], NS_LITERAL_CSTRING("-proto"));
+    if (useProtobuf && !isCurProtobuf) {
+      NS_WARNING("mUpdateTables should all or none end with '-proto'. "
+                 "Check pref 'browser.safebrowsing.provider.google4.lists'");
+      break;
+    }
+    useProtobuf = isCurProtobuf;
+  }
+
+  mProtocolParser = (useProtobuf ? new ProtocolParserProtobuf()
+                                 : new ProtocolParser());
   if (!mProtocolParser)
     return NS_ERROR_OUT_OF_MEMORY;
 
@@ -511,6 +525,10 @@ nsUrlClassifierDBServiceWorker::FinishStream()
   NS_ENSURE_STATE(mUpdateObserver);
 
   mInStream = false;
+
+  // Required when the update is via protobuf since protobuf cannot be
+  // parsed progressively.
+  mProtocolParser->End();
 
   if (NS_SUCCEEDED(mProtocolParser->Status())) {
     if (mProtocolParser->UpdateWait()) {

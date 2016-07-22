@@ -115,6 +115,13 @@ ProtocolParser::AppendStream(const nsACString& aData)
 }
 
 nsresult
+ProtocolParser::End()
+{
+  // Inbound data has been processed in every AppendStream() call.
+  return NS_OK;
+}
+
+nsresult
 ProtocolParser::ProcessControl(bool* aDone)
 {
   nsresult rv;
@@ -693,6 +700,170 @@ ProtocolParser::GetTableUpdate(const nsACString& aTable)
   mTableUpdates.AppendElement(update);
   return update;
 }
+
+///////////////////////////////////////////////////////////////////////
+// ProtocolParserProtobuf
+
+ProtocolParserProtobuf::ProtocolParserProtobuf()
+{
+}
+
+ProtocolParserProtobuf::~ProtocolParserProtobuf()
+{
+}
+
+nsresult
+ProtocolParserProtobuf::AppendStream(const nsACString& aData)
+{
+  // Protobuf data cannot be parsed progressively. Just save the incoming data.
+  mPending.Append(aData);
+  return NS_OK;
+}
+
+nsresult
+ProtocolParserProtobuf::End()
+{
+  FetchThreatListUpdatesResponse response;
+  if (!response.ParseFromArray(mPending.get(), mPending.Length())) {
+    NS_WARNING("ProtocolParserProtobuf failed parsing data.");
+    return NS_ERROR_FAILURE;
+  }
+
+  for (int i = 0; i < response.list_update_responses_size(); i++) {
+    auto r = response.list_update_responses(i);
+    nsresult rv = ProcessOneResponse(r);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
+
+  return NS_OK;
+}
+
+nsresult
+ProtocolParserProtobuf::ProcessOneResponse(const ListUpdateResponse& aResponse)
+{
+  // A response must have a threat type.
+  if (!aResponse.has_threat_type()) {
+    NS_WARNING("Threat type not initialized. This seems to be an invalid response.");
+    return NS_ERROR_FAILURE;
+  }
+
+  // Convert threat type to list name.
+  nsCOMPtr<nsIUrlClassifierUtils> urlUtil =
+    do_GetService(NS_URLCLASSIFIERUTILS_CONTRACTID);
+  nsCString listName;
+  nsresult rv = urlUtil->ConvertThreatTypeToListName(aResponse.threat_type(),
+                                                     listName);
+  if (NS_FAILED(rv)) {
+    NS_WARNING(nsPrintfCString("Threat type to list name conversion error: %d",
+                               aResponse.threat_type().get()));
+    return NS_ERROR_FAILURE;
+  }
+
+  // Test if this is a full update.
+  bool isFullUpdate = false;
+  if (aResponse.has_response_type()) {
+    isFullUpdate =
+      aResponse.response_type() == ListUpdateResponse::FULL_UPDATE;
+  } else {
+    NS_WARNING("Response type not initialized.");
+  }
+
+  // Warn if there's no new state.
+  if (!aResponse.has_new_client_state()) {
+    NS_WARNING("New state not initialized.");
+  }
+
+  PARSER_LOG(("==== Update for threat type '%d' ====", aResponse.threat_type()));
+  PARSER_LOG(("* listName: %s\n", listName.get()));
+  PARSER_LOG(("* newState: %s\n", aResponse.new_client_state().c_str()));
+  PARSER_LOG(("* isFullUpdate: %d\n", isFullUpdate));
+  ProcessAdditionOrRemoval(aResponse.additions(), true /*aIsAddition*/);
+  ProcessAdditionOrRemoval(aResponse.removals(), false);
+  PARSER_LOG(("\n\n"));
+
+  return NS_OK;
+}
+
+nsresult
+ProtocolParserProtobuf::ProcessAdditionOrRemoval(const ThreatEntrySetList& aUpdate,
+                                                 bool aIsAddition)
+{
+  nsresult ret = NS_OK;
+
+  for (int i = 0; i < aUpdate.size(); i++) {
+    auto update = aUpdate.Get(i);
+    if (!update.has_compression_type()) {
+      NS_WARNING(nsPrintfCString("%s with no compression type.",
+                                  aIsAddition ? "Addition" : "Removal").get());
+      continue;
+    }
+
+    switch (update.compression_type()) {
+    case COMPRESSION_TYPE_UNSPECIFIED:
+      NS_WARNING("Unspecified compression type.");
+      break;
+
+    case RAW:
+      ret = (aIsAddition ? ProcessRawAddition(update)
+                         : ProcessRawRemoval(update));
+      break;
+
+    case RICE:
+      // Bug 1285848 - [SafeBrowsing] Supports encoded table update for v4.
+      NS_WARNING("Encoded table update is not supported yet.");
+      break;
+    }
+  }
+
+  return ret;
+}
+
+nsresult
+ProtocolParserProtobuf::ProcessRawAddition(const ThreatEntrySet& aAddition)
+{
+  if (!aAddition.has_raw_hashes()) {
+    PARSER_LOG(("* No raw addition."));
+    return NS_OK;
+  }
+
+  auto rawHashes = aAddition.raw_hashes();
+  if (!rawHashes.has_prefix_size()) {
+    NS_WARNING("Raw hash has no prefix size");
+    return NS_OK;
+  }
+
+  auto prefixes = rawHashes.raw_hashes();
+  if (4 == rawHashes.prefix_size()) {
+    // Process fixed length prefixes separately.
+    uint32_t* fixedLengthPrefixes = (uint32_t*)prefixes.c_str();
+    size_t numOfFixedLengthPrefixes = prefixes.size() / 4;
+    PARSER_LOG(("* Raw addition (4)"));
+    PARSER_LOG(("  - # of prefixes: %d", numOfFixedLengthPrefixes));
+    PARSER_LOG(("  - Memory address: 0x%p", fixedLengthPrefixes));
+  } else {
+    // TODO: Process variable length prefixes including full hashes.
+    PARSER_LOG((" Raw addition (%d)", rawHashes.prefix_size()));
+  }
+
+  return NS_OK;
+}
+
+nsresult
+ProtocolParserProtobuf::ProcessRawRemoval(const ThreatEntrySet& aRemoval)
+{
+  if (!aRemoval.has_raw_indices()) {
+    NS_WARNING("A removal has no indices.");
+    return NS_OK;
+  }
+
+  // indices is an array of int32.
+  auto indices = aRemoval.raw_indices().indices();
+  PARSER_LOG(("* Raw removal"));
+  PARSER_LOG(("  - # of removal: %d", indices.size()));
+
+  return NS_OK;
+}
+
 
 } // namespace safebrowsing
 } // namespace mozilla
