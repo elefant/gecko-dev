@@ -5054,7 +5054,7 @@ pref("dom.mapped_arraybuffer.enabled", true);
 
 // The tables used for Safebrowsing phishing and malware checks.
 pref("urlclassifier.malwareTable", "goog-malware-shavar,goog-unwanted-shavar,test-malware-simple,test-unwanted-simple");
-pref("urlclassifier.phishTable", "goog-phish-shavar,test-phish-simple");
+pref("urlclassifier.phishTable", "goog-phish-proto,goog-phish-shavar,test-phish-simple");
 
 // Tables for application reputation.
 pref("urlclassifier.downloadBlockTable", "goog-badbinurl-shavar");
@@ -5116,7 +5116,7 @@ pref("browser.safebrowsing.provider.google.reportURL", "https://safebrowsing.goo
 // Prefs for v4.
 pref("browser.safebrowsing.provider.google4.pver", "4");
 pref("browser.safebrowsing.provider.google4.lists", "goog-phish-proto,goog-malware-proto,goog-unwanted-proto");
-pref("browser.safebrowsing.provider.google4.updateURL", "https://safebrowsing.googleapis.com/v4/threatListUpdates:fetch?$ct=application/x-protobuf&key=%GOOGLE_API_KEY%");
+pref("browser.safebrowsing.provider.google4.updateURL", "https://safebrowsing.googleapis.com/v4/threatListUpdates:fetch?$ct=application/x-protobuf&key=AIzaSyDj4XvGulPYbPjWIbbTTrFHuzGGGhS1HiQ");
 pref("browser.safebrowsing.provider.google4.gethashURL", "https://safebrowsing.googleapis.com/v4/fullHashes:find?$req=%REQUEST_BASE64%&$ct=application/x-protobuf&key=%GOOGLE_API_KEY%");
 pref("browser.safebrowsing.provider.google4.reportURL", "https://safebrowsing.google.com/safebrowsing/diagnostic?client=%NAME%&hl=%LOCALE%&site=");
 
