@@ -61,8 +61,8 @@ ParseChunkRange(nsACString::const_iterator& aBegin,
 }
 
 ProtocolParser::ProtocolParser()
-    : mState(PROTOCOL_STATE_CONTROL)
-  , mUpdateStatus(NS_OK)
+  : mUpdateStatus(NS_OK)
+  , mState(PROTOCOL_STATE_CONTROL)
   , mUpdateWait(0)
   , mResetRequested(false)
   , mTableUpdate(nullptr)
@@ -84,7 +84,8 @@ ProtocolParser::Init(nsICryptoHash* aHasher)
 void
 ProtocolParser::SetCurrentTable(const nsACString& aTable)
 {
-  mTableUpdate = GetTableUpdate(aTable);
+  auto update = GetTableUpdate(aTable);
+  mTableUpdate = TableUpdate::Cast<TableUpdateV2>(update);
 }
 
 nsresult
@@ -695,9 +696,15 @@ ProtocolParser::GetTableUpdate(const nsACString& aTable)
   // updates can be transferred to DBServiceWorker, which passes
   // them back to Classifier when doing the updates, and that
   // will free them.
-  TableUpdate *update = new TableUpdate(aTable);
+  TableUpdate *update = CreateTableUpdate(aTable);
   mTableUpdates.AppendElement(update);
   return update;
+}
+
+TableUpdate*
+ProtocolParser::CreateTableUpdate(const nsACString& aTableName) const
+{
+  return new TableUpdateV2(aTableName);
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -709,6 +716,12 @@ ProtocolParserProtobuf::ProtocolParserProtobuf()
 
 ProtocolParserProtobuf::~ProtocolParserProtobuf()
 {
+}
+
+TableUpdate*
+ProtocolParserProtobuf::CreateTableUpdate(const nsACString& aTableName) const
+{
+  return new TableUpdateV4(aTableName);
 }
 
 nsresult
@@ -780,19 +793,26 @@ ProtocolParserProtobuf::ProcessOneResponse(const ListUpdateResponse& aResponse)
     return NS_ERROR_FAILURE;
   }
 
+  auto tu = GetTableUpdate(nsCString(listName.get()));
+  auto tuV4 = TableUpdate::Cast<TableUpdateV4>(tu);
+  if (!tuV4) {
+    return NS_ERROR_FAILURE;
+  }
+
   PARSER_LOG(("==== Update for threat type '%d' ====", aResponse.threat_type()));
   PARSER_LOG(("* listName: %s\n", listName.get()));
   PARSER_LOG(("* newState: %s\n", aResponse.new_client_state().c_str()));
   PARSER_LOG(("* isFullUpdate: %s\n", (isFullUpdate ? "yes" : "no")));
-  ProcessAdditionOrRemoval(aResponse.additions(), true /*aIsAddition*/);
-  ProcessAdditionOrRemoval(aResponse.removals(), false);
+  ProcessAdditionOrRemoval(*tuV4, aResponse.additions(), true /*aIsAddition*/);
+  ProcessAdditionOrRemoval(*tuV4, aResponse.removals(), false);
   PARSER_LOG(("\n\n"));
 
   return NS_OK;
 }
 
 nsresult
-ProtocolParserProtobuf::ProcessAdditionOrRemoval(const ThreatEntrySetList& aUpdate,
+ProtocolParserProtobuf::ProcessAdditionOrRemoval(TableUpdateV4& aTableUpdate,
+                                                 const ThreatEntrySetList& aUpdate,
                                                  bool aIsAddition)
 {
   nsresult ret = NS_OK;
@@ -811,8 +831,8 @@ ProtocolParserProtobuf::ProcessAdditionOrRemoval(const ThreatEntrySetList& aUpda
       break;
 
     case RAW:
-      ret = (aIsAddition ? ProcessRawAddition(update)
-                         : ProcessRawRemoval(update));
+      ret = (aIsAddition ? ProcessRawAddition(aTableUpdate, update)
+                         : ProcessRawRemoval(aTableUpdate, update));
       break;
 
     case RICE:
@@ -826,7 +846,8 @@ ProtocolParserProtobuf::ProcessAdditionOrRemoval(const ThreatEntrySetList& aUpda
 }
 
 nsresult
-ProtocolParserProtobuf::ProcessRawAddition(const ThreatEntrySet& aAddition)
+ProtocolParserProtobuf::ProcessRawAddition(TableUpdateV4& aTableUpdate,
+                                           const ThreatEntrySet& aAddition)
 {
   if (!aAddition.has_raw_hashes()) {
     PARSER_LOG(("* No raw addition."));
@@ -853,11 +874,20 @@ ProtocolParserProtobuf::ProcessRawAddition(const ThreatEntrySet& aAddition)
     PARSER_LOG((" Raw addition (%d bytes)", rawHashes.prefix_size()));
   }
 
+  if (!rawHashes.mutable_raw_hashes()) {
+    PARSER_LOG(("Unable to get mutable raw hashes. Can't perform a string move."));
+    return NS_ERROR_FAILURE;
+  }
+
+  aTableUpdate.NewPrefixes(rawHashes.prefix_size(),
+                           *rawHashes.mutable_raw_hashes());
+
   return NS_OK;
 }
 
 nsresult
-ProtocolParserProtobuf::ProcessRawRemoval(const ThreatEntrySet& aRemoval)
+ProtocolParserProtobuf::ProcessRawRemoval(TableUpdateV4& aTableUpdate,
+                                          const ThreatEntrySet& aRemoval)
 {
   if (!aRemoval.has_raw_indices()) {
     NS_WARNING("A removal has no indices.");
@@ -868,6 +898,8 @@ ProtocolParserProtobuf::ProcessRawRemoval(const ThreatEntrySet& aRemoval)
   auto indices = aRemoval.raw_indices().indices();
   PARSER_LOG(("* Raw removal"));
   PARSER_LOG(("  - # of removal: %d", indices.size()));
+
+  aTableUpdate.NewRemovalIndices(aRemoval.raw_indices().indices());
 
   return NS_OK;
 }
