@@ -138,11 +138,11 @@ private:
   nsDependentCString mString;
 
 public:
-  PrefixString(std::string& aString) 
+  PrefixString(std::string& aString)
     : mString(nullptr)
   {
     aString.swap(mStorage);
-    mString.Rebind(mStorage.data()); 
+    mString.Rebind(mStorage.data());
   };
 
   const nsACString& GetPrefixString() {
@@ -162,6 +162,11 @@ public:
   TableUpdateV4(const nsACString& aTable)
     : TableUpdate(aTable)
   {
+  }
+
+  bool Empty() const
+  {
+    return mPrefixesMap.Count() == 0 && mRemovalIndiceArray.Length() == 0;
   }
 
   PrefixesStringMap& Prefixes() { return mPrefixesMap; }

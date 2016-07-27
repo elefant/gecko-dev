@@ -162,10 +162,10 @@ TableUpdateV2::NewSubComplete(uint32_t aAddChunk, const Completion& aHash, uint3
 }
 
 void
-TableUpdateV4::NewPrefixes(int32_t aSize, std::string& aPrefixes)	
+TableUpdateV4::NewPrefixes(int32_t aSize, std::string& aPrefixes)
 {
   MOZ_ASSERT(aPrefixes.size() % aSize == 0);
-  MOZ_ASSERT(mPrefixesMap.Get(aSize));
+  MOZ_ASSERT(!mPrefixesMap.Get(aSize));
 
   PrefixString* prefix = new PrefixString(aPrefixes);
   mPrefixesMap.Put(aSize, prefix);

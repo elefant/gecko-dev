@@ -51,6 +51,8 @@ public:
   bool ResetRequested() { return mResetRequested; }
 
 private:
+  virtual TableUpdate* CreateTableUpdate(const nsACString& aTableName) const;
+
   nsresult ProcessControl(bool* aDone);
   nsresult ProcessExpirations(const nsCString& aLine);
   nsresult ProcessChunkControl(const nsCString& aLine);
@@ -136,12 +138,20 @@ public:
 private:
   virtual ~ProtocolParserProtobuf();
 
+  virtual TableUpdate* CreateTableUpdate(const nsACString& aTableName) const;
+
   // For parsing update info.
   nsresult ProcessOneResponse(const ListUpdateResponse& aResponse);
-  nsresult ProcessAdditionOrRemoval(const ThreatEntrySetList& aUpdate,
+
+  nsresult ProcessAdditionOrRemoval(TableUpdateV4& aTableUpdate,
+                                    const ThreatEntrySetList& aUpdate,
                                     bool aIsAddition);
-  nsresult ProcessRawAddition(const ThreatEntrySet& aAddition);
-  nsresult ProcessRawRemoval(const ThreatEntrySet& aRemoval);
+
+  nsresult ProcessRawAddition(TableUpdateV4& aTableUpdate,
+                              const ThreatEntrySet& aAddition);
+
+  nsresult ProcessRawRemoval(TableUpdateV4& aTableUpdate,
+                             const ThreatEntrySet& aRemoval);
 };
 
 } // namespace safebrowsing
