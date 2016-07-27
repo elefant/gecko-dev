@@ -613,25 +613,28 @@ Classifier::ApplyTableUpdates(nsTArray<TableUpdate*>* aUpdates,
 
     applied++;
 
-    LOG(("Applied update to table %s:", store.TableName().get()));
-    LOG(("  %d add chunks", update->AddChunks().Length()));
-    LOG(("  %d add prefixes", update->AddPrefixes().Length()));
-    LOG(("  %d add completions", update->AddCompletes().Length()));
-    LOG(("  %d sub chunks", update->SubChunks().Length()));
-    LOG(("  %d sub prefixes", update->SubPrefixes().Length()));
-    LOG(("  %d sub completions", update->SubCompletes().Length()));
-    LOG(("  %d add expirations", update->AddExpirations().Length()));
-    LOG(("  %d sub expirations", update->SubExpirations().Length()));
+    auto updateV2 = TableUpdate::Cast<TableUpdateV2>(update);
+    if (updateV2) {
+      LOG(("Applied update to table %s:", store.TableName().get()));
+      LOG(("  %d add chunks", updateV2->AddChunks().Length()));
+      LOG(("  %d add prefixes", updateV2->AddPrefixes().Length()));
+      LOG(("  %d add completions", updateV2->AddCompletes().Length()));
+      LOG(("  %d sub chunks", updateV2->SubChunks().Length()));
+      LOG(("  %d sub prefixes", updateV2->SubPrefixes().Length()));
+      LOG(("  %d sub completions", updateV2->SubCompletes().Length()));
+      LOG(("  %d add expirations", updateV2->AddExpirations().Length()));
+      LOG(("  %d sub expirations", updateV2->SubExpirations().Length()));
 
-    if (!update->IsLocalUpdate()) {
-      updateFreshness = true;
-      LOG(("Remote update, updating freshness"));
-    }
+      if (!updateV2->IsLocalUpdate()) {
+        updateFreshness = true;
+        LOG(("Remote update, updating freshness"));
+      }
 
-    if (update->AddCompletes().Length() > 0
-        || update->SubCompletes().Length() > 0) {
-      hasCompletes = true;
-      LOG(("Contains Completes, keeping cache."));
+      if (updateV2->AddCompletes().Length() > 0
+          || updateV2->SubCompletes().Length() > 0) {
+        hasCompletes = true;
+        LOG(("Contains Completes, keeping cache."));
+      }
     }
 
     aUpdates->ElementAt(i) = nullptr;

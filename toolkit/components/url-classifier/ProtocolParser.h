@@ -51,6 +51,8 @@ public:
   bool ResetRequested() { return mResetRequested; }
 
 private:
+  virtual TableUpdate* CreateTableUpdate(const nsACString& aTableName) const;
+
   nsresult ProcessControl(bool* aDone);
   nsresult ProcessExpirations(const nsCString& aLine);
   nsresult ProcessChunkControl(const nsCString& aLine);
@@ -117,7 +119,7 @@ private:
   // Keep track of updates to apply before passing them to the DBServiceWorkers.
   nsTArray<TableUpdate*> mTableUpdates;
   // Updates to apply to the current table being parsed.
-  TableUpdate *mTableUpdate;
+  TableUpdateV2 *mTableUpdate;
 };
 
 // Helpers to parse the "proto" list format.
@@ -135,12 +137,20 @@ public:
 private:
   virtual ~ProtocolParserProtobuf();
 
+  virtual TableUpdate* CreateTableUpdate(const nsACString& aTableName) const;
+
   // For parsing update info.
   nsresult ProcessOneResponse(const ListUpdateResponse& aResponse);
-  nsresult ProcessAdditionOrRemoval(const ThreatEntrySetList& aUpdate,
+
+  nsresult ProcessAdditionOrRemoval(TableUpdateV4& aTableUpdate,
+                                    const ThreatEntrySetList& aUpdate,
                                     bool aIsAddition);
-  nsresult ProcessRawAddition(const ThreatEntrySet& aAddition);
-  nsresult ProcessRawRemoval(const ThreatEntrySet& aRemoval);
+
+  nsresult ProcessRawAddition(TableUpdateV4& aTableUpdate,
+                              const ThreatEntrySet& aAddition);
+
+  nsresult ProcessRawRemoval(TableUpdateV4& aTableUpdate,
+                             const ThreatEntrySet& aRemoval);
 };
 
 } // namespace safebrowsing
