@@ -99,8 +99,12 @@ RiceDeltaDecoder::Decode(uint32_t aRiceParameter,
     NS_ENSURE_TRUE(bitBuffer.ReadExponentialGolomb(&q), false);
 
     // Read the remainder of N.
-    uint32_t r;
-    NS_ENSURE_TRUE(bitBuffer.ReadBits(&r, k), false);
+    uint32_t r = 0;
+    for (uint32_t j = 0; j < k; j++) {
+      uint32_t b;
+      NS_ENSURE_TRUE(bitBuffer.ReadBits(&b, 1), false);
+      r |= (b << j);
+    }
 
     // Caculate N from q,r,k.
     aDecodedData[i] = ((q << k) + r) + last;

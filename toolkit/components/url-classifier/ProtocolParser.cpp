@@ -11,6 +11,8 @@
 #include "prprf.h"
 
 #include "nsUrlClassifierUtils.h"
+#include "RiceDeltaDecoder.h"
+#include "mozilla/EndianUtils.h"
 
 // MOZ_LOG=UrlClassifierProtocolParser:5
 mozilla::LazyLogModule gUrlClassifierProtocolParserLog("UrlClassifierProtocolParser");
@@ -836,8 +838,8 @@ ProtocolParserProtobuf::ProcessAdditionOrRemoval(TableUpdateV4& aTableUpdate,
       break;
 
     case RICE:
-      // Not implemented yet (see bug 1285848),
-      NS_WARNING("Encoded table update is not supported yet.");
+      ret = (aIsAddition ? ProcessEncodedAddition(aTableUpdate, update)
+                         : ProcessEncodedRemoval(aTableUpdate, update));
       break;
     }
   }
@@ -899,11 +901,124 @@ ProtocolParserProtobuf::ProcessRawRemoval(TableUpdateV4& aTableUpdate,
   PARSER_LOG(("* Raw removal"));
   PARSER_LOG(("  - # of removal: %d", indices.size()));
 
-  aTableUpdate.NewRemovalIndices(aRemoval.raw_indices().indices());
+  aTableUpdate.NewRemovalIndices((const uint32_t*)indices.data(),
+                                 indices.size());
 
   return NS_OK;
 }
 
+static void
+ReverseByte(uint8_t& b)
+{
+  b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+  b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+  b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+}
+
+static nsresult
+DoRiceDeltaDecode(const RiceDeltaEncoding& aEncoding,
+                  nsTArray<uint32_t>& aDecoded)
+{
+  // Sanity check of the encoding info.
+  if (!aEncoding.has_first_value() ||
+      !aEncoding.has_rice_parameter() ||
+      !aEncoding.has_num_entries() ||
+      !aEncoding.has_encoded_data()) {
+    PARSER_LOG(("The encoding info is incomplete."));
+    return NS_ERROR_FAILURE;
+  }
+
+  PARSER_LOG(("* Encoding info:"));
+  PARSER_LOG(("  - First value: %d", aEncoding.first_value()));
+  PARSER_LOG(("  - Num of entries: %d", aEncoding.num_entries()));
+  PARSER_LOG(("  - Rice parameter: %d", aEncoding.rice_parameter()));
+
+  // Set up the input buffer. Note that the bits should be read
+  // from LSB to MSB so that we in-place reverse the bits before
+  // feeding to the decoder.
+  auto encoded =
+    const_cast<RiceDeltaEncoding&>(aEncoding).mutable_encoded_data();
+  for (auto& c : *encoded) {
+    ReverseByte((uint8_t&)c);
+  }
+
+  RiceDeltaDecoder decoder((const uint8_t*)encoded->c_str(),
+                           encoded->size());
+
+  // Setup the output buffer. The "first value" is included in
+  // the output buffer.
+  aDecoded.SetLength(aEncoding.num_entries() + 1);
+  aDecoded[0] = aEncoding.first_value();
+
+  // Decode!
+  bool rv = decoder.Decode(aEncoding.rice_parameter(),
+                           aEncoding.first_value(), // first value.
+                           aEncoding.num_entries(), // # of entries (first value not included).
+                           &aDecoded[1]);
+
+  NS_ENSURE_TRUE(rv, NS_ERROR_FAILURE);
+
+  return NS_OK;
+}
+
+nsresult
+ProtocolParserProtobuf::ProcessEncodedAddition(TableUpdateV4& aTableUpdate,
+                                               const ThreatEntrySet& aAddition)
+{
+  if (!aAddition.has_rice_hashes()) {
+    PARSER_LOG(("* No rice encoded addition."));
+    return NS_OK;
+  }
+
+  nsTArray<uint32_t> decoded;
+  nsresult rv = DoRiceDeltaDecode(aAddition.rice_hashes(), decoded);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  // The compare function for sorting the decoded prefixes.
+  struct CompareBigEndian
+  {
+    bool Equals(const uint32_t& aA, const uint32_t& aB) const
+    {
+      return aA == aB;
+    }
+
+    bool LessThan(const uint32_t& aA, const uint32_t& aB) const
+    {
+      return NativeEndian::swapToBigEndian(aA) <
+             NativeEndian::swapToBigEndian(aB);
+    }
+  };
+  decoded.Sort(CompareBigEndian());
+
+  // The encoded prefixes are always 4 bytes.
+  std::string prefixes;
+  for (size_t i = 0; i < decoded.Length(); i++) {
+    prefixes.append((char*)&decoded[i], 4);
+  }
+
+  aTableUpdate.NewPrefixes(4, prefixes);
+
+  return NS_OK;
+}
+
+nsresult
+ProtocolParserProtobuf::ProcessEncodedRemoval(TableUpdateV4& aTableUpdate,
+                                              const ThreatEntrySet& aRemoval)
+{
+  if (!aRemoval.has_rice_indices()) {
+    PARSER_LOG(("* No rice encoded removal."));
+    return NS_OK;
+  }
+
+  nsTArray<uint32_t> decoded;
+  nsresult rv = DoRiceDeltaDecode(aRemoval.rice_indices(), decoded);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  // The encoded prefixes are always 4 bytes.
+  aTableUpdate.NewRemovalIndices(&decoded[0], decoded.Length());
+
+  return NS_OK;
+}
 
 } // namespace safebrowsing
 } // namespace mozilla
