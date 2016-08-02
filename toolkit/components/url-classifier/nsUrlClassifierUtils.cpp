@@ -110,7 +110,7 @@ InitListUpdateRequest(ThreatType aThreatType,
   // Only RAW data is supported for now.
   // TODO: Bug 1285848 Supports Rice-Golomb encoding.
   Constraints* contraints = new Constraints();
-  contraints->add_supported_compressions(RAW);
+  contraints->add_supported_compressions(RICE);
   aListUpdateRequest->set_allocated_constraints(contraints);
 
   // Only set non-empty state.

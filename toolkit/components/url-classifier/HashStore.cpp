@@ -167,15 +167,28 @@ TableUpdateV4::NewPrefixes(int32_t aSize, std::string& aPrefixes)
   MOZ_ASSERT(aPrefixes.size() % aSize == 0);
   MOZ_ASSERT(!mPrefixesMap.Get(aSize));
 
+#if 1 // DEBUG
+  // Dump the first 10 fixed-length prefixes for debugging.
+  if (4 == aSize) {
+    LOG(("* The first 10 (maximum) fixed-length prefixes: "));
+    uint32_t* p = (uint32_t*)aPrefixes.c_str();
+    for (int i = 0; i < std::min(10, (int)aPrefixes.size() / 4); i++) {
+      uint8_t* c = (uint8_t*)&p[i];
+      LOG(("%.2X%.2X%.2X%.2X", c[0], c[1], c[2], c[3]));
+    }
+    LOG(("----"));
+  }
+#endif
+
   PrefixString* prefix = new PrefixString(aPrefixes);
   mPrefixesMap.Put(aSize, prefix);
 }
 
 void
-TableUpdateV4::NewRemovalIndices(const ::google::protobuf::RepeatedField<int32_t>& aIndices)
+TableUpdateV4::NewRemovalIndices(const uint32_t* aIndices, size_t aNumOfIndices)
 {
-  for (int i = 0; i < aIndices.size(); i++) {
-    mRemovalIndiceArray.AppendElement(aIndices.Get(i));
+  for (size_t i = 0; i < aNumOfIndices; i++) {
+    mRemovalIndiceArray.AppendElement(aIndices[i]);
   }
 }
 

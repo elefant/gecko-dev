@@ -173,7 +173,7 @@ public:
   static const int TAG = 4;
 
   void NewPrefixes(int32_t aSize, std::string& aPrefixes);
-  void NewRemovalIndices(const ::google::protobuf::RepeatedField<int32_t>& aIndices);
+  void NewRemovalIndices(const uint32_t* aIndices, size_t aNumOfIndices);
 
 private:
   virtual int Tag() const override { return TAG; }
