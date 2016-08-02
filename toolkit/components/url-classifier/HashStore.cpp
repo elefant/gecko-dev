@@ -165,8 +165,21 @@ TableUpdateV2::NewSubComplete(uint32_t aAddChunk, const Completion& aHash, uint3
 void
 TableUpdateV4::NewPrefixes(int32_t aSize, std::string& aPrefixes)
 {
-  NS_ENSURE_TRUE_VOID(aPrefixes.size() % aSize == 0);
-  NS_ENSURE_TRUE_VOID(!mPrefixesMap.Get(aSize));
+  MOZ_ASSERT(aPrefixes.size() % aSize == 0);
+  MOZ_ASSERT(!mPrefixesMap.Get(aSize));
+
+#if 1 // DEBUG
+  // Dump the first 10 fixed-length prefixes for debugging.
+  if (4 == aSize) {
+    LOG(("* The first 10 (maximum) fixed-length prefixes: "));
+    uint32_t* p = (uint32_t*)aPrefixes.c_str();
+    for (int i = 0; i < std::min(10, (int)aPrefixes.size() / 4); i++) {
+      uint8_t* c = (uint8_t*)&p[i];
+      LOG(("%.2X%.2X%.2X%.2X", c[0], c[1], c[2], c[3]));
+    }
+    LOG(("----"));
+  }
+#endif
 
   PrefixString* prefix = new PrefixString(aPrefixes);
   mPrefixesMap.Put(aSize, prefix);
