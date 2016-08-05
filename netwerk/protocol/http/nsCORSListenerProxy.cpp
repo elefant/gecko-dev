@@ -588,10 +588,19 @@ nsCORSListenerProxy::CheckRequestApproved(nsIRequest* aRequest)
     return rv;
   }
 
+  // Bug 1210985 - Explicitly point out the error that the credential is
+  // not supported if the allowing origin is '*'. Note that this check
+  // has to be done before the following one.
+  if (mWithCredentials && allowedOriginHeader.EqualsLiteral("*")) {
+    LogBlockedRequest(aRequest,
+                      "CORSWildcardAllowOriginNotSupportingCredentials",
+                      nullptr);
+    return NS_ERROR_DOM_BAD_URI;
+  }
+
   if (mWithCredentials || !allowedOriginHeader.EqualsLiteral("*")) {
     nsAutoCString origin;
     nsContentUtils::GetASCIIOrigin(mOriginHeaderPrincipal, origin);
-
     if (!allowedOriginHeader.Equals(origin)) {
       LogBlockedRequest(aRequest, "CORSAllowOriginNotMatchingOrigin",
                         NS_ConvertUTF8toUTF16(allowedOriginHeader).get());
