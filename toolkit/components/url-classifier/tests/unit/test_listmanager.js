@@ -213,18 +213,36 @@ function run_test() {
     response.setHeader("Content-Type",
                        "application/vnd.google.safebrowsing-update", false);
     response.setStatusLine(request.httpVersion, 200, "OK");
-    let content = "n:1000\n";
+
+    // The protobuf binary represention of response:
+    //
+    // [
+    //   {
+    //     'threat_type': 2, // SOCIAL_ENGINEERING_PUBLIC
+    //     'response_type': 2, // FULL_UPDATE
+    //     'new_client_state': 'sta\x00te'
+    //   }
+    // ]
+    //
+    let content = "\x0A\x0C\x08\x02\x20\x02\x3A\x06\x73\x74\x61\x00\x74\x65";
+
     response.bodyOutputStream.write(content, content.length);
 
-    gIsV4Updated = true;
+    // See Bug 1284204. We save the state to pref at the moment to
+    // support partial update until "storing to HashStore" is supported.
+    // Here we poll the pref until the state has been saved.
+    waitUntilStateSavedToPref('sta\x00te', () => {
+      gIsV4Updated = true;
 
-    if (gUpdatedCntForTableData === SERVER_INVOLVED_TEST_CASE_LIST.length) {
-      // All tests are done!
-      run_next_test();
-      return;
-    }
+      if (gUpdatedCntForTableData === SERVER_INVOLVED_TEST_CASE_LIST.length) {
+        // All tests are done!
+        run_next_test();
+        return;
+      }
 
-    do_print("Wait for all sever-involved tests to be done ...");
+      do_print("Wait for all sever-involved tests to be done ...");
+    });
+
   });
 
   gHttpServV4.start(5555);
@@ -273,4 +291,21 @@ function buildUpdateRequestV4InBase64() {
                                               [""],
                                               1);
   return btoa(request);
+}
+
+function waitUntilStateSavedToPref(expectedState, callback) {
+  let stateBase64 = '';
+
+  try {
+    stateBase64 =
+      prefBranch.getCharPref('browser.safebrowsing.provider.google4.state.googpub-phish-proto');
+  } catch (e) {}
+
+  if (stateBase64 === btoa(expectedState)) {
+    do_print('State has been saved to pref!');
+    callback();
+    return;
+  }
+
+  do_timeout(1000, waitUntilStateSavedToPref.bind(null, expectedState, callback));
 }
