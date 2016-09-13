@@ -411,6 +411,10 @@ PROT_ListManager.prototype.makeUpdateRequest_ = function(updateUrl, tableData) {
 
     let urlUtils = Cc["@mozilla.org/url-classifier/utils;1"]
                      .getService(Ci.nsIUrlClassifierUtils);
+
+    log("makeUpdateRequestV4 with " + JSON.stringify(tableArray) +
+        " and " + JSON.stringify(stateArray));
+
     let requestPayload =  urlUtils.makeUpdateRequestV4(tableArray,
                                                        stateArray,
                                                        tableArray.length);

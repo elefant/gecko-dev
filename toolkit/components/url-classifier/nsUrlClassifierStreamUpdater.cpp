@@ -203,6 +203,7 @@ nsUrlClassifierStreamUpdater::FetchUpdate(const nsACString & aUpdateUrl,
   nsCString updateUrl(aUpdateUrl);
   if (!aIsPostRequest) {
     updateUrl.AppendPrintf("&$req=%s", nsCString(aRequestPayload).get());
+    LOG(("Appended V4 UpdateURL: %s", updateUrl.get()));
   }
 
   nsCOMPtr<nsIURI> uri;
