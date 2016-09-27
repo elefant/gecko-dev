@@ -118,7 +118,7 @@ InitListUpdateRequest(ThreatType aThreatType,
     nsCString stateBinary;
     nsresult rv = Base64Decode(nsCString(aStateBase64), stateBinary);
     if (NS_SUCCEEDED(rv)) {
-      aListUpdateRequest->set_state(stateBinary.get());
+      aListUpdateRequest->set_state(stateBinary.get(), stateBinary.Length());
     }
   }
 }

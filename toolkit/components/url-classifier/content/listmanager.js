@@ -418,8 +418,10 @@ PROT_ListManager.prototype.makeUpdateRequest_ = function(updateUrl, tableData) {
     let requestPayload =  urlUtils.makeUpdateRequestV4(tableArray,
                                                        stateArray,
                                                        tableArray.length);
-    // Use a base64-encoded request.
-    streamerMap.requestPayload = btoa(requestPayload);
+    // Encode as base64url including padding since it's going to
+    // be a part of the URL.
+    streamerMap.requestPayload = btoa(requestPayload).replace(/\+/g, '-')
+                                                     .replace(/\//g, '_');
     streamerMap.isPostRequest = false;
   } else {
     // Build the request. For each table already in the database, include the
