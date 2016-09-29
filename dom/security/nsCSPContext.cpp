@@ -805,14 +805,19 @@ nsCSPContext::SendReports(nsISupports* aBlockedContentSource,
   // blocked-uri
   if (aBlockedContentSource) {
     nsAutoCString reportBlockedURI;
-    nsCOMPtr<nsIURI> uri = do_QueryInterface(aBlockedContentSource);
-    // could be a string or URI
-    if (uri) {
-      StripURIForReporting(uri, mSelfURI, reportBlockedURI);
+    if (aOriginalURI) {
+      // The blocked content is a redirect.
+      StripURIForReporting(aOriginalURI, mSelfURI, reportBlockedURI);
     } else {
-      nsCOMPtr<nsISupportsCString> cstr = do_QueryInterface(aBlockedContentSource);
-      if (cstr) {
-        cstr->GetData(reportBlockedURI);
+      nsCOMPtr<nsIURI> uri = do_QueryInterface(aBlockedContentSource);
+      // could be a string or URI
+      if (uri) {
+        StripURIForReporting(uri, mSelfURI, reportBlockedURI);
+      } else {
+        nsCOMPtr<nsISupportsCString> cstr = do_QueryInterface(aBlockedContentSource);
+        if (cstr) {
+          cstr->GetData(reportBlockedURI);
+        }
       }
     }
     if (reportBlockedURI.IsEmpty()) {
