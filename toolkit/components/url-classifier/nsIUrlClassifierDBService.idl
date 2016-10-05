@@ -81,14 +81,22 @@ interface nsIUrlClassifierDBService : nsISupports
               in nsIUrlClassifierCallback c);
 
   /**
-   * Lists the tables along with which chunks are available in each table.
-   * This list is in the format of the request body:
-   *   tablename;chunkdata\n
-   *   tablename2;chunkdata2\n
+   * Lists the tables along with their meta info in the following format:
    *
-   * For example:
-   *   goog-phish-regexp;a:10,14,30-40s:56,67
-   *   goog-white-regexp;a:1-3,5
+   *   tablename;[meta data]\n
+   *   tablename2;[meta data]\n
+   *
+   * For v2 tables, the meta data is the chunks info such as
+   *
+   *   goog-phish-shavar;a:10,14,30-40s:56,67
+   *   goog-unwanted-shavar;a:1-3,5
+   *
+   * For v4 tables, base64 encoded state is currently the only info in the
+   * meta data (can be extended whenever necessary). For exmaple,
+   *
+   *   goog-phish-proto;Cg0IARAGGAEiAzAwMTABEKqTARoCGAjT1gDD\n
+   *   goog-malware-proto;Cg0IAhAGGAEiAzAwMTABENCQARoCGAjx5Yty\n
+   *
    */
   void getTables(in nsIUrlClassifierCallback c);
 
