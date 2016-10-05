@@ -69,6 +69,7 @@ ParseChunkRange(nsACString::const_iterator& aBegin,
 
 ProtocolParser::ProtocolParser()
   : mUpdateStatus(NS_OK)
+  , mUpdateWait(0)
 {
 }
 
@@ -116,7 +117,6 @@ ProtocolParser::GetTableUpdate(const nsACString& aTable)
 
 ProtocolParserV2::ProtocolParserV2()
   : mState(PROTOCOL_STATE_CONTROL)
-  , mUpdateWait(0)
   , mResetRequested(false)
   , mTableUpdate(nullptr)
 {
@@ -770,6 +770,10 @@ ProtocolParserProtobuf::End()
     NS_WARNING("ProtocolParserProtobuf failed parsing data.");
     return;
   }
+
+  auto minWaitDuration = response.minimum_wait_duration();
+  mUpdateWait = minWaitDuration.seconds() +
+                minWaitDuration.nanos() / 1000000000;
 
   for (int i = 0; i < response.list_update_responses_size(); i++) {
     auto r = response.list_update_responses(i);
