@@ -515,7 +515,8 @@ Classifier::Check(const nsACString& aSpec,
 }
 
 nsresult
-Classifier::ApplyUpdates(nsTArray<TableUpdate*>* aUpdates)
+Classifier::ApplyUpdates(nsTArray<TableUpdate*>* aUpdates,
+                         const nsCString& aRawUpdates)
 {
   Telemetry::AutoTimer<Telemetry::URLCLASSIFIER_CL_UPDATE_TIME> timer;
 
@@ -549,6 +550,7 @@ Classifier::ApplyUpdates(nsTArray<TableUpdate*>* aUpdates)
         }
 
         if (NS_FAILED(rv)) {
+          DumpUpdateWreck(aRawUpdates);
           if (rv != NS_ERROR_OUT_OF_MEMORY) {
             Reset();
           }
@@ -733,6 +735,54 @@ Classifier::CleanToDelete()
   }
 
   return NS_OK;
+}
+
+nsresult
+Classifier::DumpUpdateWreck(const nsACString& aRawUpdates)
+{
+  LOG(("Dumping update wreck..."));
+
+  nsCString updateWreckDirName = STORE_DIRECTORY + nsCString("-updatewreck");
+
+  // Init |wreckDirectory|.
+  nsCOMPtr<nsIFile> wreckDirectory;
+  if (NS_FAILED(mCacheDirectory->Clone(getter_AddRefs(wreckDirectory))) ||
+      NS_FAILED(wreckDirectory->AppendNative(updateWreckDirName))) {
+    LOG(("Failed to init wreckDirectory."));
+    return NS_ERROR_FAILURE;
+  }
+
+  // Failure is fine because the directory may not exist.
+  wreckDirectory->Remove(true);
+
+  // Move backup to a clean wreck directory.
+  nsCOMPtr<nsIFile> backupDirectory;
+  if (NS_FAILED(mBackupDirectory->Clone(getter_AddRefs(backupDirectory))) ||
+      NS_FAILED(backupDirectory->MoveToNative(nullptr, updateWreckDirName))) {
+    LOG(("Failed to move backup to wreck directory %s", updateWreckDirName.get()));
+    return NS_ERROR_FAILURE;
+  }
+
+  // Create tableupdate.bin and dump raw table update data.
+  nsCOMPtr<nsIFile> rawTableUpdatesFile;
+  nsCOMPtr<nsIOutputStream> outputStream;
+  if (NS_FAILED(wreckDirectory->Clone(getter_AddRefs(rawTableUpdatesFile))) ||
+      NS_FAILED(rawTableUpdatesFile->AppendNative(nsCString("tableupdates.bin"))) ||
+      NS_FAILED(NS_NewLocalFileOutputStream(getter_AddRefs(outputStream),
+                                            rawTableUpdatesFile,
+                                            PR_WRONLY | PR_TRUNCATE | PR_CREATE_FILE))) {
+    LOG(("Failed to create file to dump raw table updates."));
+    return NS_ERROR_FAILURE;
+  }
+
+  // Write out the data.
+  uint32_t written;
+  nsresult rv = outputStream->Write(aRawUpdates.BeginReading(),
+                                    aRawUpdates.Length(), &written);
+  NS_ENSURE_SUCCESS(rv, rv);
+  NS_ENSURE_TRUE(written == aRawUpdates.Length(), NS_ERROR_FAILURE);
+
+  return rv;
 }
 
 nsresult

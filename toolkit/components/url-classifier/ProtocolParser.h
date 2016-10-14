@@ -30,6 +30,8 @@ public:
 
   nsresult Init(nsICryptoHash* aHasher);
 
+  nsCString GetRawTableUpdates() const { return mPending; }
+
   virtual void SetCurrentTable(const nsACString& aTable) = 0;
 
   void SetRequestedTables(const nsTArray<nsCString>& aRequestTables)
