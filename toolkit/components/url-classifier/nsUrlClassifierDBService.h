@@ -249,6 +249,9 @@ private:
 
   // list of pending lookups
   nsTArray<PendingLookup> mPendingLookups;
+
+  // The raw update response for debugging.
+  nsCString mRawTableUpdates;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsUrlClassifierDBService, NS_URLCLASSIFIERDBSERVICE_CID)

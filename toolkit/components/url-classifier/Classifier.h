@@ -59,7 +59,8 @@ public:
    * Apply the table updates in the array.  Takes ownership of
    * the updates in the array and clears it.  Wacky!
    */
-  nsresult ApplyUpdates(nsTArray<TableUpdate*>* aUpdates);
+  nsresult ApplyUpdates(nsTArray<TableUpdate*>* aUpdates,
+                        const nsCString& aRawUpdates = EmptyCString());
 
   /**
    * Apply full hashes retrived from gethash to cache.
@@ -110,6 +111,7 @@ private:
   nsresult BackupTables();
   nsresult RemoveBackupTables();
   nsresult RegenActiveTables();
+  nsresult DumpUpdateWreck(const nsACString& aRawUpdates);
   nsresult ScanStoreDir(nsTArray<nsCString>& aTables);
 
   nsresult UpdateHashStore(nsTArray<TableUpdate*>* aUpdates,

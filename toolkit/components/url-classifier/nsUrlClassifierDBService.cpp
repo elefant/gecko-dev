@@ -557,6 +557,9 @@ nsUrlClassifierDBServiceWorker::FinishStream()
     // parser.
     mTableUpdates.AppendElements(mProtocolParser->GetTableUpdates());
     mProtocolParser->ForgetTableUpdates();
+
+    // The assignment involves no string copy since the source string is sharable.
+    mRawTableUpdates = mProtocolParser->GetRawTableUpdates();
   } else {
     LOG(("nsUrlClassifierDBService::FinishStream Failed to parse the stream "
          "using mProtocolParser."));
@@ -622,7 +625,10 @@ nsresult
 nsUrlClassifierDBServiceWorker::ApplyUpdate()
 {
   LOG(("nsUrlClassifierDBServiceWorker::ApplyUpdate()"));
-  return mClassifier->ApplyUpdates(&mTableUpdates);
+  nsresult rv = mClassifier->ApplyUpdates(&mTableUpdates, mRawTableUpdates);
+  // Invalidate the raw table updates.
+  mRawTableUpdates = EmptyCString();
+  return rv;
 }
 
 NS_IMETHODIMP
