@@ -17,6 +17,10 @@ public:
   // since the decoder will do some pre-processing before decoding.
   RiceDeltaDecoder(uint8_t* aEncodedData, size_t aEncodedDataSize);
 
+  // @param aNumEntries The number of values to be decoded, not including the first value.
+  // @param aDecodedData A pre-allocated buffer to return the output. Note that the first
+  //                     element would be |aFirstValue| and so the buffer length (in byte)
+  //                     is (aNumEntries + 1) * sizeof(uint32_t).
   bool Decode(uint32_t aRiceParameter,
               uint32_t aFirstValue,
               uint32_t aNumEntries,
