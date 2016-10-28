@@ -17,6 +17,9 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/NetUtil.jsm");
 
+XPCOMUtils.defineLazyServiceGetter(this, 'gDbService',
+                                   '@mozilla.org/url-classifier/dbservice;1',
+                                   'nsIUrlClassifierDBService');
 
 // Log only if browser.safebrowsing.debug is true
 function log(...stuff) {
@@ -173,7 +176,7 @@ HashCompleter.prototype = {
   // This is mainly how the HashCompleter interacts with other components.
   // Even though it only takes one partial hash and callback, subsequent
   // calls are made into the same HTTP request by using a thread dispatch.
-  complete: function HC_complete(aPartialHash, aGethashUrl, aCallback) {
+  complete: function HC_complete(aPartialHash, aGethashUrl, aTableName, aCallback) {
     if (!aGethashUrl) {
       throw Cr.NS_ERROR_NOT_INITIALIZED;
     }
@@ -182,13 +185,13 @@ HashCompleter.prototype = {
       this._currentRequest = new HashCompleterRequest(this, aGethashUrl);
     }
     if (this._currentRequest.gethashUrl == aGethashUrl) {
-      this._currentRequest.add(aPartialHash, aCallback);
+      this._currentRequest.add(aPartialHash, aCallback, aTableName);
     } else {
       if (!this._pendingRequests[aGethashUrl]) {
         this._pendingRequests[aGethashUrl] =
           new HashCompleterRequest(this, aGethashUrl);
       }
-      this._pendingRequests[aGethashUrl].add(aPartialHash, aCallback);
+      this._pendingRequests[aGethashUrl].add(aPartialHash, aCallback, aTableName);
     }
 
     if (!this._backoffs[aGethashUrl]) {
@@ -277,6 +280,12 @@ function HashCompleterRequest(aCompleter, aGethashUrl) {
   // Whether we have been informed of a shutdown by the xpcom-shutdown event.
   this._shuttingDown = false;
   this.gethashUrl = aGethashUrl;
+
+  // Multiple partial hashes can be associated with the same tables
+  // so we use a set here.
+  //
+  // Question: is empty table name possible?
+  this.tableNames = new Set();
 }
 HashCompleterRequest.prototype = {
   QueryInterface: XPCOMUtils.generateQI([Ci.nsIRequestObserver,
@@ -286,18 +295,55 @@ HashCompleterRequest.prototype = {
 
   // This is called by the HashCompleter to add a hash and callback to the
   // HashCompleterRequest. It must be called before calling |begin|.
-  add: function HCR_add(aPartialHash, aCallback) {
+  add: function HCR_add(aPartialHash, aCallback, aTableName) {
     this._requests.push({
       partialHash: aPartialHash,
       callback: aCallback,
       responses: []
     });
+
+    if (aTableName) {
+      this.tableNames.add(aTableName);
+      let isTableNameV4 = aTableName.endsWith('-proto');
+      if (1 === this.tableNames.size) {
+        // Decide if this request is v4 by the first added partial hash.
+        this.isV4 = isTableNameV4;
+      } else if (this.isV4 !== isTableNameV4) {
+        log('ERROR: Cannot mix "proto" tables with other types within ' +
+            'the smae gethash URL.');
+      }
+    }
+  },
+
+  maybeGetTableStatesBase64: function HCR_getTableStatesBase64(aCallback) {
+    if (!this.isV4) {
+      return aCallback(); // No-op and return to save a disk access.
+    }
+
+    let statesToReturn = [];
+    gDbService.getTables(aTableData => {
+      aTableData.split("\n").forEach(line => {
+        let p = line.indexOf(";");
+        if (-1 === p) {
+          return;
+        }
+        // [tableName];[stateBase64]:[checksumBase64]
+        let tableName = line.substring(0, p);
+        if (this.tableNames.has(tableName)) {
+          let metadata = line.substring(p + 1).split(":");
+          let stateBase64 = metadata[0];
+          statesToReturn.push(stateBase64);
+        }
+      });
+    });
+
+    return statesToReturn;
   },
 
   // This initiates the HTTP request. It can fail due to backoff timings and
   // will notify all callbacks as necessary. We notify the backoff object on
   // begin.
-  begin: function HCR_begin() {
+  begin: function HCR_begin(aTableTable) {
     if (!this._completer.canMakeRequest(this.gethashUrl)) {
       log("Can't make request to " + this.gethashUrl + "\n");
       this.notifyFailure(Cr.NS_ERROR_ABORT);
@@ -306,16 +352,22 @@ HashCompleterRequest.prototype = {
 
     Services.obs.addObserver(this, "xpcom-shutdown", false);
 
-    try {
-      this.openChannel();
-      // Notify the RequestBackoff if opening the channel succeeded. At this
-      // point, finishRequest must be called.
-      this._completer.noteRequest(this.gethashUrl);
-    }
-    catch (err) {
-      this.notifyFailure(err);
-      throw err;
-    }
+    // V4 requires table states to build the request so we need
+    // a async call to retrieve the table states from disk.
+    // Note that |HCR_begin| is fine to be changed to async because
+    // it is not appeared in a sync call chain and returns nothing.
+    this.maybeGetTableStatesBase64(aTableStatesBase64 => {
+      try {
+        this.openChannel(aTableStates);
+        // Notify the RequestBackoff if opening the channel succeeded. At this
+        // point, finishRequest must be called.
+        this._completer.noteRequest(this.gethashUrl);
+      }
+      catch (err) {
+        this.notifyFailure(err);
+        throw err;
+      }
+    });
   },
 
   notify: function HCR_notify() {
@@ -330,12 +382,20 @@ HashCompleterRequest.prototype = {
   },
 
   // Creates an nsIChannel for the request and fills the body.
-  openChannel: function HCR_openChannel() {
+  openChannel: function HCR_openChannel(aTableStatesBase64) {
     let loadFlags = Ci.nsIChannel.INHIBIT_CACHING |
                     Ci.nsIChannel.LOAD_BYPASS_CACHE;
 
+    let actualGethashUrl = this.gethashUrl;
+    if (this.isV4) {
+      // TODO: (Bug 1276826)
+      // 1) Build request for V4 by this.tableNames, this._requests and
+      //    aTableStatesBase64.
+      // 2) Annotate the request to actualGethashUrl as the query string.
+    }
+
     let channel = NetUtil.newChannel({
-      uri: this.gethashUrl,
+      uri: actualGethashUrl,
       loadUsingSystemPrincipal: true
     });
     channel.loadFlags = loadFlags;
@@ -346,8 +406,13 @@ HashCompleterRequest.prototype = {
 
     this._channel = channel;
 
-    let body = this.buildRequest();
-    this.addRequestBody(body);
+    if (this.isV4) {
+      // TODO (Bug1276826): Deal with v4 specific HTTP headers.
+      // e.g. "X-HTTP-Method-Override".
+    } else {
+      let body = this.buildRequest();
+      this.addRequestBody(body);
+    }
 
     // Set a timer that cancels the channel after timeout_ms in case we
     // don't get a gethash response.
@@ -531,6 +596,7 @@ HashCompleterRequest.prototype = {
     }
     let success = Components.isSuccessCode(aStatusCode);
     log('Received a ' + httpStatus + ' status code from the gethash server (success=' + success + ').');
+
 
     let histogram =
       Services.telemetry.getHistogramById("URLCLASSIFIER_COMPLETE_REMOTE_STATUS");
