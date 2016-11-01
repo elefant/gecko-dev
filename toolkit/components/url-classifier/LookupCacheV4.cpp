@@ -78,12 +78,28 @@ LookupCacheV4::Init()
   return NS_OK;
 }
 
-// TODO : Bug 1298257, Implement url matching for variable-length prefix set
 nsresult
 LookupCacheV4::Has(const Completion& aCompletion,
                    bool* aHas, bool* aComplete)
 {
   *aHas = false;
+
+  uint32_t length = 0;
+  nsDependentCSubstring fullhash;
+  fullhash.Rebind((const char *)aCompletion.buf, COMPLETE_SIZE);
+
+  nsresult rv = mVLPrefixSet->Matches(fullhash, &length);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  *aHas = length >= PREFIX_SIZE;
+  *aComplete = length == COMPLETE_SIZE;
+
+  if (LOG_ENABLED()) {
+    uint32_t prefix = aCompletion.ToUint32();
+    LOG(("Probe in V4 %s: %X, found %d, complete %d", mTableName.get(),
+          prefix, *aHas, *aComplete));
+  }
+
   return NS_OK;
 }
 
