@@ -21,6 +21,10 @@ XPCOMUtils.defineLazyServiceGetter(this, 'gDbService',
                                    '@mozilla.org/url-classifier/dbservice;1',
                                    'nsIUrlClassifierDBService');
 
+XPCOMUtils.defineLazyServiceGetter(this, 'gUrlUtil',
+                                   '@mozilla.org/url-classifier/utils;1',
+                                   'nsIUrlClassifierUtils');
+
 // Log only if browser.safebrowsing.debug is true
 function log(...stuff) {
   let logging = null;
@@ -388,15 +392,8 @@ HashCompleterRequest.prototype = {
 
     let actualGethashUrl = this.gethashUrl;
     if (this.isV4) {
-      // TODO: (Bug 1276826)
-      // 1) Build request for V4 by this.tableNames, this._requests.
-      // 2) Annotate the request to actualGethashUrl as the query string.
-
-      // We temporarily annotate |this.tableNames| so we can check
-      // if things go correctly in the test case.
-      // Note that the spread operator here is required to stringify the
-      // Map object...
-      actualGethashUrl += "&$req=" + JSON.stringify(...this.tableNames);
+      // As per spec, we add the request payload to the gethash url.
+      actualGethashUrl += "&$req=" + this.buildRequestV4();
     }
 
     log("actualGethashUrl: " + actualGethashUrl);
@@ -414,8 +411,7 @@ HashCompleterRequest.prototype = {
     this._channel = channel;
 
     if (this.isV4) {
-      // TODO (Bug 1276826): Deal with v4 specific HTTP headers.
-      // e.g. "X-HTTP-Method-Override".
+      httpChannel.setRequestHeader("X-HTTP-Method-Override", "POST", false);
     } else {
       let body = this.buildRequest();
       this.addRequestBody(body);
@@ -429,6 +425,33 @@ HashCompleterRequest.prototype = {
       "urlclassifier.gethash.timeout_ms");
     this.timer_.initWithCallback(this, timeout, this.timer_.TYPE_ONE_SHOT);
     channel.asyncOpen2(this);
+  },
+
+  buildRequestV4: function HCR_buildRequestV4() {
+    // Conver the "name to state" mapping to two equal-length arrays.
+    let tableNameArray = [];
+    let stateArray = [];
+    this.tableNames.forEach((state, name) => {
+      if (state) {
+        tableNameArray.push(name);
+        stateArray.push(state);
+      }
+    });
+
+    // Build the "distinct" prefix array.
+    let prefixSet = new Set();
+    this._requests.forEach(r => prefixSet.add(btoa(r.partialHash)));
+    let prefixArray = Array.from(prefixSet);
+
+    log("Build v4 gethash request with " + JSON.stringify(tableNameArray) + ', '
+                                         + JSON.stringify(stateArray) + ', '
+                                         + JSON.stringify(prefixArray));
+
+    return gUrlUtil.makeFindFullHashRequestV4(tableNameArray,
+                                              stateArray,
+                                              prefixArray,
+                                              tableNameArray.length,
+                                              prefixArray.length);
   },
 
   // Returns a string for the request body based on the contents of
@@ -484,11 +507,8 @@ HashCompleterRequest.prototype = {
       return;
     }
 
-    log('Response: ' + this._response);
-
     if (this.isV4) {
-      log("V4 is not supported yet.");
-      return;
+      return this.handleResponseV4();
     }
 
     let start = 0;
@@ -497,6 +517,38 @@ HashCompleterRequest.prototype = {
     while (start != length) {
       start = this.handleTable(start);
     }
+  },
+
+  handleResponseV4: function HCR_handleResponseV4() {
+    let callback = (aCompleteHash,
+                    aTableNames,
+                    aMinWaitDuration,
+                    aNegCacheDuration,
+                    aPerHashCacheDuration) => {
+      log("V4 response callback: " + JSON.stringify(aCompleteHash) + ", " +
+          aTableNames + ", " +
+          aMinWaitDuration + ", " +
+          aNegCacheDuration + ", " +
+          aPerHashCacheDuration);
+
+      // Filter table names which we didn't requested.
+      let filteredTables = aTableNames.split(",").filter(name => {
+        return this.tableNames.get(name);
+      });
+      if (0 === filteredTables.length) {
+        log("ERROR: Got complete hash which is from unknown table.");
+        return;
+      }
+      if (filteredTables.length > 1) {
+        log("WARNING: Got complete hash which has ambigious threat type.");
+      }
+
+      this.handleItem(aCompleteHash, filteredTables[0], 0);
+
+      // TODO: Make use of cache durations.
+    };
+
+    gUrlUtil.parseFindFullHashResponseV4(this._response, callback);
   },
 
   // This parses a table entry in the response body and calls |handleItem|
@@ -541,7 +593,7 @@ HashCompleterRequest.prototype = {
   handleItem: function HCR_handleItem(aData, aTableName, aChunkId) {
     for (let i = 0; i < this._requests.length; i++) {
       let request = this._requests[i];
-      if (aData.substring(0,4) == request.partialHash) {
+      if (aData.startsWith(request.partialHash)) {
         request.responses.push({
           completeHash: aData,
           tableName: aTableName,

@@ -17,6 +17,10 @@ let gListManager = Cc["@mozilla.org/url-classifier/listmanager;1"]
 let gCompleter = Cc["@mozilla.org/url-classifier/hashcompleter;1"]
                     .getService(Ci.nsIUrlClassifierHashCompleter);
 
+XPCOMUtils.defineLazyServiceGetter(this, 'gUrlUtil',
+                                   '@mozilla.org/url-classifier/utils;1',
+                                   'nsIUrlClassifierUtils');
+
 // Handles request for TEST_TABLE_DATA_V4.
 let gHttpServV4 = null;
 let gExpectedGetHashQueryV4 = "";
@@ -49,17 +53,60 @@ add_test(function test_update_v4() {
 });
 
 add_test(function test_getHashRequestV4() {
-  // TODO: Bug 1276826 to replace with the actual protobuf data.
-  gExpectedGetHashQueryV4 = '&$req=[%22test-phish-proto%22,%22c3RhAHRl%22]';
+  let request = gUrlUtil.makeFindFullHashRequestV4([TEST_TABLE_DATA_V4.tableName],
+                                                   [btoa(NEW_CLIENT_STATE)],
+                                                   [btoa("0123"), btoa("1234567"), btoa("1111")],
+                                                   1,
+                                                   3);
+  gExpectedGetHashQueryV4 = '&$req=' + request;
 
-  gCompleter.complete("", TEST_TABLE_DATA_V4.gethashUrl, TEST_TABLE_DATA_V4.tableName, {
+  let completeFinishedCnt = 0;
+
+  gCompleter.complete("0123", TEST_TABLE_DATA_V4.gethashUrl, TEST_TABLE_DATA_V4.tableName, {
     completion: function (hash, table, chunkId) {
-      ok(false); // There should be no matches found.
+      equal(hash, "01234567890123456789012345678901");
+      equal(table, TEST_TABLE_DATA_V4.tableName);
+      equal(chunkId, 0);
+      do_print("completion: " + hash + ", " + table + ", " + chunkId);
     },
 
     completionFinished: function (status) {
       equal(status, Cr.NS_OK);
-      run_next_test();
+      completeFinishedCnt++;
+      if (3 === completeFinishedCnt) {
+        run_next_test();
+      }
+    },
+  });
+
+  gCompleter.complete("1234567", TEST_TABLE_DATA_V4.gethashUrl, TEST_TABLE_DATA_V4.tableName, {
+    completion: function (hash, table, chunkId) {
+      equal(hash, "12345678901234567890123456789012");
+      equal(table, TEST_TABLE_DATA_V4.tableName);
+      equal(chunkId, 0);
+      do_print("completion: " + hash + ", " + table + ", " + chunkId);
+    },
+
+    completionFinished: function (status) {
+      equal(status, Cr.NS_OK);
+      completeFinishedCnt++;
+      if (3 === completeFinishedCnt) {
+        run_next_test();
+      }
+    },
+  });
+
+  gCompleter.complete("1111", TEST_TABLE_DATA_V4.gethashUrl, TEST_TABLE_DATA_V4.tableName, {
+    completion: function (hash, table, chunkId) {
+      ok(false, "1111 is not the prefix of " + hash);
+    },
+
+    completionFinished: function (status) {
+      equal(status, Cr.NS_OK);
+      completeFinishedCnt++;
+      if (3 === completeFinishedCnt) {
+        run_next_test();
+      }
     },
   });
 });
@@ -103,8 +150,13 @@ function run_test() {
   gHttpServV4.registerPathHandler("/safebrowsing/gethash-v4", function(request, response) {
     equal(request.queryString, gExpectedGetHashQueryV4);
 
+    // { nsCString("01234567890123456789012345678901"), SOCIAL_ENGINEERING_PUBLIC, { 8, 500 } },
+    // { nsCString("12345678901234567890123456789012"), SOCIAL_ENGINEERING_PUBLIC, { 7, 100} },
+    // { nsCString("23456789012345678901234567890123"), SOCIAL_ENGINEERING_PUBLIC, { 1, 20 } },
+    let content = "\x0A\x2D\x08\x02\x1A\x22\x0A\x20\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39\x30\x31\x2A\x05\x08\x08\x10\xF4\x03\x0A\x2C\x08\x02\x1A\x22\x0A\x20\x31\x32\x33\x34\x35\x36\x37\x38\x39\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39\x30\x31\x32\x2A\x04\x08\x07\x10\x64\x0A\x2C\x08\x02\x1A\x22\x0A\x20\x32\x33\x34\x35\x36\x37\x38\x39\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39\x30\x31\x32\x33\x2A\x04\x08\x01\x10\x14\x12\x04\x08\x0C\x10\x0A\x1A\x04\x08\x78\x10\x09";
+
     response.setStatusLine(request.httpVersion, 200, "OK");
-    response.bodyOutputStream.write("", 0);
+    response.bodyOutputStream.write(content, content.length);
   });
 
   gHttpServV4.start(5555);
