@@ -464,7 +464,9 @@ Classifier::Check(const nsACString& aSpec,
     for (uint32_t i = 0; i < cacheArray.Length(); i++) {
       LookupCache *cache = cacheArray[i];
       bool has, complete;
+      uint32_t matchLength;
 
+      /*
       if (LookupCache::Cast<LookupCacheV4>(cache)) {
         // TODO Bug 1312339 Return length in LookupCache.Has and support
         // VariableLengthPrefix in LookupResultArray
@@ -479,8 +481,9 @@ Classifier::Check(const nsACString& aSpec,
         }
         continue;
       }
+      */
 
-      rv = cache->Has(lookupHash, &has, &complete);
+      rv = cache->Has(lookupHash, &has, &complete, &matchLength);
       NS_ENSURE_SUCCESS(rv, rv);
       if (has) {
         LookupResult *result = aResults.AppendElement();
@@ -505,8 +508,13 @@ Classifier::Check(const nsACString& aSpec,
         result->mComplete = complete;
         result->mFresh = (age < aFreshnessGuarantee);
         result->mTableName.Assign(cache->TableName());
+        result->mPartialHashLength = matchLength;
 
-        matchingStatistics |= PrefixMatch::eMatchV2Prefix;
+        if (LookupCache::Cast<LookupCacheV4>(cache)) {
+          matchingStatistics |= PrefixMatch::eMatchV4Prefix;
+        } else {
+          matchingStatistics |= PrefixMatch::eMatchV2Prefix;
+        }
       }
     }
 
@@ -1199,7 +1207,8 @@ Classifier::ReadNoiseEntries(const Prefix& aPrefix,
                              PrefixArray* aNoiseEntries)
 {
   // TODO : Bug 1297962, support adding noise for v4
-  LookupCacheV2 *cache = static_cast<LookupCacheV2*>(GetLookupCache(aTableName));
+  LookupCacheV2 *cache =
+    LookupCache::Cast<LookupCacheV2>(GetLookupCache(aTableName));
   if (!cache) {
     return NS_ERROR_FAILURE;
   }

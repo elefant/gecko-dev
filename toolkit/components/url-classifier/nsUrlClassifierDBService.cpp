@@ -282,7 +282,7 @@ nsUrlClassifierDBServiceWorker::DoLookup(const nsACString& spec,
   nsAutoPtr<LookupResultArray> completes(new LookupResultArray());
 
   for (uint32_t i = 0; i < results->Length(); i++) {
-    if (!mMissCache.Contains(results->ElementAt(i).hash.prefix)) {
+    if (!mMissCache.Contains(results->ElementAt(i).hash.fixedLengthPrefix)) {
       completes->AppendElement(results->ElementAt(i));
     }
   }
@@ -292,7 +292,7 @@ nsUrlClassifierDBServiceWorker::DoLookup(const nsACString& spec,
       // We're going to be doing a gethash request, add some extra entries.
       // Note that we cannot pass the first two by reference, because we
       // add to completes, whicah can cause completes to reallocate and move.
-      AddNoise(completes->ElementAt(i).hash.prefix,
+      AddNoise(completes->ElementAt(i).hash.fixedLengthPrefix,
                completes->ElementAt(i).mTableName,
                mGethashNoise, *completes);
       break;
@@ -344,7 +344,7 @@ nsUrlClassifierDBServiceWorker::AddNoise(const Prefix aPrefix,
     if (!result)
       return NS_ERROR_OUT_OF_MEMORY;
 
-    result->hash.prefix = noiseEntries[i];
+    result->hash.fixedLengthPrefix = noiseEntries[i];
     result->mNoise = true;
 
     result->mTableName.Assign(tableName);
@@ -948,11 +948,7 @@ nsUrlClassifierLookupCallback::LookupComplete(nsTArray<LookupResult>* results)
            StringBeginsWith(result.mTableName, NS_LITERAL_CSTRING("test-"))) &&
           mDBService->GetCompleter(result.mTableName,
                                    getter_AddRefs(completer))) {
-        nsAutoCString partialHash;
-        partialHash.Assign(reinterpret_cast<char*>(&result.hash.prefix),
-                           PREFIX_SIZE);
-
-        nsresult rv = completer->Complete(partialHash,
+        nsresult rv = completer->Complete(result.PartialHash(),
                                           gethashUrl,
                                           result.mTableName,
                                           this);
@@ -1065,17 +1061,17 @@ nsUrlClassifierLookupCallback::HandleResults()
     // the list can't be verified.  Also leave out randomly-generated
     // noise.
     if (result.mNoise) {
-      LOG(("Skipping result %X from table %s (noise)",
-           result.hash.prefix.ToUint32(), result.mTableName.get()));
+      LOG(("Skipping result %s from table %s (noise)",
+           result.PartialHashHex().get(), result.mTableName.get()));
       continue;
     } else if (!result.Confirmed()) {
       LOG(("Skipping result %X from table %s (not confirmed)",
-           result.hash.prefix.ToUint32(), result.mTableName.get()));
+           result.PartialHashHex().get(), result.mTableName.get()));
       continue;
     }
 
     LOG(("Confirmed result %X from table %s",
-         result.hash.prefix.ToUint32(), result.mTableName.get()));
+         result.PartialHashHex().get(), result.mTableName.get()));
 
     if (tables.IndexOf(result.mTableName) == nsTArray<nsCString>::NoIndex) {
       tables.AppendElement(result.mTableName);
@@ -1091,7 +1087,7 @@ nsUrlClassifierLookupCallback::HandleResults()
     for (uint32_t i = 0; i < mResults->Length(); i++) {
       LookupResult &result = mResults->ElementAt(i);
       if (!result.Confirmed() && !result.mNoise) {
-        cacheMisses->AppendElement(result.PrefixHash());
+        cacheMisses->AppendElement(result.hash.fixedLengthPrefix);
       }
     }
     // Hands ownership of the miss array back to the worker thread.
