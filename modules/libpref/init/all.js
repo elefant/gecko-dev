@@ -5039,14 +5039,14 @@ pref("dom.flyweb.enabled", false);
 pref("dom.mapped_arraybuffer.enabled", true);
 
 // The tables used for Safebrowsing phishing and malware checks.
-pref("urlclassifier.malwareTable", "goog-malware-shavar,goog-unwanted-shavar,test-malware-simple,test-unwanted-simple");
+pref("urlclassifier.malwareTable", "goog-malware-proto,goog-unwanted-proto");
 
 #ifdef MOZILLA_OFFICIAL
 // In the official build, we are allowed to use google's private
 // phishing list "goog-phish-shavar". See Bug 1288840.
-pref("urlclassifier.phishTable", "goog-phish-shavar,test-phish-simple");
+pref("urlclassifier.phishTable", "goog-phish-proto,test-phish-simple");
 #else
-pref("urlclassifier.phishTable", "googpub-phish-shavar,test-phish-simple");
+pref("urlclassifier.phishTable", "googpub-phish-proto,test-phish-simple");
 #endif
 
 // Tables for application reputation.
