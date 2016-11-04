@@ -24,7 +24,10 @@ namespace safebrowsing {
  */
 class Classifier {
 public:
-  Classifier();
+  typedef nsClassHashtable<nsCStringHashKey, nsCString> ProviderDictType;
+
+public:
+  Classifier(const ProviderDictType* aProviderDict);
   ~Classifier();
 
   nsresult Open(nsIFile& aCacheDirectory);
@@ -98,6 +101,7 @@ public:
   // the root directory.
   static nsresult GetPrivateStoreDirectory(nsIFile* aRootStoreDirectory,
                                            const nsACString& aTableName,
+                                           const nsACString& aProvider,
                                            nsIFile** aPrivateStoreDirectory);
 
 private:
@@ -129,6 +133,8 @@ private:
 
   nsresult LoadMetadata(nsIFile* aDirectory, nsACString& aResult);
 
+  nsCString GetProvider(const nsACString& aTableName);
+
   // Root dir of the Local profile.
   nsCOMPtr<nsIFile> mCacheDirectory;
   // Main directory where to store the databases.
@@ -142,6 +148,7 @@ private:
   uint32_t mHashKey;
   // Stores the last time a given table was updated (seconds).
   nsDataHashtable<nsCStringHashKey, int64_t> mTableFreshness;
+  ProviderDictType mProviderDict;
 };
 
 } // namespace safebrowsing

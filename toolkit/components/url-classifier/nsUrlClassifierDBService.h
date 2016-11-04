@@ -21,7 +21,7 @@
 #include "mozilla/Attributes.h"
 #include "mozilla/Mutex.h"
 #include "mozilla/TimeStamp.h"
-
+#include "mozilla/UniquePtr.h"
 #include "Entries.h"
 #include "LookupCache.h"
 
@@ -58,6 +58,9 @@ class nsUrlClassifierDBService final : public nsIUrlClassifierDBService,
                                        public nsIURIClassifier,
                                        public nsIObserver
 {
+public:
+  typedef nsClassHashtable<nsCStringHashKey, nsCString> ProviderDictType;
+
 public:
   // This is thread safe. It throws an exception if the thread is busy.
   nsUrlClassifierDBService();
@@ -145,12 +148,17 @@ private:
 class nsUrlClassifierDBServiceWorker final : public nsIUrlClassifierDBService
 {
 public:
+  typedef nsUrlClassifierDBService::ProviderDictType ProviderDictType;
+
+public:
   nsUrlClassifierDBServiceWorker();
 
   NS_DECL_THREADSAFE_ISUPPORTS
   NS_DECL_NSIURLCLASSIFIERDBSERVICE
 
-  nsresult Init(uint32_t aGethashNoise, nsCOMPtr<nsIFile> aCacheDir);
+  nsresult Init(uint32_t aGethashNoise,
+                nsCOMPtr<nsIFile> aCacheDir,
+                mozilla::UniquePtr<ProviderDictType>&& aProviderDict);
 
   // Queue a lookup for the worker to perform, called in the main thread.
   // tables is a comma-separated list of tables to query
@@ -249,6 +257,8 @@ private:
 
   // list of pending lookups
   nsTArray<PendingLookup> mPendingLookups;
+
+  mozilla::UniquePtr<ProviderDictType> mProviderDict;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsUrlClassifierDBService, NS_URLCLASSIFIERDBSERVICE_CID)

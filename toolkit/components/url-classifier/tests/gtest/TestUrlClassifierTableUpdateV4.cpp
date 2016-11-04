@@ -198,7 +198,7 @@ Clear()
   nsCOMPtr<nsIFile> file;
   NS_GetSpecialDirectory(NS_APP_USER_PROFILE_50_DIR, getter_AddRefs(file));
 
-  UniquePtr<Classifier> classifier(new Classifier());
+  UniquePtr<Classifier> classifier(new Classifier(nullptr));
   classifier->Open(*file);
   classifier->Reset();
 }
@@ -209,7 +209,7 @@ testUpdateFail(nsTArray<TableUpdate*>& tableUpdates)
   nsCOMPtr<nsIFile> file;
   NS_GetSpecialDirectory(NS_APP_USER_PROFILE_50_DIR, getter_AddRefs(file));
 
-  UniquePtr<Classifier> classifier(new Classifier());
+  UniquePtr<Classifier> classifier(new Classifier(nullptr));
   classifier->Open(*file);
 
   RunTestInNewThread([&] () -> void {
@@ -225,7 +225,7 @@ testUpdate(nsTArray<TableUpdate*>& tableUpdates,
   nsCOMPtr<nsIFile> file;
   NS_GetSpecialDirectory(NS_APP_USER_PROFILE_50_DIR, getter_AddRefs(file));
 
-  UniquePtr<Classifier> classifier(new Classifier());
+  UniquePtr<Classifier> classifier(new Classifier(nullptr));
   classifier->Open(*file);
 
   RunTestInNewThread([&] () -> void {
@@ -266,7 +266,7 @@ testOpenLookupCache()
   file->AppendNative(GTEST_SAFEBROWSING_DIR);
 
   RunTestInNewThread([&] () -> void {
-    LookupCacheV4 cache(nsCString(GTEST_TABLE), file);
+    LookupCacheV4 cache(nsCString(GTEST_TABLE), EmptyCString(), file);
     nsresult rv = cache.Init();
     ASSERT_EQ(rv, NS_OK);
 

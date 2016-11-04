@@ -156,10 +156,12 @@ nsUrlClassifierDBServiceWorker::~nsUrlClassifierDBServiceWorker()
 
 nsresult
 nsUrlClassifierDBServiceWorker::Init(uint32_t aGethashNoise,
-                                     nsCOMPtr<nsIFile> aCacheDir)
+                                     nsCOMPtr<nsIFile> aCacheDir,
+                                     UniquePtr<ProviderDictType>&& aProviderDict)
 {
   mGethashNoise = aGethashNoise;
   mCacheDir = aCacheDir;
+  mProviderDict = Move(aProviderDict);
 
   ResetUpdate();
 
@@ -809,7 +811,9 @@ nsUrlClassifierDBServiceWorker::OpenDb()
   mCryptoHash = do_CreateInstance(NS_CRYPTO_HASH_CONTRACTID, &rv);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  nsAutoPtr<Classifier> classifier(new Classifier());
+  // Note that we can't transfer the ownwership of mProviderDict
+  // to Classifier since we still need mProviderDict.
+  nsAutoPtr<Classifier> classifier(new Classifier(mProviderDict.get()));
   if (!classifier) {
     return NS_ERROR_OUT_OF_MEMORY;
   }
@@ -1224,6 +1228,68 @@ nsUrlClassifierDBService::ReadTablesFromPrefs()
   return NS_OK;
 }
 
+static nsresult
+ReadProvidersFromPrefs(nsUrlClassifierDBService::ProviderDictType& aDict)
+{
+  // Check all preferences "browser.safebrowsing.provider.[provider].list"
+  // to see which one contains |aTableName|.
+
+  nsCOMPtr<nsIPrefService> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
+  NS_ENSURE_TRUE(prefs, NS_ERROR_FAILURE);
+  nsCOMPtr<nsIPrefBranch> prefBranch;
+  nsresult rv = prefs->GetBranch("browser.safebrowsing.provider.",
+                                  getter_AddRefs(prefBranch));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  // We've got a pref branch for "browser.safebrowsing.provider.".
+  // Enumerate all children prefs and parse providers.
+  uint32_t childCount;
+  char** childArray;
+  rv = prefBranch->GetChildList("", &childCount, &childArray);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  // Collect providers from childArray.
+  nsTHashtable<nsCStringHashKey> providers;
+  for (uint32_t i = 0; i < childCount; i++) {
+    nsCString child(childArray[i]);
+    auto dotPos = child.FindChar('.');
+    if (dotPos < 0) {
+      continue;
+    }
+
+    nsDependentCSubstring provider = Substring(child, 0, dotPos);
+
+    providers.PutEntry(provider);
+  }
+  NS_FREE_XPCOM_ALLOCATED_POINTER_ARRAY(childCount, childArray);
+
+  // Now we have all providers. Check which one owns |aTableName|.
+  // e.g. The owning lists of provider "google" is defined in
+  // "browser.safebrowsing.provider.google.lists".
+  for (auto itr = providers.Iter(); !itr.Done(); itr.Next()) {
+    auto entry = itr.Get();
+    nsCString provider(entry->GetKey());
+    nsPrintfCString owninListsPref("%s.lists", provider.get());
+
+    nsXPIDLCString owningLists;
+    nsresult rv = prefBranch->GetCharPref(owninListsPref.get(),
+                                          getter_Copies(owningLists));
+    if (NS_FAILED(rv)) {
+      continue;
+    }
+
+    // We've got the owning lists (represented as string) of |provider|.
+    // Parse the string and see if |aTableName| is included.
+    nsTArray<nsCString> tables;
+    Classifier::SplitTables(owningLists, tables);
+    for (auto tableName : tables) {
+      aDict.Put(tableName, new nsCString(provider));
+    }
+  }
+
+  return NS_OK;
+}
+
 nsresult
 nsUrlClassifierDBService::Init()
 {
@@ -1279,7 +1345,14 @@ nsUrlClassifierDBService::Init()
   if (!mWorker)
     return NS_ERROR_OUT_OF_MEMORY;
 
-  rv = mWorker->Init(gethashNoise, cacheDir);
+  UniquePtr<ProviderDictType> providerDict(new ProviderDictType());
+  rv = ReadProvidersFromPrefs(*providerDict);
+  if (NS_FAILED(rv)) {
+    LOG(("Unable to bulid provider dictionary."));
+  }
+  // We've built the dictionary on the main thread and immediately
+  // transfer the ownership to the worker.
+  rv = mWorker->Init(gethashNoise, cacheDir, Move(providerDict));
   if (NS_FAILED(rv)) {
     mWorker = nullptr;
     return rv;
