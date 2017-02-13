@@ -12,7 +12,7 @@ public:
   template<typename T>
   static nsIFile* InspectStoreDirectory(const T& aT)
   {
-    return aT.mStoreDirectory;
+    return aT.mReadOnlyStoreDirectory;
   }
 };
 

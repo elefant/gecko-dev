@@ -19,8 +19,8 @@ class LookupCacheV4 final : public LookupCache
 public:
   explicit LookupCacheV4(const nsACString& aTableName,
                          const nsACString& aProvider,
-                         nsIFile* aStoreFile)
-    : LookupCache(aTableName, aProvider, aStoreFile) {}
+                         nsIFile* aReadOnlyStoreFile)
+    : LookupCache(aTableName, aProvider, aReadOnlyStoreFile) {}
   ~LookupCacheV4() {}
 
   virtual nsresult Init() override;
@@ -44,7 +44,7 @@ public:
                        PrefixStringMap& aInputMap,
                        PrefixStringMap& aOutputMap);
 
-  nsresult WriteMetadata(TableUpdateV4* aTableUpdate);
+  nsresult WriteMetadata(TableUpdateV4* aTableUpdate, nsIFile* aOutDirectory);
   nsresult LoadMetadata(nsACString& aState, nsACString& aChecksum);
 
   static const int VER;

@@ -112,7 +112,7 @@ public:
 
   LookupCache(const nsACString& aTableName,
               const nsACString& aProvider,
-              nsIFile* aStoreFile);
+              nsIFile* aReadOnlyStoreFile);
   virtual ~LookupCache() {}
 
   const nsCString &TableName() const { return mTableName; }
@@ -124,8 +124,8 @@ public:
   // This will Clear() the passed arrays when done.
   nsresult AddCompletionsToCache(AddCompleteArray& aAddCompletes);
 
-  // Write data stored in lookup cache to disk.
-  nsresult WriteFile();
+  // Write data stored in lookup cache to the specified directory.
+  nsresult WriteFile(nsIFile* aOutDirectory);
 
   // Clear completions retrieved from gethash request.
   void ClearCache();
@@ -171,8 +171,10 @@ protected:
   bool mPrimed;
   nsCString mTableName;
   nsCString mProvider;
-  nsCOMPtr<nsIFile> mRootStoreDirectory;
-  nsCOMPtr<nsIFile> mStoreDirectory;
+
+  // These directoties are read-only.
+  nsCOMPtr<nsIFile> mReadOnlyRootStoreDirectory;
+  nsCOMPtr<nsIFile> mReadOnlyStoreDirectory;
 
   // Full length hashes obtained in gethash request
   CompletionArray mGetHashCache;

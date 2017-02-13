@@ -32,6 +32,7 @@ extern mozilla::LazyLogModule gUrlClassifierDbServiceLog;
 #define STORE_DIRECTORY      NS_LITERAL_CSTRING("safebrowsing")
 #define TO_DELETE_DIR_SUFFIX NS_LITERAL_CSTRING("-to_delete")
 #define BACKUP_DIR_SUFFIX    NS_LITERAL_CSTRING("-backup")
+#define UPDATING_DIR_SUFFIX  NS_LITERAL_CSTRING("-updating")
 
 #define METADATA_SUFFIX      NS_LITERAL_CSTRING(".metadata")
 
@@ -178,6 +179,13 @@ Classifier::SetupPathNames()
   rv = mBackupDirectory->AppendNative(STORE_DIRECTORY + BACKUP_DIR_SUFFIX);
   NS_ENSURE_SUCCESS(rv, rv);
 
+  // Directory where to move a backup before an update.
+  rv = mCacheDirectory->Clone(getter_AddRefs(mUpdatingDirectory));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  rv = mUpdatingDirectory->AppendNative(STORE_DIRECTORY + UPDATING_DIR_SUFFIX);
+  NS_ENSURE_SUCCESS(rv, rv);
+
   // Directory where to move the backup so we can atomically
   // delete (really move) it.
   rv = mCacheDirectory->Clone(getter_AddRefs(mToDeleteDirectory));
@@ -227,7 +235,8 @@ Classifier::Open(nsIFile& aCacheDirectory)
   NS_ENSURE_SUCCESS(rv, rv);
 
   // Check whether we have an incomplete update and recover from the
-  // backup if so.
+  // backup if so. Only required for backward compatibility.
+  // See Bug 1338970.
   rv = RecoverBackups();
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -258,6 +267,7 @@ Classifier::Reset()
 
   mRootStoreDirectory->Remove(true);
   mBackupDirectory->Remove(true);
+  mUpdatingDirectory->Remove(true);
   mToDeleteDirectory->Remove(true);
 
   CreateStoreDirectory();
@@ -348,7 +358,7 @@ Classifier::AbortUpdateAndReset(const nsCString& aTable)
 
   // Remove the backup and delete directory since we are aborting
   // from an update.
-  Unused << RemoveBackupTables();
+  Unused << RemoveUnusedTables();
   Unused << CleanToDelete();
 }
 
@@ -525,6 +535,83 @@ Classifier::Check(const nsACString& aSpec,
   return NS_OK;
 }
 
+static nsresult
+SwapDirectoryContent(nsIFile* aDir1, nsIFile* aDir2, nsIFile* aParentDir)
+{
+  // Pre-condition: |aDir1| and |aDir2| are directory and their parent
+  //                are both |aParentDir|.
+  //
+  // Post-condition: The locations where aDir1 and aDir2 point to will not
+  //                 change but their contents will be exchanged. If we failed
+  //                 to swap their content, everything will be rolled back.
+
+  const nsCString TEMP_DIR_NAME = NS_LITERAL_CSTRING("temp");
+
+  nsresult rv;
+
+  nsAutoCString dirName1, dirName2;
+  aDir1->GetNativeLeafName(dirName1);
+  aDir2->GetNativeLeafName(dirName2);
+
+  LOG(("Swapping directories %s and %s...", dirName1.get(),
+                                            dirName2.get()));
+
+  // 1. Rename "dirName1" to "temp"
+  rv = aDir1->RenameToNative(nullptr, TEMP_DIR_NAME);
+  if (NS_FAILED(rv)) {
+    LOG(("Unable to rename %s to %s", dirName1.get(),
+                                      TEMP_DIR_NAME.get()));
+    return rv; // Nothting to roll back.
+  }
+
+  // 1.1. Create a handle for temp directory. This is annoying but required
+  //      since |nsIFile.rename| will not change the location where the
+  //      object points to.
+  nsCOMPtr<nsIFile> tempDirectory;
+  rv = aParentDir->Clone(getter_AddRefs(tempDirectory));
+  rv = tempDirectory->AppendNative(TEMP_DIR_NAME);
+
+  // 2. Rename "dirName2" to "dirName2".
+  rv = aDir2->RenameToNative(nullptr, dirName1);
+  if (NS_FAILED(rv)) {
+    LOG(("Failed to rename %s to %s. Rename temp directory back to %s",
+         dirName2.get(), dirName1.get(), dirName1.get()));
+    nsresult rbrv = tempDirectory->RenameToNative(nullptr, dirName1);
+    if (NS_FAILED(rbrv)) {
+      LOG(("Unable to rename temp diretory back to %s. What can I do?",
+           dirName1.get()));
+    }
+    return rv;
+  }
+
+  // 3. Rename "temp" to "dirName2".
+  rv = tempDirectory->RenameToNative(nullptr, dirName2);
+  if (NS_FAILED(rv)) {
+    LOG(("Failed to rename temp directory to %s. ", dirName2.get()));
+    // We've done (1) renaming "dir1 to temp" and
+    //            (2) renaming "dir2 to dir1"
+    // so the rollback is
+    //            (1) renaming "dir1 to dir2" and
+    //            (2) renaming "temp to dir1"
+    nsresult rbrv; // rollback result
+    rbrv = aDir1->RenameToNative(nullptr, dirName2);
+    NS_ENSURE_SUCCESS(rbrv, rbrv);
+    rbrv = tempDirectory->RenameToNative(nullptr, dirName1);
+    NS_ENSURE_SUCCESS(rbrv, rbrv);
+    return rv;
+  }
+
+  return rv;
+}
+
+nsresult
+Classifier::SwapInUpdatedTables()
+{
+  return SwapDirectoryContent(mRootStoreDirectory,
+                              mUpdatingDirectory,
+                              mCacheDirectory);
+}
+
 nsresult
 Classifier::ApplyUpdates(nsTArray<TableUpdate*>* aUpdates)
 {
@@ -552,9 +639,9 @@ Classifier::ApplyUpdates(nsTArray<TableUpdate*>* aUpdates)
   {
     ScopedUpdatesClearer scopedUpdatesClearer(aUpdates);
 
-    LOG(("Backup before update."));
+    LOG(("Copy in-use directory content for update."));
 
-    rv = BackupTables();
+    rv = CopyInUseDirForUpdate(); // i.e. mUpdatingDirectory will be setup.
     NS_ENSURE_SUCCESS(rv, rv);
 
     LOG(("Applying %d table updates.", aUpdates->Length()));
@@ -589,14 +676,22 @@ Classifier::ApplyUpdates(nsTArray<TableUpdate*>* aUpdates)
 
   } // End of scopedUpdatesClearer scope.
 
+  rv = SwapInUpdatedTables();
+  if (NS_FAILED(rv)) {
+    LOG(("Update succeeded but failed to swap in new tables. The temporary "
+         "directory for update (i.e. safebrowsing-updating) will be deleted."));
+  }
+
   rv = RegenActiveTables();
-  NS_ENSURE_SUCCESS(rv, rv);
+  if (NS_FAILED(rv)) {
+    LOG(("Failed to re-generate active tables!"));
+  }
 
-  LOG(("Cleaning up backups."));
+  LOG(("Cleaning up unused tables."));
 
-  // Move the backup directory away (signaling the transaction finished
+  // Move the updating directory away (signaling the transaction finished
   // successfully). This is atomic.
-  rv = RemoveBackupTables();
+  rv = RemoveUnusedTables();
   NS_ENSURE_SUCCESS(rv, rv);
 
   // Do the actual deletion of the backup files.
@@ -814,10 +909,10 @@ Classifier::DumpFailedUpdate()
   NS_ENSURE_SUCCESS(rv, rv);
 
   // Move backup to a clean "failed update" directory.
-  nsCOMPtr<nsIFile> backupDirectory;
-  if (NS_FAILED(mBackupDirectory->Clone(getter_AddRefs(backupDirectory))) ||
-      NS_FAILED(backupDirectory->MoveToNative(nullptr, failedUpdatekDirName))) {
-    LOG(("Failed to move backup to the \"failed update\" directory %s",
+  nsCOMPtr<nsIFile> inUseDirectory;
+  if (NS_FAILED(mRootStoreDirectory->Clone(getter_AddRefs(inUseDirectory))) ||
+      NS_FAILED(inUseDirectory->MoveToNative(nullptr, failedUpdatekDirName))) {
+    LOG(("Failed to move in-use to the \"failed update\" directory %s",
          failedUpdatekDirName.get()));
     return NS_ERROR_FAILURE;
   }
@@ -828,26 +923,16 @@ Classifier::DumpFailedUpdate()
 #endif // MOZ_SAFEBROWSING_DUMP_FAILED_UPDATES
 
 nsresult
-Classifier::BackupTables()
+Classifier::CopyInUseDirForUpdate()
 {
-  // We have to work in reverse here: first move the normal directory
-  // away to be the backup directory, then copy the files over
-  // to the normal directory. This ensures that if we crash the backup
-  // dir always has a valid, complete copy, instead of a partial one,
-  // because that's the one we will copy over the normal store dir.
+  // We copy everything from in-use directory to a temporary directory
+  // for updating.
 
-  nsCString backupDirName;
-  nsresult rv = mBackupDirectory->GetNativeLeafName(backupDirName);
+  nsCString updatingDirName;
+  nsresult rv = mUpdatingDirectory->GetNativeLeafName(updatingDirName);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  nsCString storeDirName;
-  rv = mRootStoreDirectory->GetNativeLeafName(storeDirName);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  rv = mRootStoreDirectory->MoveToNative(nullptr, backupDirName);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  rv = mRootStoreDirectory->CopyToNative(nullptr, storeDirName);
+  rv = mRootStoreDirectory->CopyToNative(nullptr, updatingDirName);
   NS_ENSURE_SUCCESS(rv, rv);
 
   // We moved some things to new places, so move the handles around, too.
@@ -858,16 +943,16 @@ Classifier::BackupTables()
 }
 
 nsresult
-Classifier::RemoveBackupTables()
+Classifier::RemoveUnusedTables()
 {
   nsCString toDeleteName;
   nsresult rv = mToDeleteDirectory->GetNativeLeafName(toDeleteName);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  rv = mBackupDirectory->MoveToNative(nullptr, toDeleteName);
+  rv = mUpdatingDirectory->MoveToNative(nullptr, toDeleteName);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  // mBackupDirectory now points to toDelete, fix that up.
+  // mUpdatingDirectory now points to toDelete, fix that up.
   rv = SetupPathNames();
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -1029,7 +1114,7 @@ Classifier::UpdateHashStore(nsTArray<TableUpdate*>* aUpdates,
   LOG(("  %d sub prefixes", store.SubPrefixes().Length()));
   LOG(("  %d sub completions", store.SubCompletes().Length()));
 
-  rv = store.WriteFile();
+  rv = store.WriteFile(mUpdatingDirectory);
   NS_ENSURE_SUCCESS(rv, rv);
 
   // At this point the store is updated and written out to disk, but
@@ -1040,7 +1125,7 @@ Classifier::UpdateHashStore(nsTArray<TableUpdate*>* aUpdates,
 #if defined(DEBUG)
   lookupCache->DumpCompletions();
 #endif
-  rv = lookupCache->WriteFile();
+  rv = lookupCache->WriteFile(mUpdatingDirectory);
   NS_ENSURE_SUCCESS(rv, rv);
 
   int64_t now = (PR_Now() / PR_USEC_PER_SEC);
@@ -1130,12 +1215,12 @@ Classifier::UpdateTableV4(nsTArray<TableUpdate*>* aUpdates,
   rv = lookupCache->Build(*output);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  rv = lookupCache->WriteFile();
+  rv = lookupCache->WriteFile(mUpdatingDirectory);
   NS_ENSURE_SUCCESS(rv, rv);
 
   if (lastAppliedUpdate) {
     LOG(("Write meta data of the last applied update."));
-    rv = lookupCache->WriteMetadata(lastAppliedUpdate);
+    rv = lookupCache->WriteMetadata(lastAppliedUpdate, mUpdatingDirectory);
     NS_ENSURE_SUCCESS(rv, rv);
   }
 

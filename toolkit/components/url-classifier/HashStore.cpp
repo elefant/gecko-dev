@@ -217,10 +217,10 @@ HashStore::HashStore(const nsACString& aTableName,
   nsresult rv = Classifier::GetPrivateStoreDirectory(aRootStoreDir,
                                                      aTableName,
                                                      aProvider,
-                                                     getter_AddRefs(mStoreDirectory));
+                                                     getter_AddRefs(mReadOnlyStoreDirectory));
   if (NS_FAILED(rv)) {
     LOG(("Failed to get private store directory for %s", mTableName.get()));
-    mStoreDirectory = aRootStoreDir;
+    mReadOnlyStoreDirectory = aRootStoreDir;
   }
 }
 
@@ -233,7 +233,7 @@ HashStore::Reset()
   LOG(("HashStore resetting"));
 
   nsCOMPtr<nsIFile> storeFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(storeFile));
+  nsresult rv = mReadOnlyStoreDirectory->Clone(getter_AddRefs(storeFile));
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = storeFile->AppendNative(mTableName + NS_LITERAL_CSTRING(STORE_SUFFIX));
@@ -290,7 +290,7 @@ nsresult
 HashStore::Open()
 {
   nsCOMPtr<nsIFile> storeFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(storeFile));
+  nsresult rv = mReadOnlyStoreDirectory->Clone(getter_AddRefs(storeFile));
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = storeFile->AppendNative(mTableName + NS_LITERAL_CSTRING(".sbstore"));
@@ -482,7 +482,7 @@ HashStore::ReadCompletions()
   }
 
   nsCOMPtr<nsIFile> storeFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(storeFile));
+  nsresult rv = mReadOnlyStoreDirectory->Clone(getter_AddRefs(storeFile));
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = storeFile->AppendNative(mTableName + NS_LITERAL_CSTRING(STORE_SUFFIX));
@@ -945,7 +945,7 @@ HashStore::WriteSubPrefixes(nsIOutputStream* aOut)
 }
 
 nsresult
-HashStore::WriteFile()
+HashStore::WriteFile(nsIFile* aOutDirectory)
 {
   NS_ASSERTION(mInUpdate, "Must be in update to write database.");
   if (nsUrlClassifierDBService::ShutdownHasStarted()) {
@@ -953,7 +953,7 @@ HashStore::WriteFile()
   }
 
   nsCOMPtr<nsIFile> storeFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(storeFile));
+  nsresult rv = aOutDirectory->Clone(getter_AddRefs(storeFile));
   NS_ENSURE_SUCCESS(rv, rv);
   rv = storeFile->AppendNative(mTableName + NS_LITERAL_CSTRING(".sbstore"));
   NS_ENSURE_SUCCESS(rv, rv);

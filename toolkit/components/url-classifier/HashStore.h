@@ -230,7 +230,7 @@ public:
   // Write the current state of the store to disk.
   // If you call between ApplyUpdate() and Rebuild(), you'll
   // have a mess on your hands.
-  nsresult WriteFile();
+  nsresult WriteFile(nsIFile* aOutDirectory);
 
   // Wipe out all Completes.
   void ClearCompletes();
@@ -280,7 +280,7 @@ private:
   // The name of the table (must end in -shavar or -digest256, or evidently
   // -simple for unittesting.
   nsCString mTableName;
-  nsCOMPtr<nsIFile> mStoreDirectory;
+  nsCOMPtr<nsIFile> mReadOnlyStoreDirectory;
 
   bool mInUpdate;
 

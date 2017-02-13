@@ -118,8 +118,8 @@ private:
   nsresult SetupPathNames();
   nsresult RecoverBackups();
   nsresult CleanToDelete();
-  nsresult BackupTables();
-  nsresult RemoveBackupTables();
+  nsresult CopyInUseDirForUpdate();
+  nsresult RemoveUnusedTables();
   nsresult RegenActiveTables();
 
 #ifdef MOZ_SAFEBROWSING_DUMP_FAILED_UPDATES
@@ -146,12 +146,16 @@ private:
 
   nsCString GetProvider(const nsACString& aTableName);
 
+  // TODO: Promote to public.
+  nsresult SwapInUpdatedTables();
+
   // Root dir of the Local profile.
   nsCOMPtr<nsIFile> mCacheDirectory;
   // Main directory where to store the databases.
   nsCOMPtr<nsIFile> mRootStoreDirectory;
   // Used for atomically updating the other dirs.
   nsCOMPtr<nsIFile> mBackupDirectory;
+  nsCOMPtr<nsIFile> mUpdatingDirectory;
   nsCOMPtr<nsIFile> mToDeleteDirectory;
   nsCOMPtr<nsICryptoHash> mCryptoHash;
   nsTArray<LookupCache*> mLookupCaches;

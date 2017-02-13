@@ -44,13 +44,13 @@ const int LookupCacheV2::VER = 2;
 
 LookupCache::LookupCache(const nsACString& aTableName,
                          const nsACString& aProvider,
-                         nsIFile* aRootStoreDir)
+                         nsIFile* aReadOnlyRootStoreDir)
   : mPrimed(false)
   , mTableName(aTableName)
   , mProvider(aProvider)
-  , mRootStoreDirectory(aRootStoreDir)
+  , mReadOnlyRootStoreDirectory(aReadOnlyRootStoreDir)
 {
-  UpdateRootDirHandle(mRootStoreDirectory);
+  UpdateRootDirHandle(mReadOnlyRootStoreDirectory);
 }
 
 nsresult
@@ -68,24 +68,24 @@ LookupCache::UpdateRootDirHandle(nsIFile* aNewRootStoreDirectory)
 {
   nsresult rv;
 
-  if (aNewRootStoreDirectory != mRootStoreDirectory) {
-    rv = aNewRootStoreDirectory->Clone(getter_AddRefs(mRootStoreDirectory));
+  if (aNewRootStoreDirectory != mReadOnlyRootStoreDirectory) {
+    rv = aNewRootStoreDirectory->Clone(getter_AddRefs(mReadOnlyRootStoreDirectory));
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
-  rv = Classifier::GetPrivateStoreDirectory(mRootStoreDirectory,
+  rv = Classifier::GetPrivateStoreDirectory(mReadOnlyRootStoreDirectory,
                                             mTableName,
                                             mProvider,
-                                            getter_AddRefs(mStoreDirectory));
+                                            getter_AddRefs(mReadOnlyStoreDirectory));
 
   if (NS_FAILED(rv)) {
     LOG(("Failed to get private store directory for %s", mTableName.get()));
-    mStoreDirectory = mRootStoreDirectory;
+    mReadOnlyStoreDirectory = mReadOnlyRootStoreDirectory;
   }
 
   if (LOG_ENABLED()) {
     nsString path;
-    mStoreDirectory->GetPath(path);
+    mReadOnlyStoreDirectory->GetPath(path);
     LOG(("Private store directory for %s is %s", mTableName.get(),
                                                  NS_ConvertUTF16toUTF8(path).get()));
   }
@@ -99,7 +99,7 @@ LookupCache::Reset()
   LOG(("LookupCache resetting"));
 
   nsCOMPtr<nsIFile> prefixsetFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(prefixsetFile));
+  nsresult rv = mReadOnlyStoreDirectory->Clone(getter_AddRefs(prefixsetFile));
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = prefixsetFile->AppendNative(mTableName + NS_LITERAL_CSTRING(PREFIXSET_SUFFIX));
@@ -142,14 +142,14 @@ LookupCache::DumpCache()
 #endif
 
 nsresult
-LookupCache::WriteFile()
+LookupCache::WriteFile(nsIFile* aOutDirectory)
 {
   if (nsUrlClassifierDBService::ShutdownHasStarted()) {
     return NS_ERROR_ABORT;
   }
 
   nsCOMPtr<nsIFile> psFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(psFile));
+  nsresult rv = aOutDirectory->Clone(getter_AddRefs(psFile));
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = psFile->AppendNative(mTableName + NS_LITERAL_CSTRING(PREFIXSET_SUFFIX));
@@ -355,7 +355,7 @@ nsresult
 LookupCache::LoadPrefixSet()
 {
   nsCOMPtr<nsIFile> psFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(psFile));
+  nsresult rv = mReadOnlyStoreDirectory->Clone(getter_AddRefs(psFile));
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = psFile->AppendNative(mTableName + NS_LITERAL_CSTRING(PREFIXSET_SUFFIX));
@@ -517,7 +517,7 @@ LookupCacheV2::GetPrefixes(FallibleTArray<uint32_t>& aAddPrefixes)
 nsresult
 LookupCacheV2::ReadCompletions()
 {
-  HashStore store(mTableName, mProvider, mRootStoreDirectory);
+  HashStore store(mTableName, mProvider, mReadOnlyRootStoreDirectory);
 
   nsresult rv = store.Open();
   NS_ENSURE_SUCCESS(rv, rv);

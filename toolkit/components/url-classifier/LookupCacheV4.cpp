@@ -459,7 +459,7 @@ ReadValue(nsIInputStream* aInputStream, T& aValue)
 ////////////////////////////////////////////////////////////////////////
 
 nsresult
-LookupCacheV4::WriteMetadata(TableUpdateV4* aTableUpdate)
+LookupCacheV4::WriteMetadata(TableUpdateV4* aTableUpdate, nsIFile* aOutDirectory)
 {
   NS_ENSURE_ARG_POINTER(aTableUpdate);
   if (nsUrlClassifierDBService::ShutdownHasStarted()) {
@@ -467,7 +467,7 @@ LookupCacheV4::WriteMetadata(TableUpdateV4* aTableUpdate)
   }
 
   nsCOMPtr<nsIFile> metaFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(metaFile));
+  nsresult rv = aOutDirectory->Clone(getter_AddRefs(metaFile));
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = metaFile->AppendNative(mTableName + METADATA_SUFFIX);
@@ -502,7 +502,7 @@ nsresult
 LookupCacheV4::LoadMetadata(nsACString& aState, nsACString& aChecksum)
 {
   nsCOMPtr<nsIFile> metaFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(metaFile));
+  nsresult rv = mReadOnlyStoreDirectory->Clone(getter_AddRefs(metaFile));
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = metaFile->AppendNative(mTableName + METADATA_SUFFIX);
