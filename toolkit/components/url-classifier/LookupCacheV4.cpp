@@ -459,15 +459,28 @@ ReadValue(nsIInputStream* aInputStream, T& aValue)
 ////////////////////////////////////////////////////////////////////////
 
 nsresult
-LookupCacheV4::WriteMetadata(TableUpdateV4* aTableUpdate)
+LookupCacheV4::WriteMetadata(TableUpdateV4* aTableUpdate, nsIFile* aOutDirectory)
 {
   NS_ENSURE_ARG_POINTER(aTableUpdate);
   if (nsUrlClassifierDBService::ShutdownHasStarted()) {
     return NS_ERROR_ABORT;
   }
 
+  nsresult rv;
+  nsCOMPtr<nsIFile> privateOutDir;
+  rv = Classifier::GetPrivateStoreDirectory(aOutDirectory,
+                                            mTableName,
+                                            mProvider,
+                                            getter_AddRefs(privateOutDir));
+
+  if (NS_FAILED(rv)) {
+    LOG(("Failed to get private store directory for %s", mTableName.get()));
+    privateOutDir = aOutDirectory;
+  }
+
+
   nsCOMPtr<nsIFile> metaFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(metaFile));
+  rv = privateOutDir->Clone(getter_AddRefs(metaFile));
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = metaFile->AppendNative(mTableName + METADATA_SUFFIX);

@@ -109,6 +109,10 @@ public:
                                            const nsACString& aProvider,
                                            nsIFile** aPrivateStoreDirectory);
 
+  // This function will mutate both in-memory and in-disk table data.
+  // Should be very careful when calling it.
+  nsresult SwapInUpdatedTables();
+
 private:
   void DropStores();
   void DeleteTables(nsIFile* aDirectory, const nsTArray<nsCString>& aTables);
@@ -118,8 +122,7 @@ private:
   nsresult SetupPathNames();
   nsresult RecoverBackups();
   nsresult CleanToDelete();
-  nsresult BackupTables();
-  nsresult RemoveBackupTables();
+  nsresult CopyInUseDirForUpdate();
   nsresult RegenActiveTables();
 
 #ifdef MOZ_SAFEBROWSING_DUMP_FAILED_UPDATES
@@ -152,6 +155,7 @@ private:
   nsCOMPtr<nsIFile> mRootStoreDirectory;
   // Used for atomically updating the other dirs.
   nsCOMPtr<nsIFile> mBackupDirectory;
+  nsCOMPtr<nsIFile> mUpdatingDirectory;
   nsCOMPtr<nsIFile> mToDeleteDirectory;
   nsCOMPtr<nsICryptoHash> mCryptoHash;
   nsTArray<LookupCache*> mLookupCaches;

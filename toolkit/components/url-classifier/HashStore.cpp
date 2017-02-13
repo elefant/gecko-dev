@@ -211,6 +211,7 @@ HashStore::HashStore(const nsACString& aTableName,
                      const nsACString& aProvider,
                      nsIFile* aRootStoreDir)
   : mTableName(aTableName)
+  , mProvider(aProvider)
   , mInUpdate(false)
   , mFileSize(0)
 {
@@ -945,15 +946,27 @@ HashStore::WriteSubPrefixes(nsIOutputStream* aOut)
 }
 
 nsresult
-HashStore::WriteFile()
+HashStore::WriteFile(nsIFile* aOutDirectory)
 {
   NS_ASSERTION(mInUpdate, "Must be in update to write database.");
   if (nsUrlClassifierDBService::ShutdownHasStarted()) {
     return NS_ERROR_ABORT;
   }
 
+  nsresult rv;
+  nsCOMPtr<nsIFile> privateOutDir;
+  rv = Classifier::GetPrivateStoreDirectory(aOutDirectory,
+                                            mTableName,
+                                            mProvider,
+                                            getter_AddRefs(privateOutDir));
+
+  if (NS_FAILED(rv)) {
+    LOG(("Failed to get private store directory for %s", mTableName.get()));
+    privateOutDir = aOutDirectory;
+  }
+
   nsCOMPtr<nsIFile> storeFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(storeFile));
+  rv = aOutDirectory->Clone(getter_AddRefs(storeFile));
   NS_ENSURE_SUCCESS(rv, rv);
   rv = storeFile->AppendNative(mTableName + NS_LITERAL_CSTRING(".sbstore"));
   NS_ENSURE_SUCCESS(rv, rv);

@@ -124,8 +124,8 @@ public:
   // This will Clear() the passed arrays when done.
   nsresult AddCompletionsToCache(AddCompleteArray& aAddCompletes);
 
-  // Write data stored in lookup cache to disk.
-  nsresult WriteFile();
+  // Write data stored in lookup cache to the specified directory.
+  nsresult WriteFile(nsIFile* aOutDirectory);
 
   // Clear completions retrieved from gethash request.
   void ClearCache();

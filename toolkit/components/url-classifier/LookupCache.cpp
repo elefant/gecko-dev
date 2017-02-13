@@ -142,14 +142,26 @@ LookupCache::DumpCache()
 #endif
 
 nsresult
-LookupCache::WriteFile()
+LookupCache::WriteFile(nsIFile* aOutDirectory)
 {
   if (nsUrlClassifierDBService::ShutdownHasStarted()) {
     return NS_ERROR_ABORT;
   }
 
+  nsresult rv;
+  nsCOMPtr<nsIFile> privateOutDir;
+  rv = Classifier::GetPrivateStoreDirectory(aOutDirectory,
+                                            mTableName,
+                                            mProvider,
+                                            getter_AddRefs(privateOutDir));
+
+  if (NS_FAILED(rv)) {
+    LOG(("Failed to get private store directory for %s", mTableName.get()));
+    privateOutDir = aOutDirectory;
+  }
+
   nsCOMPtr<nsIFile> psFile;
-  nsresult rv = mStoreDirectory->Clone(getter_AddRefs(psFile));
+  rv = privateOutDir->Clone(getter_AddRefs(psFile));
   NS_ENSURE_SUCCESS(rv, rv);
 
   rv = psFile->AppendNative(mTableName + NS_LITERAL_CSTRING(PREFIXSET_SUFFIX));
@@ -603,7 +615,6 @@ LookupCacheV2::ConstructPrefixSet(AddPrefixArray& aAddPrefixes)
 #ifdef DEBUG
   uint32_t size;
   size = mPrefixSet->SizeOfIncludingThis(moz_malloc_size_of);
-  LOG(("SB tree done, size = %d bytes\n", size));
 #endif
 
   mPrimed = true;
@@ -621,7 +632,6 @@ LookupCacheV2::DumpCompletions()
   for (uint32_t i = 0; i < mUpdateCompletions.Length(); i++) {
     nsAutoCString str;
     mUpdateCompletions[i].ToHexString(str);
-    LOG(("Update: %s", str.get()));
   }
 }
 #endif
