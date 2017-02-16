@@ -171,6 +171,10 @@ private:
   // Whether mTableRequestResult is outdated and needs to
   // be reloaded from disk.
   bool mIsTableRequestResultOutdated;
+
+  // A subset of mLookupCaches. "dirty" means new internal database
+  // has been ready to be taken.
+  nsTArray<LookupCache> mDirtyLookupCaches;
 };
 
 } // namespace safebrowsing

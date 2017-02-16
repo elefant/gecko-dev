@@ -491,28 +491,50 @@ LookupCacheV2::IsEmpty()
 }
 
 nsresult
+LookupCacheV2::SwapInUpdatedTable()
+{
+  // Swap in prefix set.
+  if (!mNewPrefixSet) {
+    LOG(("No previously built database to swap in."));
+    return NS_ERROR_FAILURE;
+  }
+  Swap(mPrefixSet, mNewPrefixSet);
+
+  // Swap in update completion.
+  mUpdateCompletions.SwapElements(mNewUpdateCompletions);
+
+  mPrimed = true;
+
+  // Abandon old ones.
+  mNewPrefixSet = nullptr;
+  mNewUpdateCompletions.Clear();
+
+  return NS_OK;
+}
+
+nsresult
 LookupCacheV2::Build(AddPrefixArray& aAddPrefixes,
-                     AddCompleteArray& aAddCompletes)
+                     AddCompleteArray& aAddCompletes) const
 {
   Telemetry::Accumulate(Telemetry::URLCLASSIFIER_LC_COMPLETIONS,
                         static_cast<uint32_t>(aAddCompletes.Length()));
 
-  mUpdateCompletions.Clear();
-  mUpdateCompletions.SetCapacity(aAddCompletes.Length());
+  if (mNewPrefixSet) {
+    LOG(("Previously built database will be overriden."));
+  }
+
+  mNewUpdateCompletions.Clear();
+  mNewUpdateCompletions.SetCapacity(aAddCompletes.Length());
   for (uint32_t i = 0; i < aAddCompletes.Length(); i++) {
-    mUpdateCompletions.AppendElement(aAddCompletes[i].CompleteHash());
+    mNewUpdateCompletions.AppendElement(aAddCompletes[i].CompleteHash());
   }
   aAddCompletes.Clear();
-  mUpdateCompletions.Sort();
+  mNewUpdateCompletions.Sort();
 
   Telemetry::Accumulate(Telemetry::URLCLASSIFIER_LC_PREFIXES,
                         static_cast<uint32_t>(aAddPrefixes.Length()));
 
-  nsresult rv = ConstructPrefixSet(aAddPrefixes);
-  NS_ENSURE_SUCCESS(rv, rv);
-  mPrimed = true;
-
-  return NS_OK;
+  return ConstructNewPrefixSet(aAddPrefixes);
 }
 
 nsresult
@@ -589,7 +611,7 @@ static void EnsureSorted(T* aArray)
 #endif
 
 nsresult
-LookupCacheV2::ConstructPrefixSet(AddPrefixArray& aAddPrefixes)
+LookupCacheV2::ConstructNewPrefixSet(AddPrefixArray& aAddPrefixes) const
 {
   Telemetry::AutoTimer<Telemetry::URLCLASSIFIER_PS_CONSTRUCT_TIME> timer;
 
@@ -608,16 +630,16 @@ LookupCacheV2::ConstructPrefixSet(AddPrefixArray& aAddPrefixes)
   EnsureSorted(&array);
 #endif
 
-  // construct new one, replace old entries
-  nsresult rv = mPrefixSet->SetPrefixes(array.Elements(), array.Length());
+  // construct new one.
+  mNewPrefixSet = new nsUrlClassifierPrefixSet();
+  mNewPrefixSet->Init(mTableName);
+  nsresult rv = mNewPrefixSet->SetPrefixes(array.Elements(), array.Length());
   NS_ENSURE_SUCCESS(rv, rv);
 
 #ifdef DEBUG
   uint32_t size;
-  size = mPrefixSet->SizeOfIncludingThis(moz_malloc_size_of);
+  size = mNewPrefixSet->SizeOfIncludingThis(moz_malloc_size_of);
 #endif
-
-  mPrimed = true;
 
   return NS_OK;
 }

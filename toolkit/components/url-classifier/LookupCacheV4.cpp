@@ -126,11 +126,36 @@ LookupCacheV4::IsEmpty()
 }
 
 nsresult
-LookupCacheV4::Build(PrefixStringMap& aPrefixMap)
+LookupCacheV4::SwapInUpdatedTable()
+{
+  if (!mNewVLPrefixSet) {
+    LOG(("We have no built database to swap in."));
+    return NS_ERROR_FAILURE;
+  }
+
+  Swap(mVLPrefixSet, mNewVLPrefixSet);
+  mNewVLPrefixSet = nullptr;
+}
+
+nsresult
+LookupCacheV4::Build(PrefixStringMap& aPrefixMap) const
 {
   Telemetry::AutoTimer<Telemetry::URLCLASSIFIER_VLPS_CONSTRUCT_TIME> timer;
 
-  return mVLPrefixSet->SetPrefixes(aPrefixMap);
+  if (mNewVLPrefixSet) {
+    LOG(("Previously built database will be overriden."));
+  }
+
+  mNewVLPrefixSet = new VariableLengthPrefixSet();
+  mNewVLPrefixSet->Init(mTableName);
+  nsresult rv = mNewVLPrefixSet->SetPrefixes(aPrefixMap);
+
+  if (NS_FAILED(rv)) {
+    mNewVLPrefixSet = nullptr;
+    LOG(("Failed to build prefix set."));
+  }
+
+  return rv;
 }
 
 nsresult
@@ -207,7 +232,7 @@ UpdateChecksum(nsICryptoHash* aCrypto, const nsACString& aPrefix)
 nsresult
 LookupCacheV4::ApplyUpdate(TableUpdateV4* aTableUpdate,
                            PrefixStringMap& aInputMap,
-                           PrefixStringMap& aOutputMap)
+                           PrefixStringMap& aOutputMap) const
 {
   MOZ_ASSERT(aOutputMap.IsEmpty());
 

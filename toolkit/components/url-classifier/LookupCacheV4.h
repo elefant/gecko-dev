@@ -35,14 +35,14 @@ public:
 
   virtual bool IsEmpty() override;
 
-  nsresult Build(PrefixStringMap& aPrefixMap);
+  nsresult Build(PrefixStringMap& aPrefixMap) const;
 
   nsresult GetPrefixes(PrefixStringMap& aPrefixMap);
 
   // ApplyUpdate will merge data stored in aTableUpdate with prefixes in aInputMap.
   nsresult ApplyUpdate(TableUpdateV4* aTableUpdate,
                        PrefixStringMap& aInputMap,
-                       PrefixStringMap& aOutputMap);
+                       PrefixStringMap& aOutputMap) const;
 
   nsresult WriteMetadata(TableUpdateV4* aTableUpdate, nsIFile* aOutDirectory);
   nsresult LoadMetadata(nsACString& aState, nsACString& aChecksum);
@@ -61,7 +61,11 @@ private:
   nsresult InitCrypto(nsCOMPtr<nsICryptoHash>& aCrypto);
   nsresult VerifyChecksum(const nsACString& aChecksum);
 
+  // Must be called after Build().
+  virtual nsresult SwapInUpdatedTables() override;
+
   RefPtr<VariableLengthPrefixSet> mVLPrefixSet;
+  mutable RefPtr<VariableLengthPrefixSet> mNewVLPrefixSet;
 };
 
 } // namespace safebrowsing

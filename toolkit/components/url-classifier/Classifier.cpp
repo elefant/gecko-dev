@@ -621,13 +621,7 @@ nsresult
 Classifier::SwapInUpdatedTables()
 {
   nsresult rv;
-  // Step 1. Swap in in-memory tables.
-  // TODO: We have nothing to do right now because the in-memory tables will
-  //       still be updated in place and it's fine because the concurrency is
-  //       not introduced yet. Bug 1339050 should address this issue while
-  //       trying to actually do update and lookup concurrently.
-
-  // Step 2. Swap in in-disk tables. The idea of using "safebrowsing-backup"
+  // Step 1. Swap in in-disk tables. The idea of using "safebrowsing-backup"
   // as the intermediary directory is we can get databases recovered if
   // crash occurred in any step of swapping. (We will recover from
   // "safebrowsing-backup" in OpenDb().)
@@ -639,6 +633,19 @@ Classifier::SwapInUpdatedTables()
     LOG(("Failed to swap in in-disk tables."));
     return rv;
   }
+
+  // Step 2. Swap in in-memory tables.
+  // TODO: We have nothing to do right now because the in-memory tables will
+  //       still be updated in place and it's fine because the concurrency is
+  //       not introduced yet. Bug 1339050 should address this issue while
+  //       trying to actually do update and lookup concurrently.
+  for (auto c: mDirtyLookupCaches) {
+    rv = c->SwapInUpdatedTables();
+    if (NS_SUCCEEDED(rv)) {
+      c->ClearCache();
+    }
+  }
+  mDirtyLookupCaches.Clear();
 
   // Step 3. Re-generate active tables based on in-disk tables.
   // XXX: If step 2 failed, should we re-generate?
@@ -1085,7 +1092,7 @@ Classifier::UpdateHashStore(nsTArray<TableUpdate*>* aUpdates,
   }
 
   // Clear cache when update
-  lookupCache->ClearCache();
+  //lookupCache->ClearCache();
 
   FallibleTArray<uint32_t> AddPrefixHashes;
   rv = lookupCache->GetPrefixes(AddPrefixHashes);
@@ -1148,6 +1155,8 @@ Classifier::UpdateHashStore(nsTArray<TableUpdate*>* aUpdates,
 #endif
   rv = lookupCache->WriteFile(mUpdatingDirectory);
   NS_ENSURE_SUCCESS(rv, rv);
+
+  mDirtyLookupCaches.AppendElement(lookupCache);
 
   int64_t now = (PR_Now() / PR_USEC_PER_SEC);
   LOG(("Successfully updated %s", store.TableName().get()));
@@ -1245,6 +1254,7 @@ Classifier::UpdateTableV4(nsTArray<TableUpdate*>* aUpdates,
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
+  mDirtyLookupCaches->AppendElement(lookupCache);
 
   int64_t now = (PR_Now() / PR_USEC_PER_SEC);
   LOG(("Successfully updated %s\n", PromiseFlatCString(aTable).get()));

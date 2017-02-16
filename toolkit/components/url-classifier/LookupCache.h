@@ -152,6 +152,9 @@ public:
 
   virtual void ClearAll();
 
+  // Must be called after Build().
+  virtual nsresult SwapInUpdatedTable() = 0;
+
   template<typename T>
   static T* Cast(LookupCache* aThat) {
     return ((aThat && T::VER == aThat->Ver()) ? reinterpret_cast<T*>(aThat) : nullptr);
@@ -205,7 +208,7 @@ public:
   virtual bool IsEmpty() override;
 
   nsresult Build(AddPrefixArray& aAddPrefixes,
-                 AddCompleteArray& aAddCompletes);
+                 AddCompleteArray& aAddCompletes) const;
 
   nsresult GetPrefixes(FallibleTArray<uint32_t>& aAddPrefixes);
 
@@ -228,7 +231,18 @@ private:
 
   // Construct a Prefix Set with known prefixes.
   // This will Clear() aAddPrefixes when done.
-  nsresult ConstructPrefixSet(AddPrefixArray& aAddPrefixes);
+  nsresult ConstructNewPrefixSet(AddPrefixArray& aAddPrefixes) const;
+
+  // Must be called after Build().
+  virtual nsresult SwapInUpdatedTable() override;
+
+  // Full length hashes obtained in update request
+  CompletionArray mUpdateCompletions;
+  mutable CompletionArray mNewUpdateCompletions;
+
+  // Set of prefixes known to be in the database
+  RefPtr<nsUrlClassifierPrefixSet> mPrefixSet;
+  mutable RefPtr<nsUrlClassifierPrefixSet> mNewPrefixSet;
 
   // Full length hashes obtained in update request
   CompletionArray mUpdateCompletions;
