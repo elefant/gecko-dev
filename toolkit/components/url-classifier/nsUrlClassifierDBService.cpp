@@ -134,6 +134,9 @@ static nsUrlClassifierDBService* sUrlClassifierDBService;
 
 nsIThread* nsUrlClassifierDBService::gDbBackgroundThread = nullptr;
 
+// For update only.
+static nsIThread* gDbUpdateThread = nullptr;
+
 // Once we've committed to shutting down, don't do work in the background
 // thread.
 static bool gShuttingDownThread = false;
@@ -609,14 +612,95 @@ nsUrlClassifierDBServiceWorker::FinishUpdate()
     return NS_ERROR_NOT_INITIALIZED;
   }
 
+  NS_ASSERTION(!mProtocolParser, "Should have been nulled out in FinishStream() "
+                                 "or never created.");
+
   NS_ENSURE_STATE(mUpdateObserver);
 
-  if (NS_SUCCEEDED(mUpdateStatus)) {
-    mUpdateStatus = ApplyUpdate();
-  } else {
+  if (NS_FAILED(mUpdateStatus)) {
     LOG(("nsUrlClassifierDBServiceWorker::FinishUpdate() Not running "
          "ApplyUpdate() since the update has already failed."));
+    return NotifyUpdateObserver(mUpdateStatus);
   }
+
+#if 1
+  // TODO: Asynchronously dispatch |BuildNewTables| to update thread.
+  //       See Bug 1339050. For now we *synchronously* run BuildNewTables()
+  //       so we can commit new tables right after BuildNewTables().
+  auto self = this;
+  nsresult buildRv;
+  nsCOMPtr<nsIRunnable> r =
+    NS_NewRunnableFunction([self, &buildRv] () -> void {
+      nsresult rv = self->BuildNewTables();
+      buildRv = rv;
+    });
+
+  LOG(("Bulding new tables..."));
+  mozilla::SyncRunnable::DispatchToThread(gDbUpdateThread, r);
+  LOG(("Done bulding new tables. Try to commit them."));
+
+  return MaybeCommitNewTables(buildRv);
+#else
+  // The following is what it would look like if we run BuildNewTables()
+  // asynchronously on update thread:
+
+  auto self = this;
+  nsCOMPtr<nsIRunnable> r = NS_NewRunnableFunction([self] () -> void {
+    nsresult rv = self->BuildNewTables();
+
+    // Send to worker thread for committing new tables.
+    auto t = nsUrlClassifierDBService::BackgroundThread();
+    if (t) {
+      using Worker = nsUrlClassifierDBServiceWorker;
+      nsCOMPtr<nsIRunnable> commitRunnable =
+        NewRunnableMethod<nsresult>(self, &Worker::MaybeCommitNewTables, rv);
+
+      t->Dispatch(commitRunnable, NS_DISPATCH_NORMAL);
+    }
+  });
+
+  gDbUpdateThread->Dispatch(r, NS_DISPATCH_NORMAL);
+
+  return NS_OK;
+#endif
+}
+
+nsresult
+nsUrlClassifierDBServiceWorker::MaybeCommitNewTables(nsresult aBuildStatus)
+{
+  NS_ASSERTION(NS_GetCurrentThread() == nsUrlClassifierDBService::BackgroundThread(),
+               "nsUrlClassifierDBServiceWorker::MaybeCommitNewTables MUST"
+               "run on worker thread!!");
+
+  // We've built the new tables. Try to swap them in.
+  nsresult updateStatus;
+
+  if (NS_SUCCEEDED(aBuildStatus)) {
+    updateStatus = mClassifier->SwapInNewTablesAndCleanup();
+    if (NS_FAILED(updateStatus)) {
+      LOG(("We've applied the update but failed to swap the updated tables in."));
+    }
+  } else {
+    // Build failed. Populate build status to update status.
+    updateStatus = aBuildStatus;
+  }
+
+  return NotifyUpdateObserver(updateStatus);
+}
+
+nsresult
+nsUrlClassifierDBServiceWorker::NotifyUpdateObserver(nsresult aUpdateStatus)
+{
+  // We've either
+  //  1) failed starting a download stream
+  //  2) succedded in starting a download stream but failed to obtain
+  //     table updates
+  //  3) succedded in obtaining table updates but failed to build new
+  //     talbes.
+  //  4) succedded in building new tables but failed to take them.
+  //  5) succedded in taking new tables.
+
+  mUpdateStatus = aUpdateStatus;
 
   nsCOMPtr<nsIUrlClassifierUtils> urlUtil =
     do_GetService(NS_URLCLASSIFIERUTILS_CONTRACTID);
@@ -667,9 +751,16 @@ nsUrlClassifierDBServiceWorker::FinishUpdate()
 }
 
 nsresult
-nsUrlClassifierDBServiceWorker::ApplyUpdate()
+nsUrlClassifierDBServiceWorker::BuildNewTables()
 {
-  LOG(("nsUrlClassifierDBServiceWorker::ApplyUpdate()"));
+  // ***** Please be very careful while adding tasks. *****
+  // ***** It will run on the update thread.          *****
+
+  NS_ASSERTION(NS_GetCurrentThread() == gDbUpdateThread,
+               "nsUrlClassifierDBServiceWorker::BuildNewTables MUST "
+               "run on update thread!!");
+
+  LOG(("nsUrlClassifierDBServiceWorker::BuildNewTables()"));
   nsresult rv = mClassifier->ApplyUpdates(&mTableUpdates);
 
 #ifdef MOZ_SAFEBROWSING_DUMP_FAILED_UPDATES
@@ -1381,6 +1472,11 @@ nsUrlClassifierDBService::Init()
   if (NS_FAILED(rv))
     return rv;
 
+  // Start the update thread.
+  rv = NS_NewNamedThread("SB DB Update", &gDbUpdateThread);
+  if (NS_FAILED(rv))
+    return rv;
+
   mWorker = new nsUrlClassifierDBServiceWorker();
   if (!mWorker)
     return NS_ERROR_OUT_OF_MEMORY;
@@ -1885,14 +1981,21 @@ nsUrlClassifierDBService::Observe(nsISupports *aSubject, const char *aTopic,
     LOG(("joining background thread"));
     mWorkerProxy = nullptr;
 
-    if (!gDbBackgroundThread) {
-      return NS_OK;
+    if (gDbBackgroundThread) {
+      nsIThread *backgroundThread = gDbBackgroundThread;
+      gDbBackgroundThread = nullptr;
+      backgroundThread->Shutdown();
+      NS_RELEASE(backgroundThread);
     }
 
-    nsIThread *backgroundThread = gDbBackgroundThread;
-    gDbBackgroundThread = nullptr;
-    backgroundThread->Shutdown();
-    NS_RELEASE(backgroundThread);
+    if (gDbUpdateThread) {
+      nsIThread *updateThread = gDbUpdateThread;
+      gDbUpdateThread = nullptr;
+      updateThread->Shutdown();
+      NS_RELEASE(updateThread);
+    }
+
+    return NS_OK;
   } else {
     return NS_ERROR_UNEXPECTED;
   }
@@ -1907,8 +2010,9 @@ nsUrlClassifierDBService::Shutdown()
   LOG(("shutting down db service\n"));
   MOZ_ASSERT(XRE_IsParentProcess());
 
-  if (!gDbBackgroundThread || gShuttingDownThread)
+  if ((!gDbBackgroundThread && !gDbUpdateThread) || gShuttingDownThread) {
     return NS_OK;
+  }
 
   gShuttingDownThread = true;
 

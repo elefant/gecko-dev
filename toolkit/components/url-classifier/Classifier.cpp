@@ -632,6 +632,13 @@ Classifier::SwapInNewTablesAndCleanup()
 {
   nsresult rv;
 
+  bool updatingDirExists = false;
+  rv = mUpdatingDirectory->Exists(&updatingDirExists);
+  if (NS_FAILED(rv) || !updatingDirExists) {
+    // We hit the case where a null or empty TableUpdate is applied.
+    return NS_OK;
+  }
+
   // Step 1. Swap in on-disk tables. The idea of using "safebrowsing-backup"
   // as the intermediary directory is we can get databases recovered if
   // crash occurred in any step of the swap. (We will recover from
@@ -672,6 +679,7 @@ Classifier::ApplyUpdates(nsTArray<TableUpdate*>* aUpdates)
   // the table lookup may lead to database removal.
 
   if (!aUpdates || aUpdates->Length() == 0) {
+    LOG(("Nothing to update."));
     return NS_OK;
   }
 
@@ -741,11 +749,6 @@ Classifier::ApplyUpdates(nsTArray<TableUpdate*>* aUpdates)
     }
 
   } // End of scopedUpdatesClearer scope.
-
-  rv = SwapInNewTablesAndCleanup();
-  if (NS_FAILED(rv)) {
-    LOG(("Failed to swap in new tables."));
-  }
 
   if (LOG_ENABLED()) {
     PRIntervalTime clockEnd = PR_IntervalNow();
