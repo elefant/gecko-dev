@@ -189,8 +189,13 @@ private:
   // Disallow copy constructor
   nsUrlClassifierDBServiceWorker(nsUrlClassifierDBServiceWorker&);
 
-  // Applies the current transaction and resets the update/working times.
-  nsresult ApplyUpdate();
+  // Build new tables but NOT commit them. MUST run on update thread.
+  nsresult BuildNewTables();
+
+  // Commit new tables we've just built. MUST run on worker thread.
+  nsresult CommitNewTables(nsresult aBuildStatus);
+
+  nsresult NotifyUpdateObserver(nsresult aUpdateStatus);
 
   // Reset the in-progress update stream
   void ResetStream();
