@@ -623,7 +623,7 @@ nsUrlClassifierDBServiceWorker::FinishUpdate()
     return NotifyUpdateObserver(mUpdateStatus);
   }
 
-#if 1
+#if 0
   // TODO: Asynchronously dispatch |BuildNewTables| to update thread.
   //       See Bug 1339050. For now we *synchronously* run BuildNewTables()
   //       so we can commit new tables right after BuildNewTables().
