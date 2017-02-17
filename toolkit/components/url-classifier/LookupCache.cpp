@@ -93,6 +93,13 @@ LookupCache::UpdateRootDirHandle(nsIFile* aNewRootStoreDirectory)
   return rv;
 }
 
+void
+LookupCache::SwapRootDirHandle(LookupCache* aOther)
+{
+  Swap(mRootStoreDirectory, aOther->mRootStoreDirectory);
+  Swap(mStoreDirectory, aOther->mStoreDirectory);
+}
+
 nsresult
 LookupCache::Reset()
 {

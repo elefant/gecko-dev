@@ -121,6 +121,8 @@ public:
   // be moved away when a backup is made.
   nsresult UpdateRootDirHandle(nsIFile* aRootStoreDirectory);
 
+  void SwapRootDirHandle(LookupCache* aOther);
+
   // This will Clear() the passed arrays when done.
   nsresult AddCompletionsToCache(AddCompleteArray& aAddCompletes);
 

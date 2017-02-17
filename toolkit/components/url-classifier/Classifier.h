@@ -109,6 +109,13 @@ public:
                                            const nsACString& aProvider,
                                            nsIFile** aPrivateStoreDirectory);
 
+  // This function will mutate both in-memory and in-disk table data.
+  // Should be very careful when calling it.
+  nsresult SwapInNewTables();
+
+  // Swap in only in-memory databases.
+  void SwapInNewLookupCaches();
+
 private:
   void DropStores();
   void DeleteTables(nsIFile* aDirectory, const nsTArray<nsCString>& aTables);
@@ -118,8 +125,7 @@ private:
   nsresult SetupPathNames();
   nsresult RecoverBackups();
   nsresult CleanToDelete();
-  nsresult BackupTables();
-  nsresult RemoveBackupTables();
+  nsresult CopyInUseDirForUpdate();
   nsresult RegenActiveTables();
 
 #ifdef MOZ_SAFEBROWSING_DUMP_FAILED_UPDATES
@@ -137,7 +143,17 @@ private:
 
   nsresult UpdateCache(TableUpdate* aUpdates);
 
-  LookupCache *GetLookupCache(const nsACString& aTable);
+  LookupCache *GetLookupCache(const nsACString& aTable,
+                              bool aForUpdate = false);
+
+  LookupCache *GetLookupCacheForUpdate(const nsACString& aTable) {
+    return GetLookupCache(aTable, true);
+  }
+
+  LookupCache *GetLookupCacheFrom(const nsACString& aTable,
+                                  nsTArray<LookupCache*>& aLookupCaches,
+                                  nsIFile* aRootStoreDirectory);
+
 
   bool CheckValidUpdate(nsTArray<TableUpdate*>* aUpdates,
                         const nsACString& aTable);
@@ -152,6 +168,7 @@ private:
   nsCOMPtr<nsIFile> mRootStoreDirectory;
   // Used for atomically updating the other dirs.
   nsCOMPtr<nsIFile> mBackupDirectory;
+  nsCOMPtr<nsIFile> mUpdatingDirectory;
   nsCOMPtr<nsIFile> mToDeleteDirectory;
   nsCOMPtr<nsICryptoHash> mCryptoHash;
   nsTArray<LookupCache*> mLookupCaches;
@@ -167,6 +184,10 @@ private:
   // Whether mTableRequestResult is outdated and needs to
   // be reloaded from disk.
   bool mIsTableRequestResultOutdated;
+
+  // The LookupCache placeholder for update. Should only be accessed
+  // via GetLookupCacheForUpdate().
+  nsTArray<LookupCache*> mNewLookupCaches;
 };
 
 } // namespace safebrowsing
