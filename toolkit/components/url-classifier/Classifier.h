@@ -71,6 +71,11 @@ public:
   nsresult ApplyUpdates(nsTArray<TableUpdate*>* aUpdates);
 
   /**
+   * MUST be called if we want to apply updates in the background.
+   */
+  void ApplyUpdatesPrepare();
+
+  /**
    * The "background" part of ApplyUpdates. Once the background update
    * is called, the foreground update has to be called along with the
    * background result no matter the background update is successful or not.
@@ -146,10 +151,9 @@ private:
   nsresult RecoverBackups();
   nsresult CleanToDelete();
   nsresult CopyInUseDirForUpdate();
-  nsresult CopyInUseLookupCacheForUpdate();
   nsresult RegenActiveTables();
 
-
+  void MergeNewLookupCaches(); // Merge mNewLookupCaches into mLookupCaches.
 
   // Remove any intermediary for update, including in-memory
   // and on-disk data.
@@ -211,6 +215,11 @@ private:
 
   // The copy of mLookupCaches for update only.
   nsTArray<LookupCache*> mNewLookupCaches;
+
+  bool mUpdateInterrupted;
+
+  // Hold this lock to prevent from in-use data being reset.
+  mozilla::Mutex mResetMutex;
 };
 
 } // namespace safebrowsing

@@ -631,7 +631,8 @@ nsUrlClassifierDBServiceWorker::FinishUpdate()
   }
 
   RefPtr<nsUrlClassifierDBServiceWorker> self = this;
-#if 1
+  mClassifier->ApplyUpdatesPrepare();
+#if 0
   // TODO: Asynchronously dispatch |ApplyUpdatesBackground| to update thread.
   //       See Bug 1339050. For now we *synchronously* run
   //       ApplyUpdatesForeground() after ApplyUpdatesBackground().
@@ -653,6 +654,8 @@ nsUrlClassifierDBServiceWorker::FinishUpdate()
   nsCOMPtr<nsIRunnable> r = NS_NewRunnableFunction([self] () -> void {
     nsCString failedTableName;
     nsresult rv = self->ApplyUpdatesBackground(failedTableName);
+
+    LOG(("Background update finished. Do foreground update!"));
 
     // nsUrlClassifierDBService::BackgroundThread() is relatively
     // "foreground" to the DB update thread.
@@ -762,10 +765,10 @@ nsUrlClassifierDBServiceWorker::ApplyUpdatesBackground(nsACString& aFailedTableN
   // the in-use data is forbidden.
 
   NS_ASSERTION(NS_GetCurrentThread() == gDbUpdateThread,
-               "nsUrlClassifierDBServiceWorker::BuildNewTables MUST "
+               "nsUrlClassifierDBServiceWorker::ApplyUpdatesBackground MUST "
                "run on update thread!!");
 
-  LOG(("nsUrlClassifierDBServiceWorker::BuildNewTables()"));
+  LOG(("nsUrlClassifierDBServiceWorker::ApplyUpdatesBackground()"));
   nsresult rv = mClassifier->ApplyUpdatesBackground(&mTableUpdates,
                                                     aFailedTableName);
 

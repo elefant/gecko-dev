@@ -16,6 +16,7 @@
 #include "nsClassHashtable.h"
 #include "safebrowsing.pb.h"
 #include <string>
+#include "mozilla/Mutex.h"
 
 namespace mozilla {
 namespace safebrowsing {
@@ -192,7 +193,8 @@ class HashStore {
 public:
   HashStore(const nsACString& aTableName,
             const nsACString& aProvider,
-            nsIFile* aRootStoreFile);
+            nsIFile* aRootStoreFile,
+            Mutex* aResetMutex);
   ~HashStore();
 
   const nsCString& TableName() const { return mTableName; }
@@ -237,6 +239,7 @@ public:
 
 private:
   nsresult Reset();
+  nsresult ResetNoLock();
 
   nsresult ReadHeader();
   nsresult SanityCheck();
@@ -303,6 +306,8 @@ private:
   SubCompleteArray mSubCompletes;
 
   uint32_t mFileSize;
+
+  Mutex* mResetMutex;
 
   // For gtest to inspect private members.
   friend class PerProviderDirectoryTestUtils;

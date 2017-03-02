@@ -19,8 +19,9 @@ class LookupCacheV4 final : public LookupCache
 public:
   explicit LookupCacheV4(const nsACString& aTableName,
                          const nsACString& aProvider,
-                         nsIFile* aStoreFile)
-    : LookupCache(aTableName, aProvider, aStoreFile) {}
+                         nsIFile* aStoreFile,
+                         Mutex* aResetMutex)
+    : LookupCache(aTableName, aProvider, aStoreFile, aResetMutex) {}
   ~LookupCacheV4() {}
 
   virtual nsresult Init() override;

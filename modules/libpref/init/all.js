@@ -5196,7 +5196,7 @@ pref("browser.safebrowsing.downloads.remote.block_dangerous",            true);
 pref("browser.safebrowsing.downloads.remote.block_dangerous_host",       true);
 pref("browser.safebrowsing.downloads.remote.block_potentially_unwanted", true);
 pref("browser.safebrowsing.downloads.remote.block_uncommon",             true);
-pref("browser.safebrowsing.debug", false);
+pref("browser.safebrowsing.debug", true);
 
 // The protocol version we communicate with google server.
 pref("browser.safebrowsing.provider.google.pver", "2.2");

@@ -136,7 +136,8 @@ public:
 
   LookupCache(const nsACString& aTableName,
               const nsACString& aProvider,
-              nsIFile* aStoreFile);
+              nsIFile* aStoreFile,
+              Mutex* aResetMutex);
   virtual ~LookupCache() {}
 
   const nsCString &TableName() const { return mTableName; }
@@ -183,6 +184,7 @@ public:
 
 private:
   nsresult Reset();
+  nsresult ResetNoLock();
   nsresult LoadPrefixSet();
 
   virtual nsresult StoreToFile(nsIFile* aFile) = 0;
@@ -201,6 +203,8 @@ protected:
   // Full length hashes obtained in gethash request
   CompletionArray mGetHashCache;
 
+  Mutex* mResetMutex;
+
   // For gtest to inspect private members.
   friend class PerProviderDirectoryTestUtils;
 };
@@ -210,8 +214,9 @@ class LookupCacheV2 final : public LookupCache
 public:
   explicit LookupCacheV2(const nsACString& aTableName,
                          const nsACString& aProvider,
-                         nsIFile* aStoreFile)
-    : LookupCache(aTableName, aProvider, aStoreFile) {}
+                         nsIFile* aStoreFile,
+                         Mutex* aResetMutex)
+    : LookupCache(aTableName, aProvider, aStoreFile, aResetMutex) {}
   ~LookupCacheV2() {}
 
   virtual nsresult Init() override;

@@ -44,11 +44,13 @@ const int LookupCacheV2::VER = 2;
 
 LookupCache::LookupCache(const nsACString& aTableName,
                          const nsACString& aProvider,
-                         nsIFile* aRootStoreDir)
+                         nsIFile* aRootStoreDir,
+                         Mutex* aResetMutex)
   : mPrimed(false)
   , mTableName(aTableName)
   , mProvider(aProvider)
   , mRootStoreDirectory(aRootStoreDir)
+  , mResetMutex(aResetMutex)
 {
   UpdateRootDirHandle(mRootStoreDirectory);
 }
@@ -95,6 +97,16 @@ LookupCache::UpdateRootDirHandle(nsIFile* aNewRootStoreDirectory)
 
 nsresult
 LookupCache::Reset()
+{
+  if (!mResetMutex) {
+    return ResetNoLock();
+  }
+  MutexAutoLock lock(*mResetMutex);
+  return ResetNoLock();
+}
+
+nsresult
+LookupCache::ResetNoLock()
 {
   LOG(("LookupCache resetting"));
 
@@ -517,7 +529,7 @@ LookupCacheV2::GetPrefixes(FallibleTArray<uint32_t>& aAddPrefixes)
 nsresult
 LookupCacheV2::ReadCompletions()
 {
-  HashStore store(mTableName, mProvider, mRootStoreDirectory);
+  HashStore store(mTableName, mProvider, mRootStoreDirectory, mResetMutex);
 
   nsresult rv = store.Open();
   NS_ENSURE_SUCCESS(rv, rv);
