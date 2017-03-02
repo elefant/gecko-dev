@@ -182,6 +182,8 @@ public:
   nsresult CacheCompletions(CacheResultArray * aEntries);
   nsresult CacheMisses(PrefixArray * aEntries);
 
+  bool IsBusy() const { return !!mUpdateObserver; }
+
 private:
   // No subclassing
   ~nsUrlClassifierDBServiceWorker();

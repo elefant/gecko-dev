@@ -1965,7 +1965,7 @@ nsUrlClassifierDBService::BeginUpdate(nsIUrlClassifierUpdateObserver *observer,
 {
   NS_ENSURE_TRUE(gDbBackgroundThread, NS_ERROR_NOT_INITIALIZED);
 
-  if (mInUpdate) {
+  if (mInUpdate || mWorker->IsBusy()) {
     LOG(("Already updating, not available"));
     return NS_ERROR_NOT_AVAILABLE;
   }
