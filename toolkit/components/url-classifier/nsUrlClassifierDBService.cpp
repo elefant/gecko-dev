@@ -631,22 +631,33 @@ nsUrlClassifierDBServiceWorker::FinishUpdate()
   }
 
   RefPtr<nsUrlClassifierDBServiceWorker> self = this;
+  mClassifier->ApplyUpdatesPrepare();
 
-  // TODO: Asynchronously dispatch |ApplyUpdatesBackground| to update thread.
-  //       See Bug 1339050. For now we *synchronously* run
-  //       ApplyUpdatesForeground() after ApplyUpdatesBackground().
-  nsresult backgroundRv;
-  nsCString failedTableName;
-  nsCOMPtr<nsIRunnable> r =
-    NS_NewRunnableFunction([self, &backgroundRv, &failedTableName] () -> void {
-      backgroundRv = self->ApplyUpdatesBackground(failedTableName);
-    });
+  nsCOMPtr<nsIRunnable> r = NS_NewRunnableFunction([self] () -> void {
+    nsCString failedTableName;
+    nsresult rv = self->ApplyUpdatesBackground(failedTableName);
 
-  LOG(("Bulding new tables..."));
-  mozilla::SyncRunnable::DispatchToThread(gDbUpdateThread, r);
-  LOG(("Done bulding new tables. Try to commit them."));
+    LOG(("Background update finished. Do foreground update!"));
 
-  return ApplyUpdatesForeground(backgroundRv, failedTableName);
+    // nsUrlClassifierDBService::BackgroundThread() is relatively
+    // "foreground" to the DB update thread.
+    auto foregroundThread = nsUrlClassifierDBService::BackgroundThread();
+    if (foregroundThread) {
+      using Worker = nsUrlClassifierDBServiceWorker;
+      nsCOMPtr<nsIRunnable> foregroundRunnable =
+        NewRunnableMethod<nsresult,
+                          nsCString>(self,
+                                     &Worker::ApplyUpdatesForeground,
+                                     rv,
+                                     failedTableName);
+
+      foregroundThread->Dispatch(foregroundRunnable, NS_DISPATCH_NORMAL);
+    }
+  });
+
+  gDbUpdateThread->Dispatch(r, NS_DISPATCH_NORMAL);
+
+  return NS_OK;
 }
 
 nsresult
@@ -743,10 +754,10 @@ nsUrlClassifierDBServiceWorker::ApplyUpdatesBackground(nsACString& aFailedTableN
   }
 
   MOZ_ASSERT(NS_GetCurrentThread() == gDbUpdateThread,
-             "nsUrlClassifierDBServiceWorker::BuildNewTables MUST "
+             "nsUrlClassifierDBServiceWorker::ApplyUpdatesBackground MUST "
              "run on update thread!!");
 
-  LOG(("nsUrlClassifierDBServiceWorker::BuildNewTables()"));
+  LOG(("nsUrlClassifierDBServiceWorker::ApplyUpdatesBackground()"));
   nsresult rv = mClassifier->ApplyUpdatesBackground(&mTableUpdates,
                                                     aFailedTableName);
 
@@ -2020,6 +2031,32 @@ nsUrlClassifierDBService::BeginUpdate(nsIUrlClassifierUpdateObserver *observer,
 
   if (mInUpdate) {
     LOG(("Already updating, not available"));
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+  if (mWorker->IsBusy()) {
+    // |mInUpdate| used to work well because "notifying update observer"
+    // is synchronously done in Worker::FinishUpdate(). Even if the the
+    // update observe hasn't been notified at this point, we can still
+    // dispatch BeginUpdate() since it will NOT be run until the
+    // previous Worker::FinishUpdate() returns.
+    //
+    // However, some tasks in Worker::FinishUpdate() have been moved to
+    // another thread. The update observer will NOT be notified when
+    // Worker::FinishUpdate() returns. If we only check |mInUpdate|,
+    // the following sequence might happen on worker thread:
+    //
+    // Worker::FinsihUpdate() // for update 1
+    // Worker::BeginUpdate()  // for update 2
+    // Worker::NotifyUpdateObserver() // for update 1
+    //
+    // So, we have to find out a way to reject BeginUpdate() right here
+    // if the previous update observer hasn't been notified.
+    //
+    // Directly probing the worker's state is the most lightweight solution.
+    // No lock is required since Worker::BeginUpdate() and
+    // Worker::NotifyUpdateObserver() are by nature mutual exclusive.
+    // (both run on worker thread.)
+    LOG(("The previous update observer hasn't been notified."));
     return NS_ERROR_NOT_AVAILABLE;
   }
 

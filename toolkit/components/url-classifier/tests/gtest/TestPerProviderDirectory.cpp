@@ -32,7 +32,7 @@ void VerifyPrivateStorePath(const char* aTableName,
   nsresult rv = aRootDir->GetPath(rootStorePath);
   EXPECT_EQ(rv, NS_OK);
 
-  T target(nsCString(aTableName), nsCString(aProvider), aRootDir);
+  T target(nsCString(aTableName), nsCString(aProvider), aRootDir, nullptr);
 
   nsIFile* privateStoreDirectory =
     PerProviderDirectoryTestUtils::InspectStoreDirectory(target);

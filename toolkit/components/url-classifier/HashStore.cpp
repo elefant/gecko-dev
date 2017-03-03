@@ -211,10 +211,12 @@ TableUpdateV4::NewChecksum(const std::string& aChecksum)
 
 HashStore::HashStore(const nsACString& aTableName,
                      const nsACString& aProvider,
-                     nsIFile* aRootStoreDir)
+                     nsIFile* aRootStoreDir,
+                     Mutex* aResetMutex)
   : mTableName(aTableName)
   , mInUpdate(false)
   , mFileSize(0)
+  , mResetMutex(aResetMutex)
 {
   nsresult rv = Classifier::GetPrivateStoreDirectory(aRootStoreDir,
                                                      aTableName,
@@ -231,6 +233,16 @@ HashStore::~HashStore()
 
 nsresult
 HashStore::Reset()
+{
+  if (!mResetMutex) {
+    return ResetNoLock();
+  }
+  MutexAutoLock lock(*mResetMutex);
+  return ResetNoLock();
+}
+
+nsresult
+HashStore::ResetNoLock()
 {
   LOG(("HashStore resetting"));
 
