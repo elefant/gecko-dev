@@ -41,6 +41,7 @@ EXPORTS.mozilla.net += [
     'HttpAuthUtils.h',
     'HttpBaseChannel.h',
     'HttpChannelChild.h',
+    'HttpChannelFuzzer.h',
     'HttpChannelParent.h',
     'HttpInfo.h',
     'NullHttpChannel.h',
@@ -54,6 +55,7 @@ EXPORTS.mozilla.net += [
 SOURCES += [
     'AlternateServices.cpp',
     'ASpdySession.cpp',
+    'HttpChannelFuzzer.cpp',
     'nsHttpAuthCache.cpp',
     'nsHttpChannelAuthProvider.cpp', # redefines GetAuthType
 ]

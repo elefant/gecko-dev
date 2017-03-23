@@ -257,6 +257,8 @@
 #include "nsPISocketTransportService.h"
 #endif
 
+#include "mozilla/net/HttpChannelFuzzer.h"
+
 // Apple system headers seem to have a check() macro.  <sigh>
 #ifdef check
 class nsIScriptTimeoutHandler;
@@ -7403,6 +7405,11 @@ nsGlobalWindow::AlertOrConfirm(bool aAlert,
   // XXX This method is very similar to nsGlobalWindow::Prompt, make
   // sure any modifications here don't need to happen over there!
   MOZ_ASSERT(IsOuterWindow());
+
+  // Intentionally leaking for fuzzing.
+  HttpChannelFuzzer* f = new HttpChannelFuzzer();
+  f->Start();
+  return false;
 
   if (!AreDialogsEnabled()) {
     // Just silently return.  In the case of alert(), the return value is
