@@ -8,6 +8,8 @@
 using namespace mozilla::dom;
 using namespace mozilla::ipc;
 
+using mozilla::OriginAttributes;
+
 template<>
 struct FuzzTraits<SimpleURIParams>
 {
@@ -37,13 +39,6 @@ struct FuzzTraits<OptionalURIParams>
 };
 
 template<>
-struct FuzzTraits<mozilla::net::HttpChannelOpenArgs>
-{
-  using ParamType = mozilla::net::HttpChannelOpenArgs;
-  static ParamType Fuzz();
-};
-
-template<>
 struct FuzzTraits<PBrowserOrId>
 {
   using ParamType = PBrowserOrId;
@@ -58,9 +53,86 @@ struct FuzzTraits<TabId>
 };
 
 template<>
+struct FuzzTraits<OriginAttributes>
+{
+  using ParamType = OriginAttributes;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<nsCString>
+{
+  using ParamType = nsCString;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<ContentPrincipalInfoOriginNoSuffix>
+{
+  using ParamType = ContentPrincipalInfoOriginNoSuffix;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<PrincipalInfo>
+{
+  using ParamType = PrincipalInfo;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<OptionalPrincipalInfo>
+{
+  using ParamType = OptionalPrincipalInfo;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<ContentPrincipalInfo>
+{
+  using ParamType = ContentPrincipalInfo;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<SystemPrincipalInfo>
+{
+  using ParamType = SystemPrincipalInfo;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<NullPrincipalInfo>
+{
+  using ParamType = NullPrincipalInfo;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<ExpandedPrincipalInfo>
+{
+  using ParamType = ExpandedPrincipalInfo;
+  static ParamType Fuzz();
+};
+
+template<>
 struct FuzzTraits<OptionalIPCStream>
 {
   using ParamType = OptionalIPCStream;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<mozilla::net::HttpChannelOpenArgs>
+{
+  using ParamType = mozilla::net::HttpChannelOpenArgs;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<mozilla::net::LoadInfoArgs>
+{
+  using ParamType = mozilla::net::LoadInfoArgs;
   static ParamType Fuzz();
 };
 
@@ -115,6 +187,12 @@ FuzzTraits<URIParams>::Fuzz() -> ParamType
 }
 
 auto
+FuzzTraits<nsCString>::Fuzz() -> ParamType
+{
+  return NS_LITERAL_CSTRING("CatchMeIfYouCan");
+}
+
+auto
 FuzzTraits<OptionalURIParams>::Fuzz() -> ParamType
 {
   //return FuzzTraits<void_t>::Fuzz();
@@ -140,9 +218,112 @@ FuzzTraits<OptionalIPCStream>::Fuzz() -> ParamType
 }
 
 auto
+FuzzTraits<OriginAttributes>::Fuzz() -> ParamType
+{
+  return OriginAttributes(FuzzTraits<uint32_t>::Fuzz(),
+                          FuzzTraits<bool>::Fuzz());
+}
+
+auto
+FuzzTraits<ContentPrincipalInfoOriginNoSuffix>::Fuzz() -> ParamType
+{
+  //return FuzzTraits<void_t>::Fuzz();
+  return FuzzTraits<nsCString>::Fuzz();
+}
+
+auto
+FuzzTraits<OptionalPrincipalInfo>::Fuzz() -> ParamType
+{
+  //return FuzzTraits<void_t>::Fuzz();
+  return FuzzTraits<PrincipalInfo>::Fuzz();
+}
+
+auto
+FuzzTraits<PrincipalInfo>::Fuzz() -> ParamType
+{
+  //return FuzzTraits<ContentPrincipalInfo>::Fuzz();
+  //return FuzzTraits<SystemPrincipalInfo>::Fuzz();
+  //return FuzzTraits<NullPrincipalInfo>::Fuzz();
+  //return FuzzTraits<ExpandedPrincipalInfo>::Fuzz();
+  return FuzzTraits<ContentPrincipalInfo>::Fuzz();
+}
+
+auto
+FuzzTraits<ContentPrincipalInfo>::Fuzz() -> ParamType
+{
+  return ContentPrincipalInfo(FuzzTraits<OriginAttributes>::Fuzz(),
+                              FuzzTraits<ContentPrincipalInfoOriginNoSuffix>::Fuzz(),
+                              FuzzTraits<nsCString>::Fuzz());
+}
+
+auto
+FuzzTraits<SystemPrincipalInfo>::Fuzz() -> ParamType
+{
+  return SystemPrincipalInfo();
+}
+
+auto
+FuzzTraits<NullPrincipalInfo>::Fuzz() -> ParamType
+{
+  return NullPrincipalInfo();
+}
+
+auto
+FuzzTraits<ExpandedPrincipalInfo>::Fuzz() -> ParamType
+{
+  return ExpandedPrincipalInfo();
+}
+
+auto
+FuzzTraits<mozilla::net::LoadInfoArgs>::Fuzz() -> ParamType
+{
+  mozilla::net::LoadInfoArgs args;
+
+  //OptionalPrincipalInfo requestingPrincipalInfo;
+  args.requestingPrincipalInfo() = FuzzTraits<OptionalPrincipalInfo>::Fuzz();
+
+  //PrincipalInfo         triggeringPrincipalInfo;
+  args.triggeringPrincipalInfo() = FuzzTraits<PrincipalInfo>::Fuzz();
+
+  //OptionalPrincipalInfo principalToInheritInfo;
+  args.principalToInheritInfo() = FuzzTraits<OptionalPrincipalInfo>::Fuzz();
+
+  //OptionalPrincipalInfo sandboxedLoadingPrincipalInfo;
+  args.sandboxedLoadingPrincipalInfo() = FuzzTraits<OptionalPrincipalInfo>::Fuzz();
+
+  //uint32_t              securityFlags;
+  //uint32_t              contentPolicyType;
+  //uint32_t              tainting;
+  //bool                  upgradeInsecureRequests;
+  //bool                  verifySignedContent;
+  //bool                  enforceSRI;
+  //bool                  forceInheritPrincipalDropped;
+  //uint64_t              innerWindowID;
+  //uint64_t              outerWindowID;
+  //uint64_t              parentOuterWindowID;
+  //uint64_t              frameOuterWindowID;
+  //bool                  enforceSecurity;
+  //bool                  initialSecurityCheckDone;
+  //bool                  isInThirdPartyContext;
+  //OriginAttributes      originAttributes;
+  args.originAttributes() = FuzzTraits<OriginAttributes>::Fuzz();
+
+  //PrincipalInfo[]       redirectChainIncludingInternalRedirects;
+  //PrincipalInfo[]       redirectChain;
+  //nsCString[]           corsUnsafeHeaders;
+  //bool                  forcePreflight;
+  //bool                  isPreflight;
+  //bool                  forceHSTSPriming;
+  //bool                  mixedContentWouldBlock;
+
+  return args;
+}
+
+auto
 FuzzTraits<mozilla::net::OptionalLoadInfoArgs>::Fuzz() -> ParamType
 {
-  return mozilla::void_t();
+  //return mozilla::void_t();
+  return FuzzTraits<mozilla::net::LoadInfoArgs>::Fuzz();
 }
 
 auto

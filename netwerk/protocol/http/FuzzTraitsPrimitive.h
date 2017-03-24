@@ -5,6 +5,13 @@ template<class T>
 struct FuzzTraits {};
 
 template<>
+struct FuzzTraits<bool>
+{
+  using ParamType = bool;
+  static ParamType Fuzz();
+};
+
+template<>
 struct FuzzTraits<uint32_t>
 {
   using ParamType = uint32_t;
@@ -20,6 +27,12 @@ struct FuzzTraits<uint64_t>
 
 //////////////////////////////////////////////////////////////
 // Implementation
+
+auto
+FuzzTraits<bool>::Fuzz() -> ParamType
+{
+  return false;
+}
 
 auto
 FuzzTraits<uint64_t>::Fuzz() -> ParamType
