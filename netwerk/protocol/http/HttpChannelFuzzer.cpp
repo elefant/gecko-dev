@@ -124,6 +124,37 @@ HttpChannelFuzzer::~HttpChannelFuzzer()
   LOG(("Destroying HttpChannelFuzzer @%p\n", this));
 }
 
+bool FuzzyCall(bool aCallResult, const char* aMessageName)
+{
+  LOG(("Sending %s...", aMessageName));
+  return aCallResult;
+}
+
+#define FT(P) FuzzTraits<P>::Fuzz()
+
+#define FUZZY_CALL0(Message)\
+  FuzzyCall(Send##Message(), #Message)
+#define FUZZY_CALL1(Message, P1)\
+  FuzzyCall(Send##Message(FT(P1)), #Message)
+#define FUZZY_CALL2(Message, P1, P2)\
+  FuzzyCall(Send##Message(FT(P1), FT(P2)), #Message)
+#define FUZZY_CALL3(Message, P1, P2, P3)\
+  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3)), #Message)
+#define FUZZY_CALL4(Message, P1, P2, P3, P4)\
+  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4)), #Message)
+#define FUZZY_CALL5(Message, P1, P2, P3, P4, P5)\
+  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4), FT(P5)), #Message)
+#define FUZZY_CALL6(Message, P1, P2, P3, P4, P5, P6)\
+  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4), FT(P5), FT(P6)), #Message)
+#define FUZZY_CALL7(Message, P1, P2, P3, P4, P5, P6, P7)\
+  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4), FT(P5), FT(P6), FT(P7)), #Message)
+#define FUZZY_CALL8(Message, P1, P2, P3, P4, P5, P6, P7, P8)\
+  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4), FT(P5), FT(P6), FT(P7), FT(P8)), #Message)
+#define FUZZY_CALL9(Message, P1, P2, P3, P4, P5, P6, P7, P8, P9)\
+  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4), FT(P5), FT(P6), FT(P7), FT(P8), FT(P9)), #Message)
+#define FUZZY_CALL10(Message, P1, P2, P3, P4, P5, P6, P7, P8, P9, P10)\
+  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4),FT(P5), FT(P6),FT(P7), FT(P8),FT(P9), FT(P10)), #Message)
+
 ///////////////////////////////////////////////////////////////////////////////
 // nsITimerCallback implementation
 NS_IMETHODIMP
@@ -132,90 +163,24 @@ HttpChannelFuzzer::Notify(nsITimer *timer)
   bool callRet = false;
   int callIndex = mCallIndex++ % kParentMessageNum;
   switch (callIndex) {
-  case 0:
-    LOG(("Calling SendSetClassOfService()"));
-    callRet = SendSetClassOfService(FuzzTraits<uint32_t>::Fuzz());
-    break;
-  case 1:
-    LOG(("Calling SendSetCacheTokenCachedCharset()"));
-    callRet = SendSetCacheTokenCachedCharset(FuzzTraits<nsCString>::Fuzz());
-    break;
-  case 2:
-    LOG(("Calling SendUpdateAssociatedContentSecurity()"));
-    callRet = SendUpdateAssociatedContentSecurity(FuzzTraits<int32_t>::Fuzz(),
-                                                  FuzzTraits<int32_t>::Fuzz());
-    break;
-  case 3:
-      LOG(("Calling SendSuspend()"));
-    callRet = SendSuspend();
-    break;
-  case 4:
-    LOG(("Calling SendResume()"));
-    callRet = SendResume();
-    break;
-  case 5:
-    LOG(("Calling SendCancel()"));
-    callRet = SendCancel(FuzzTraits<nsresult>::Fuzz());
-    break;
-  case 6:
-    LOG(("Calling SendRedirect2Verify()"));
-    callRet = SendRedirect2Verify(FuzzTraits<nsresult>::Fuzz(),
-                                  FuzzTraits<RequestHeaderTuples>::Fuzz(),
-                                  FuzzTraits<uint32_t>::Fuzz(),
-                                  FuzzTraits<uint32_t>::Fuzz(),
-                                  FuzzTraits<OptionalURIParams>::Fuzz(),
-                                  FuzzTraits<OptionalURIParams>::Fuzz(),
-                                  FuzzTraits<OptionalCorsPreflightArgs>::Fuzz(),
-                                  FuzzTraits<bool>::Fuzz(),
-                                  FuzzTraits<bool>::Fuzz(),
-                                  FuzzTraits<bool>::Fuzz());
-    break;
-  case 7:
-    LOG(("Calling SendDocumentChannelCleanup()"));
-    callRet = SendDocumentChannelCleanup();
-    break;
-  case 8:
-    LOG(("Calling SendMarkOfflineCacheEntryAsForeign()"));
-    callRet = SendMarkOfflineCacheEntryAsForeign();
-    break;
-  case 9:
-    LOG(("Calling SendDivertOnDataAvailable()"));
-    callRet = SendDivertOnDataAvailable(FuzzTraits<nsCString>::Fuzz(),
-                                        FuzzTraits<uint64_t>::Fuzz(),
-                                        FuzzTraits<uint32_t>::Fuzz());
-    break;
-  case 10:
-    LOG(("Calling SendDivertOnStopRequest()"));
-    callRet = SendDivertOnStopRequest(FuzzTraits<nsresult>::Fuzz());
-    break;
-  case 11:
-    LOG(("Calling SendDivertComplete()"));
-    callRet = SendDivertComplete();
-    break;
-  case 12:
-    LOG(("Calling SendRemoveCorsPreflightCacheEntry()"));
-    callRet = SendRemoveCorsPreflightCacheEntry(FuzzTraits<URIParams>::Fuzz(),
-                                                FuzzTraits<PrincipalInfo>::Fuzz());
-    break;
-  case 13:
-    LOG(("Calling SendDeletingChannel()"));
-    callRet = SendDeletingChannel();
-    break;
-  case 14:
-    LOG(("Calling Send__delete__()"));
-    //callRet = Send__delete__(this);
-    break;
-  case 15:
-    LOG(("Calling SendFinishInterceptedRedirect()"));
-    callRet = SendFinishInterceptedRedirect();
-    break;
-  case 16:
-    LOG(("Calling SendSetPriority()"));
-    callRet = SendSetPriority(FuzzTraits<int16_t>::Fuzz());
-    break;
-  default:
-    LOG(("Unknown call index: %d", callIndex));
-    break;
+  case 0:  callRet = FUZZY_CALL1(SetClassOfService, uint32_t); break;
+  case 1:  callRet = FUZZY_CALL1(SetCacheTokenCachedCharset, nsCString); break;
+  case 2:  callRet = FUZZY_CALL2(UpdateAssociatedContentSecurity, int32_t, int32_t); break;
+  case 3:  callRet = FUZZY_CALL0(Suspend); break;
+  case 4:  callRet = FUZZY_CALL0(Resume); break;
+  case 5:  callRet = FUZZY_CALL1(Cancel, nsresult); break;
+  case 6:  callRet = FUZZY_CALL10(Redirect2Verify, nsresult, RequestHeaderTuples, uint32_t, uint32_t, OptionalURIParams, OptionalURIParams, OptionalCorsPreflightArgs, bool, bool, bool); break;
+  case 7:  callRet = FUZZY_CALL0(DocumentChannelCleanup); break;
+  case 8:  callRet = FUZZY_CALL0(MarkOfflineCacheEntryAsForeign); break;
+  case 9:  callRet = FUZZY_CALL3(DivertOnDataAvailable, nsCString, uint64_t, uint32_t); break;
+  case 10: callRet = FUZZY_CALL1(DivertOnStopRequest, nsresult); break;
+  case 11: callRet = FUZZY_CALL0(DivertComplete); break;
+  case 12: callRet = FUZZY_CALL2(RemoveCorsPreflightCacheEntry, URIParams, PrincipalInfo); break;
+  case 13: callRet = FUZZY_CALL0(DeletingChannel); break;
+  //case 14: callRet = FUZZY_CALL(__delete__, this); break;
+  case 15: callRet = FUZZY_CALL0(FinishInterceptedRedirect); break;
+  case 16: callRet = FUZZY_CALL1(SetPriority, int16_t); break;
+  default: LOG(("Unknown call index: %d", callIndex)); break;
   }
 
   if (!callRet) {
