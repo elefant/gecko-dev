@@ -66,6 +66,8 @@ using namespace mozilla::ipc;
 namespace mozilla {
 namespace net {
 
+NS_IMPL_ISUPPORTS(HttpChannelFuzzer, nsITimerCallback)
+
 extern bool
 WillRedirect(nsHttpResponseHead * response);
 
@@ -74,7 +76,9 @@ WillRedirect(nsHttpResponseHead * response);
 //-----------------------------------------------------------------------------
 
 HttpChannelFuzzer::HttpChannelFuzzer()
+  : mCallIndex(0)
 {
+  mTimer = do_CreateInstance("@mozilla.org/timer;1");
 }
 
 nsresult
@@ -105,12 +109,120 @@ HttpChannelFuzzer::Start()
 
   LOG(("Successful to construct HttpChannel parent-side actor."));
 
+  nsresult rv = mTimer->InitWithCallback(this,
+                                         100,
+                                         nsITimer::TYPE_REPEATING_SLACK);
+  if (NS_FAILED(rv)) {
+    LOG(("Failed to init timer for fuzzing."));
+  }
+
   return NS_OK;
 }
 
 HttpChannelFuzzer::~HttpChannelFuzzer()
 {
   LOG(("Destroying HttpChannelFuzzer @%p\n", this));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// nsITimerCallback implementation
+NS_IMETHODIMP
+HttpChannelFuzzer::Notify(nsITimer *timer)
+{
+  bool callRet = false;
+  int callIndex = mCallIndex++ % kParentMessageNum;
+  switch (callIndex) {
+  case 0:
+    LOG(("Calling SendSetClassOfService()"));
+    callRet = SendSetClassOfService(FuzzTraits<uint32_t>::Fuzz());
+    break;
+  case 1:
+    LOG(("Calling SendSetCacheTokenCachedCharset()"));
+    callRet = SendSetCacheTokenCachedCharset(FuzzTraits<nsCString>::Fuzz());
+    break;
+  case 2:
+    LOG(("Calling SendUpdateAssociatedContentSecurity()"));
+    callRet = SendUpdateAssociatedContentSecurity(FuzzTraits<int32_t>::Fuzz(),
+                                                  FuzzTraits<int32_t>::Fuzz());
+    break;
+  case 3:
+      LOG(("Calling SendSuspend()"));
+    callRet = SendSuspend();
+    break;
+  case 4:
+    LOG(("Calling SendResume()"));
+    callRet = SendResume();
+    break;
+  case 5:
+    LOG(("Calling SendCancel()"));
+    callRet = SendCancel(FuzzTraits<nsresult>::Fuzz());
+    break;
+  case 6:
+    LOG(("Calling SendRedirect2Verify()"));
+    callRet = SendRedirect2Verify(FuzzTraits<nsresult>::Fuzz(),
+                                  FuzzTraits<RequestHeaderTuples>::Fuzz(),
+                                  FuzzTraits<uint32_t>::Fuzz(),
+                                  FuzzTraits<uint32_t>::Fuzz(),
+                                  FuzzTraits<OptionalURIParams>::Fuzz(),
+                                  FuzzTraits<OptionalURIParams>::Fuzz(),
+                                  FuzzTraits<OptionalCorsPreflightArgs>::Fuzz(),
+                                  FuzzTraits<bool>::Fuzz(),
+                                  FuzzTraits<bool>::Fuzz(),
+                                  FuzzTraits<bool>::Fuzz());
+    break;
+  case 7:
+    LOG(("Calling SendDocumentChannelCleanup()"));
+    callRet = SendDocumentChannelCleanup();
+    break;
+  case 8:
+    LOG(("Calling SendMarkOfflineCacheEntryAsForeign()"));
+    callRet = SendMarkOfflineCacheEntryAsForeign();
+    break;
+  case 9:
+    LOG(("Calling SendDivertOnDataAvailable()"));
+    callRet = SendDivertOnDataAvailable(FuzzTraits<nsCString>::Fuzz(),
+                                        FuzzTraits<uint64_t>::Fuzz(),
+                                        FuzzTraits<uint32_t>::Fuzz());
+    break;
+  case 10:
+    LOG(("Calling SendDivertOnStopRequest()"));
+    callRet = SendDivertOnStopRequest(FuzzTraits<nsresult>::Fuzz());
+    break;
+  case 11:
+    LOG(("Calling SendDivertComplete()"));
+    callRet = SendDivertComplete();
+    break;
+  case 12:
+    LOG(("Calling SendRemoveCorsPreflightCacheEntry()"));
+    callRet = SendRemoveCorsPreflightCacheEntry(FuzzTraits<URIParams>::Fuzz(),
+                                                FuzzTraits<PrincipalInfo>::Fuzz());
+    break;
+  case 13:
+    LOG(("Calling SendDeletingChannel()"));
+    callRet = SendDeletingChannel();
+    break;
+  case 14:
+    LOG(("Calling Send__delete__()"));
+    //callRet = Send__delete__(this);
+    break;
+  case 15:
+    LOG(("Calling SendFinishInterceptedRedirect()"));
+    callRet = SendFinishInterceptedRedirect();
+    break;
+  case 16:
+    LOG(("Calling SendSetPriority()"));
+    callRet = SendSetPriority(FuzzTraits<int16_t>::Fuzz());
+    break;
+  default:
+    LOG(("Unknown call index: %d", callIndex));
+    break;
+  }
+
+  if (!callRet) {
+    LOG(("Failed to call %d", callIndex));
+  }
+
+  return NS_OK;
 }
 
 } // namespace net

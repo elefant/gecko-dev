@@ -13,6 +13,7 @@
 #include "mozilla/net/HttpBaseChannel.h"
 */
 #include "mozilla/net/PHttpChannelChild.h"
+#include "nsITimer.h"
 
  /*
 #include "mozilla/net/ChannelEventQueue.h"
@@ -40,15 +41,19 @@ namespace mozilla {
 namespace net {
 
 class HttpChannelFuzzer final : public PHttpChannelChild
+                              , public nsITimerCallback
 {
 public:
-
   HttpChannelFuzzer();
-  virtual ~HttpChannelFuzzer();
+
+  NS_DECL_ISUPPORTS
+  NS_DECL_NSITIMERCALLBACK
 
   nsresult Start();
 
-protected:
+private:
+  virtual ~HttpChannelFuzzer();
+
   mozilla::ipc::IPCResult RecvNotifyTrackingProtectionDisabled() override { return IPC_OK(); }
   mozilla::ipc::IPCResult RecvNotifyTrackingResource() override { return IPC_OK(); }
   mozilla::ipc::IPCResult RecvSetClassifierMatchedInfo(const ClassifierInfo& aInfo) override { return IPC_OK(); }
@@ -100,6 +105,12 @@ protected:
                                                       const bool& asError) override { return IPC_OK(); }
 
   mozilla::ipc::IPCResult RecvSetPriority(const int16_t& aPriority) override { return IPC_OK(); }
+
+  nsCOMPtr<nsITimer> mTimer;
+
+  uint32_t mCallIndex;
+
+  const uint32_t kParentMessageNum = 17;
 };
 
 }

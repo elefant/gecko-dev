@@ -11,6 +11,13 @@ using namespace mozilla::ipc;
 using mozilla::OriginAttributes;
 
 template<>
+struct FuzzTraits<nsresult>
+{
+  using ParamType = nsresult;
+  static ParamType Fuzz();
+};
+
+template<>
 struct FuzzTraits<SimpleURIParams>
 {
   using ParamType = SimpleURIParams;
@@ -63,6 +70,20 @@ template<>
 struct FuzzTraits<nsCString>
 {
   using ParamType = nsCString;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<mozilla::net::RequestHeaderTuples>
+{
+  using ParamType = mozilla::net::RequestHeaderTuples;
+  static ParamType Fuzz();
+};
+
+template<>
+struct FuzzTraits<mozilla::net::nsHttpResponseHead>
+{
+  using ParamType = mozilla::net::nsHttpResponseHead;
   static ParamType Fuzz();
 };
 
@@ -161,6 +182,12 @@ struct FuzzTraits<mozilla::net::OptionalCorsPreflightArgs>
 // Implementations
 
 auto
+FuzzTraits<nsresult>::Fuzz() -> ParamType
+{
+  return NS_OK;
+}
+
+auto
 FuzzTraits<SimpleURIParams>::Fuzz() -> ParamType
 {
   SimpleURIParams p;
@@ -190,6 +217,18 @@ auto
 FuzzTraits<nsCString>::Fuzz() -> ParamType
 {
   return NS_LITERAL_CSTRING("CatchMeIfYouCan");
+}
+
+auto
+FuzzTraits<mozilla::net::RequestHeaderTuples>::Fuzz() -> ParamType
+{
+  return mozilla::net::RequestHeaderTuples();
+}
+
+auto
+FuzzTraits<mozilla::net::nsHttpResponseHead>::Fuzz() -> ParamType
+{
+  return mozilla::net::nsHttpResponseHead();
 }
 
 auto
