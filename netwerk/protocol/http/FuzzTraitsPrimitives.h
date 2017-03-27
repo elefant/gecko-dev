@@ -2,7 +2,11 @@
 #define mozilla_FuzzTraitsPrimitive_h
 
 template<typename ParamType>
-struct FuzzTraits {};
+struct FuzzTraits
+{
+  // It may not be a good idea offering a default Fuzz() impl.
+  //static ParamType Fuzz() { return ParamType(); }
+};
 
 template<>
 struct FuzzTraits<bool>
@@ -68,15 +72,6 @@ struct FuzzTraits<uint64_t>
 };
 
 //////////////////////////////////////////////////////////////
-// Random pick utilities.
-template<typename ParamType>
-ParamType RandomPick(const std::vector<ParamType>& aCollection)
-{
-  int pickedIndex = FuzzTraits<uint32_t>::Fuzz() % aCollection.size();
-  return aCollection[pickedIndex];
-}
-
-//////////////////////////////////////////////////////////////
 // Implementation
 
 auto
@@ -135,5 +130,15 @@ FuzzTraits<uint64_t>::Fuzz() -> ParamType
   uint64_t upper = FuzzTraits<uint32_t>::Fuzz();
   return (upper << 32) + FuzzTraits<uint32_t>::Fuzz();
 }
+
+//////////////////////////////////////////////////////////////
+// Random pick utilities.
+template<typename ParamType>
+ParamType RandomPick(const std::vector<ParamType>& aCollection)
+{
+  int pickedIndex = FuzzTraits<uint32_t>::Fuzz() % aCollection.size();
+  return aCollection[pickedIndex];
+}
+
 
 #endif // mozilla_net_FuzzTraitsPrimitive_h
