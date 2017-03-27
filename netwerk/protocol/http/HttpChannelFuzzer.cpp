@@ -57,11 +57,12 @@
 
 #undef LOG
 #define LOG(args) printf_stderr(">>>>>> HttpChannelFuzzer <<<<<<< %s\n", (nsPrintfCString args).get())
+//#define LOG
+
+#include "FuzzyCall.h"
 
 using namespace mozilla::dom;
 using namespace mozilla::ipc;
-
-
 
 namespace mozilla {
 namespace net {
@@ -89,6 +90,8 @@ HttpChannelFuzzer::Start()
   if (cc->IsShuttingDown()) {
     return NS_ERROR_FAILURE;
   }
+
+  srand(time(NULL));
 
   // Non-ipdlh type.
   IPC::SerializedLoadContext loadContext;
@@ -124,43 +127,12 @@ HttpChannelFuzzer::~HttpChannelFuzzer()
   LOG(("Destroying HttpChannelFuzzer @%p\n", this));
 }
 
-bool FuzzyCall(bool aCallResult, const char* aMessageName)
-{
-  LOG(("Sending %s...", aMessageName));
-  return aCallResult;
-}
-
-#define FT(P) FuzzTraits<P>::Fuzz()
-
-#define FUZZY_CALL0(Message)\
-  FuzzyCall(Send##Message(), #Message)
-#define FUZZY_CALL1(Message, P1)\
-  FuzzyCall(Send##Message(FT(P1)), #Message)
-#define FUZZY_CALL2(Message, P1, P2)\
-  FuzzyCall(Send##Message(FT(P1), FT(P2)), #Message)
-#define FUZZY_CALL3(Message, P1, P2, P3)\
-  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3)), #Message)
-#define FUZZY_CALL4(Message, P1, P2, P3, P4)\
-  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4)), #Message)
-#define FUZZY_CALL5(Message, P1, P2, P3, P4, P5)\
-  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4), FT(P5)), #Message)
-#define FUZZY_CALL6(Message, P1, P2, P3, P4, P5, P6)\
-  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4), FT(P5), FT(P6)), #Message)
-#define FUZZY_CALL7(Message, P1, P2, P3, P4, P5, P6, P7)\
-  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4), FT(P5), FT(P6), FT(P7)), #Message)
-#define FUZZY_CALL8(Message, P1, P2, P3, P4, P5, P6, P7, P8)\
-  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4), FT(P5), FT(P6), FT(P7), FT(P8)), #Message)
-#define FUZZY_CALL9(Message, P1, P2, P3, P4, P5, P6, P7, P8, P9)\
-  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4), FT(P5), FT(P6), FT(P7), FT(P8), FT(P9)), #Message)
-#define FUZZY_CALL10(Message, P1, P2, P3, P4, P5, P6, P7, P8, P9, P10)\
-  FuzzyCall(Send##Message(FT(P1), FT(P2), FT(P3), FT(P4),FT(P5), FT(P6),FT(P7), FT(P8),FT(P9), FT(P10)), #Message)
-
 ///////////////////////////////////////////////////////////////////////////////
 // nsITimerCallback implementation
 NS_IMETHODIMP
 HttpChannelFuzzer::Notify(nsITimer *timer)
 {
-  bool callRet = false;
+  bool callRet = true;
   int callIndex = mCallIndex++ % kParentMessageNum;
   switch (callIndex) {
   case 0:  callRet = FUZZY_CALL1(SetClassOfService, uint32_t); break;
@@ -172,9 +144,9 @@ HttpChannelFuzzer::Notify(nsITimer *timer)
   case 6:  callRet = FUZZY_CALL10(Redirect2Verify, nsresult, RequestHeaderTuples, uint32_t, uint32_t, OptionalURIParams, OptionalURIParams, OptionalCorsPreflightArgs, bool, bool, bool); break;
   case 7:  callRet = FUZZY_CALL0(DocumentChannelCleanup); break;
   case 8:  callRet = FUZZY_CALL0(MarkOfflineCacheEntryAsForeign); break;
-  case 9:  callRet = FUZZY_CALL3(DivertOnDataAvailable, nsCString, uint64_t, uint32_t); break;
-  case 10: callRet = FUZZY_CALL1(DivertOnStopRequest, nsresult); break;
-  case 11: callRet = FUZZY_CALL0(DivertComplete); break;
+  //case 9:  callRet = FUZZY_CALL3(DivertOnDataAvailable, nsCString, uint64_t, uint32_t); break;
+  //case 10: callRet = FUZZY_CALL1(DivertOnStopRequest, nsresult); break;
+  //case 11: callRet = FUZZY_CALL0(DivertComplete); break;
   case 12: callRet = FUZZY_CALL2(RemoveCorsPreflightCacheEntry, URIParams, PrincipalInfo); break;
   case 13: callRet = FUZZY_CALL0(DeletingChannel); break;
   //case 14: callRet = FUZZY_CALL(__delete__, this); break;
@@ -185,6 +157,7 @@ HttpChannelFuzzer::Notify(nsITimer *timer)
 
   if (!callRet) {
     LOG(("Failed to call %d", callIndex));
+    timer->Cancel();
   }
 
   return NS_OK;

@@ -3,7 +3,8 @@
 
 #include "mozilla/net/NeckoChannelParams.h"
 #include "nsIStandardURL.h"
-#include "FuzzTraitsPrimitive.h"
+#include "nsStandardURL.h"
+#include "FuzzTraitsPrimitives.h"
 
 using namespace mozilla::dom;
 using namespace mozilla::ipc;
@@ -199,18 +200,35 @@ FuzzTraits<SimpleURIParams>::Fuzz() -> ParamType
 auto
 FuzzTraits<StandardURLParams>::Fuzz() -> ParamType
 {
-  StandardURLParams p;
-  p.spec() = NS_LITERAL_CSTRING("www.mozilla.org");
-  p.urlType() = nsIStandardURL::URLTYPE_STANDARD;
-  p.hostEncoding() = 1; // nsIStandardURL::eEncoding_ASCII
-  return p;
+  // Direct assemble will lead to a malformed params.
+
+  // StandardURLParams p;
+  // p.spec() = NS_LITERAL_CSTRING("www.mozilla.org");
+  // p.urlType() = nsIStandardURL::URLTYPE_STANDARD;
+  // p.hostEncoding() = 1; // nsIStandardURL::eEncoding_ASCII
+  // return p;
+
+  nsCOMPtr<nsIStandardURL> url = new mozilla::net::nsStandardURL();
+  url->Init(nsIStandardURL::URLTYPE_STANDARD,
+            80,
+            NS_LITERAL_CSTRING("https://mozilla.org"),
+            "UTF-8",
+            nullptr);
+
+  nsCOMPtr<nsIIPCSerializableURI> serializable = do_QueryInterface(url);
+  URIParams p;
+  serializable->Serialize(p);
+  return p.get_StandardURLParams();
 }
 
 auto
 FuzzTraits<URIParams>::Fuzz() -> ParamType
 {
-  //return FuzzTraits<SimplURLParams>::Fuzz();
-  return FuzzTraits<StandardURLParams>::Fuzz();
+  return RandomPick<ParamType>(
+  {
+    FuzzTraits<StandardURLParams>::Fuzz(),
+    //FuzzTraits<SimpleURIParams>::Fuzz(),
+  });
 }
 
 auto
@@ -234,8 +252,11 @@ FuzzTraits<mozilla::net::nsHttpResponseHead>::Fuzz() -> ParamType
 auto
 FuzzTraits<OptionalURIParams>::Fuzz() -> ParamType
 {
-  //return FuzzTraits<void_t>::Fuzz();
-  return FuzzTraits<URIParams>::Fuzz();
+  return RandomPick<ParamType>(
+  {
+    FuzzTraits<URIParams>::Fuzz(),
+    //mozilla::void_t(),
+  });
 }
 
 auto
@@ -266,33 +287,51 @@ FuzzTraits<OriginAttributes>::Fuzz() -> ParamType
 auto
 FuzzTraits<ContentPrincipalInfoOriginNoSuffix>::Fuzz() -> ParamType
 {
-  //return FuzzTraits<void_t>::Fuzz();
-  return FuzzTraits<nsCString>::Fuzz();
+  return RandomPick<ParamType>(
+  {
+    //mozilla::void_t(),
+    nsCString("https://mozilla.org")
+  });
 }
 
 auto
 FuzzTraits<OptionalPrincipalInfo>::Fuzz() -> ParamType
 {
-  //return FuzzTraits<void_t>::Fuzz();
-  return FuzzTraits<PrincipalInfo>::Fuzz();
+  return RandomPick<ParamType>(
+  {
+    FuzzTraits<PrincipalInfo>::Fuzz(),
+    //mozilla::void_t()
+  });
 }
 
 auto
 FuzzTraits<PrincipalInfo>::Fuzz() -> ParamType
 {
-  //return FuzzTraits<ContentPrincipalInfo>::Fuzz();
-  //return FuzzTraits<SystemPrincipalInfo>::Fuzz();
-  //return FuzzTraits<NullPrincipalInfo>::Fuzz();
-  //return FuzzTraits<ExpandedPrincipalInfo>::Fuzz();
-  return FuzzTraits<ContentPrincipalInfo>::Fuzz();
+  return RandomPick<ParamType>(
+  {
+    FuzzTraits<ContentPrincipalInfo>::Fuzz()
+    //FuzzTraits<ContentPrincipalInfo>::Fuzz(),
+    //FuzzTraits<SystemPrincipalInfo>::Fuzz(),
+    //FuzzTraits<NullPrincipalInfo>::Fuzz(),
+    //FuzzTraits<ExpandedPrincipalInfo>::Fuzz(),
+  });
 }
 
 auto
 FuzzTraits<ContentPrincipalInfo>::Fuzz() -> ParamType
 {
-  return ContentPrincipalInfo(FuzzTraits<OriginAttributes>::Fuzz(),
-                              FuzzTraits<ContentPrincipalInfoOriginNoSuffix>::Fuzz(),
-                              FuzzTraits<nsCString>::Fuzz());
+  return RandomPick<ParamType>(
+  {
+    // By spec only.
+    ContentPrincipalInfo(FuzzTraits<OriginAttributes>::Fuzz(),
+                         mozilla::void_t(),
+                         nsCString("https://mozilla.org")),
+
+    // By OA + originNoSuffix.
+    ContentPrincipalInfo(FuzzTraits<OriginAttributes>::Fuzz(),
+                         nsCString("https://mozilla.org"),
+                         nsCString("https://mozilla.org"))
+  });
 }
 
 auto

@@ -55,9 +55,18 @@ EXPORTS.mozilla.net += [
 SOURCES += [
     'AlternateServices.cpp',
     'ASpdySession.cpp',
-    'HttpChannelFuzzer.cpp',
     'nsHttpAuthCache.cpp',
     'nsHttpChannelAuthProvider.cpp', # redefines GetAuthType
+]
+
+# For fuzzing.
+SOURCES += [
+    'HttpChannelFuzzer.cpp',
+]
+EXPORTS.mozilla.fuzzing += [
+    'FuzzTraitsPrimitives.h',
+    'FuzzyCall.h',
+    'HttpChannelFuzzer.h',
 ]
 
 UNIFIED_SOURCES += [
