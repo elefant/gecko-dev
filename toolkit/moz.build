@@ -8,6 +8,7 @@ DIRS += [
     'components',
     'content',
     'forgetaboutsite',
+    'ipdl_fuzzing',
     'locales',
     'modules',
     'mozapps/downloads',

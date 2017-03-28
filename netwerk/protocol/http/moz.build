@@ -58,21 +58,6 @@ SOURCES += [
     'nsHttpChannelAuthProvider.cpp', # redefines GetAuthType
 ]
 
-# For fuzzing.
-SOURCES += [
-    'CamerasFuzzer.cpp',
-    'HttpChannelFuzzer.cpp',
-]
-EXPORTS.mozilla.fuzzing += [
-    'CamerasFuzzer.h',
-    'FuzzTraitsCommon.h',
-    'FuzzTraitsNeckoChannelParams.h',
-    'FuzzTraitsPCameras.h',
-    'FuzzTraitsPrimitives.h',
-    'FuzzyCall.h',
-    'HttpChannelFuzzer.h',
-]
-
 UNIFIED_SOURCES += [
     'AltDataOutputStreamChild.cpp',
     'AltDataOutputStreamParent.cpp',
