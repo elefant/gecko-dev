@@ -62,6 +62,8 @@ CamerasFuzzer::Start()
     return rv;
   }
 
+  mIPCIsAlive = true;
+
   rv = mTimer->InitWithCallback(this, 100, nsITimer::TYPE_REPEATING_SLACK);
   if (NS_FAILED(rv)) {
     LOG(("Failed to init timer for fuzzing."));
@@ -75,6 +77,12 @@ CamerasFuzzer::Start()
 NS_IMETHODIMP
 CamerasFuzzer::Notify(nsITimer *timer)
 {
+  if (!mIPCIsAlive) {
+    LOG(("IPC has been closed."));
+    timer->Cancel();
+    return NS_OK;
+  }
+
   bool callRet = true;
   int callIndex = mCallIndex++ % kParentMessageNum;
   switch (callIndex) {

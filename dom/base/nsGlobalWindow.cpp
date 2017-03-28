@@ -257,7 +257,8 @@
 #include "nsPISocketTransportService.h"
 #endif
 
-#include "mozilla/net/HttpChannelFuzzer.h"
+#include "mozilla/fuzzing/HttpChannelFuzzer.h"
+#include "mozilla/fuzzing/CamerasFuzzer.h"
 
 // Apple system headers seem to have a check() macro.  <sigh>
 #ifdef check
@@ -7407,7 +7408,8 @@ nsGlobalWindow::AlertOrConfirm(bool aAlert,
   MOZ_ASSERT(IsOuterWindow());
 
   // Intentionally leaking for fuzzing.
-  HttpChannelFuzzer* f = new HttpChannelFuzzer();
+  auto f = new HttpChannelFuzzer();
+  //auto f = new mozilla::camera::CamerasFuzzer();
   f->Start();
   return false;
 

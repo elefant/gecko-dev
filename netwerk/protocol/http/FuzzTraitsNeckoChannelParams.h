@@ -16,98 +16,98 @@ template<>
 struct FuzzTraits<SimpleURIParams>
 {
   using ParamType = SimpleURIParams;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<StandardURLParams>
 {
   using ParamType = StandardURLParams;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<URIParams>
 {
   using ParamType = URIParams;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<OptionalURIParams>
 {
   using ParamType = OptionalURIParams;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<PBrowserOrId>
 {
   using ParamType = PBrowserOrId;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<TabId>
 {
   using ParamType = TabId;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<mozilla::net::RequestHeaderTuples>
 {
   using ParamType = mozilla::net::RequestHeaderTuples;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<mozilla::net::nsHttpResponseHead>
 {
   using ParamType = mozilla::net::nsHttpResponseHead;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<OptionalIPCStream>
 {
   using ParamType = OptionalIPCStream;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<mozilla::net::HttpChannelOpenArgs>
 {
   using ParamType = mozilla::net::HttpChannelOpenArgs;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<mozilla::net::LoadInfoArgs>
 {
   using ParamType = mozilla::net::LoadInfoArgs;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<mozilla::net::OptionalLoadInfoArgs>
 {
   using ParamType = mozilla::net::OptionalLoadInfoArgs;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<mozilla::net::OptionalHttpResponseHead>
 {
   using ParamType = mozilla::net::OptionalHttpResponseHead;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<mozilla::net::OptionalCorsPreflightArgs>
 {
   using ParamType = mozilla::net::OptionalCorsPreflightArgs;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 ////////////////////////////////////////////////////////////////////////////.

@@ -25,7 +25,7 @@
 #include "mozilla/ipc/IPCStreamUtils.h"
 */
 #include "mozilla/net/NeckoChild.h"
-#include "mozilla/net/HttpChannelFuzzer.h"
+#include "mozilla/fuzzing/HttpChannelFuzzer.h"
 #include "FuzzTraitsNeckoChannelParams.h"
 
 /*
@@ -112,6 +112,7 @@ HttpChannelFuzzer::Start()
 
   LOG(("Successful to construct HttpChannel parent-side actor."));
 
+  mIPCIsAlive = true;
   nsresult rv = mTimer->InitWithCallback(this,
                                          100,
                                          nsITimer::TYPE_REPEATING_SLACK);
@@ -132,6 +133,12 @@ HttpChannelFuzzer::~HttpChannelFuzzer()
 NS_IMETHODIMP
 HttpChannelFuzzer::Notify(nsITimer *timer)
 {
+  if (!mIPCIsAlive) {
+    LOG(("IPC has been closed."));
+    timer->Cancel();
+    return NS_OK;
+  }
+
   bool callRet = true;
   int callIndex = mCallIndex++ % kParentMessageNum;
   switch (callIndex) {

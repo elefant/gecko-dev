@@ -14,70 +14,70 @@ template<>
 struct FuzzTraits<nsresult>
 {
   using ParamType = nsresult;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<OriginAttributes>
 {
   using ParamType = OriginAttributes;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<nsCString>
 {
   using ParamType = nsCString;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<PrincipalInfo>
 {
   using ParamType = PrincipalInfo;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<OptionalPrincipalInfo>
 {
   using ParamType = OptionalPrincipalInfo;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<ContentPrincipalInfo>
 {
   using ParamType = ContentPrincipalInfo;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<SystemPrincipalInfo>
 {
   using ParamType = SystemPrincipalInfo;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<NullPrincipalInfo>
 {
   using ParamType = NullPrincipalInfo;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<ExpandedPrincipalInfo>
 {
   using ParamType = ExpandedPrincipalInfo;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<ContentPrincipalInfoOriginNoSuffix>
 {
   using ParamType = ContentPrincipalInfoOriginNoSuffix;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 

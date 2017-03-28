@@ -106,10 +106,14 @@ private:
 
   mozilla::ipc::IPCResult RecvSetPriority(const int16_t& aPriority) override { return IPC_OK(); }
 
+  virtual void ActorDestroy(ActorDestroyReason aWhy) override
+  {
+    mIPCIsAlive = false;
+  }
+
   nsCOMPtr<nsITimer> mTimer;
-
   uint32_t mCallIndex;
-
+  bool mIPCIsAlive = false;
   const uint32_t kParentMessageNum = 17;
 };
 

@@ -8,67 +8,73 @@ struct FuzzTraits
   //static ParamType Fuzz() { return ParamType(); }
 };
 
+template<typename ParamType>
+void AutoTypeFuzz(ParamType& aParam)
+{
+  aParam = FuzzTraits<ParamType>::Fuzz();
+}
+
 template<>
 struct FuzzTraits<bool>
 {
   using ParamType = bool;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<int8_t>
 {
   using ParamType = int8_t;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<int16_t>
 {
   using ParamType = int16_t;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<int32_t>
 {
   using ParamType = int32_t;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<int64_t>
 {
   using ParamType = int64_t;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<uint8_t>
 {
   using ParamType = uint8_t;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<uint16_t>
 {
   using ParamType = uint16_t;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<uint32_t>
 {
   using ParamType = uint32_t;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 template<>
 struct FuzzTraits<uint64_t>
 {
   using ParamType = uint64_t;
-  static ParamType Fuzz();
+  inline static ParamType Fuzz();
 };
 
 //////////////////////////////////////////////////////////////

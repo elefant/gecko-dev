@@ -37,6 +37,9 @@ public:
   NS_DECL_ISUPPORTS
   NS_DECL_NSITIMERCALLBACK
 
+private:
+  virtual ~CamerasFuzzer() {}
+
   // IPC messages recevied, received on the PBackground thread
   // these are the actual callbacks with data
   virtual mozilla::ipc::IPCResult RecvDeliverFrame(const CaptureEngine&, const int&,
@@ -58,20 +61,15 @@ public:
   virtual mozilla::ipc::IPCResult RecvReplyFailure(void) override { return IPC_OK(); }
   virtual mozilla::ipc::IPCResult RecvReplySuccess(void) override { return IPC_OK(); }
 
-  // Maybe not important.
-  //virtual void ActorDestroy(ActorDestroyReason aWhy) override;
-
-private:
-  ~CamerasFuzzer() {}
+  virtual void ActorDestroy(ActorDestroyReason aWhy) override
+  {
+    mIPCIsAlive = false;
+  }
 
   nsCOMPtr<nsITimer> mTimer;
-
   uint32_t mCallIndex = 0;
-
+  bool mIPCIsAlive = false;
   const uint32_t kParentMessageNum = 11;
-
-  //bool mIPCIsAlive;
-  //nsCOMPtr<nsIThread> mIPCThread;
 };
 
 } // namespace camera
