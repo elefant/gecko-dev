@@ -8,6 +8,7 @@ SOURCES += [
     'CamerasFuzzer.cpp',
     'FuzzerBase.cpp',
     'HttpChannelFuzzer.cpp',
+    'PBrowserFuzzer.cpp',
 ]
 
 EXPORTS.mozilla.fuzzing += [
@@ -19,6 +20,7 @@ EXPORTS.mozilla.fuzzing += [
     'FuzzTraitsPrimitives.h',
     'FuzzyCall.h',
     'HttpChannelFuzzer.h',
+    'PBrowserFuzzer.h',
 ]
 
 include('/ipc/chromium/chromium-config.mozbuild')
