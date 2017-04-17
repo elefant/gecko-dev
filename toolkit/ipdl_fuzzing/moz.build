@@ -6,11 +6,13 @@
 
 SOURCES += [
     'CamerasFuzzer.cpp',
+    'FuzzerBase.cpp',
     'HttpChannelFuzzer.cpp',
 ]
 
 EXPORTS.mozilla.fuzzing += [
     'CamerasFuzzer.h',
+    'FuzzerBase.h',
     'FuzzTraitsCommon.h',
     'FuzzTraitsNeckoChannelParams.h',
     'FuzzTraitsPCameras.h',

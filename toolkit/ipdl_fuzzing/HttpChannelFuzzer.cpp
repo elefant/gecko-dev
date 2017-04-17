@@ -63,23 +63,12 @@ using namespace mozilla::ipc;
 namespace mozilla {
 namespace net {
 
-NS_IMPL_ISUPPORTS(HttpChannelFuzzer, nsITimerCallback)
-
-extern bool
-WillRedirect(nsHttpResponseHead * response);
-
 //-----------------------------------------------------------------------------
 // HttpChannelFuzzer
 //-----------------------------------------------------------------------------
 
-HttpChannelFuzzer::HttpChannelFuzzer()
-  : mCallIndex(0)
-{
-  mTimer = do_CreateInstance("@mozilla.org/timer;1");
-}
-
 nsresult
-HttpChannelFuzzer::Start()
+HttpChannelFuzzer::CreateParentActor()
 {
   // Singleton: ContentChild, NeckoChild.
   ContentChild* cc = static_cast<ContentChild*>(gNeckoChild->Manager());
@@ -107,63 +96,35 @@ HttpChannelFuzzer::Start()
   }
 
   LOG(("Successful to construct HttpChannel parent-side actor."));
-
-  mIPCIsAlive = true;
-  nsresult rv = mTimer->InitWithCallback(this,
-                                         100,
-                                         nsITimer::TYPE_REPEATING_SLACK);
-  if (NS_FAILED(rv)) {
-    LOG(("Failed to init timer for fuzzing."));
-  }
-
   return NS_OK;
 }
 
-HttpChannelFuzzer::~HttpChannelFuzzer()
+bool
+HttpChannelFuzzer::SendOneIPCMessage()
 {
-  LOG(("Destroying HttpChannelFuzzer @%p\n", this));
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// nsITimerCallback implementation
-NS_IMETHODIMP
-HttpChannelFuzzer::Notify(nsITimer *timer)
-{
-  if (!mIPCIsAlive) {
-    LOG(("IPC has been closed."));
-    timer->Cancel();
-    return NS_OK;
-  }
-
-  bool callRet = true;
   int callIndex = mCallIndex++ % kParentMessageNum;
   switch (callIndex) {
-  case 0:  callRet = FUZZY_CALL1(SetClassOfService, uint32_t); break;
-  case 1:  callRet = FUZZY_CALL1(SetCacheTokenCachedCharset, nsCString); break;
-  case 2:  callRet = FUZZY_CALL2(UpdateAssociatedContentSecurity, int32_t, int32_t); break;
-  case 3:  callRet = FUZZY_CALL0(Suspend); break;
-  case 4:  callRet = FUZZY_CALL0(Resume); break;
-  case 5:  callRet = FUZZY_CALL1(Cancel, nsresult); break;
-  case 6:  callRet = FUZZY_CALL10(Redirect2Verify, nsresult, RequestHeaderTuples, uint32_t, uint32_t, OptionalURIParams, OptionalURIParams, OptionalCorsPreflightArgs, bool, bool, bool); break;
-  case 7:  callRet = FUZZY_CALL0(DocumentChannelCleanup); break;
-  case 8:  callRet = FUZZY_CALL0(MarkOfflineCacheEntryAsForeign); break;
-  //case 9:  callRet = FUZZY_CALL3(DivertOnDataAvailable, nsCString, uint64_t, uint32_t); break;
-  //case 10: callRet = FUZZY_CALL1(DivertOnStopRequest, nsresult); break;
-  //case 11: callRet = FUZZY_CALL0(DivertComplete); break;
-  case 12: callRet = FUZZY_CALL2(RemoveCorsPreflightCacheEntry, URIParams, PrincipalInfo); break;
-  case 13: callRet = FUZZY_CALL0(DeletingChannel); break;
-  //case 14: callRet = FUZZY_CALL(__delete__, this); break;
-  case 15: callRet = FUZZY_CALL0(FinishInterceptedRedirect); break;
-  case 16: callRet = FUZZY_CALL1(SetPriority, int16_t); break;
-  default: LOG(("Unknown call index: %d", callIndex)); break;
+  case 0:  return FUZZY_CALL1(SetClassOfService, uint32_t);
+  case 1:  return FUZZY_CALL1(SetCacheTokenCachedCharset, nsCString);
+  case 2:  return FUZZY_CALL2(UpdateAssociatedContentSecurity, int32_t, int32_t);
+  case 3:  return FUZZY_CALL0(Suspend);
+  case 4:  return FUZZY_CALL0(Resume);
+  case 5:  return FUZZY_CALL1(Cancel, nsresult);
+  case 6:  return FUZZY_CALL10(Redirect2Verify, nsresult, RequestHeaderTuples, uint32_t, uint32_t, OptionalURIParams, OptionalURIParams, OptionalCorsPreflightArgs, bool, bool, bool);
+  case 7:  return FUZZY_CALL0(DocumentChannelCleanup);
+  case 8:  return FUZZY_CALL0(MarkOfflineCacheEntryAsForeign);
+  //case 9:  return FUZZY_CALL3(DivertOnDataAvailable, nsCString, uint64_t, uint32_t);
+  //case 10: return = FUZZY_CALL1(DivertOnStopRequest, nsresult);
+  //case 11: return FUZZY_CALL0(DivertComplete);
+  case 12: return FUZZY_CALL2(RemoveCorsPreflightCacheEntry, URIParams, PrincipalInfo);
+  case 13: return FUZZY_CALL0(DeletingChannel);
+  //case 14: return FUZZY_CALL(__delete__, this);
+  case 15: return FUZZY_CALL0(FinishInterceptedRedirect);
+  case 16: return FUZZY_CALL1(SetPriority, int16_t);
+  default: LOG(("Unknown call index: %d", callIndex));
   }
 
-  if (!callRet) {
-    LOG(("Failed to call %d", callIndex));
-    timer->Cancel();
-  }
-
-  return NS_OK;
+  return true;
 }
 
 } // namespace net

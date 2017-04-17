@@ -22,6 +22,13 @@ struct FuzzTraits<bool>
 };
 
 template<>
+struct FuzzTraits<unsigned long>
+{
+  using ParamType = unsigned long;
+  inline static ParamType Fuzz();
+};
+
+template<>
 struct FuzzTraits<int8_t>
 {
   using ParamType = int8_t;
@@ -84,6 +91,12 @@ auto
 FuzzTraits<bool>::Fuzz() -> ParamType
 {
   return FuzzTraits<uint8_t>::Fuzz() & 0x1;
+}
+
+auto
+FuzzTraits<unsigned long>::Fuzz() -> ParamType
+{
+  return FuzzTraits<uint32_t>::Fuzz() & 0x1;
 }
 
 auto

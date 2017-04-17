@@ -25,88 +25,36 @@
 namespace mozilla {
 namespace camera {
 
-NS_IMPL_ISUPPORTS(CamerasFuzzer, nsITimerCallback)
-
-static nsresult
-CreatePCamerasParentActor(PCamerasChild* aPCamerasChild)
+nsresult
+CamerasFuzzer::CreateParentActor()
 {
-  auto existingBackgroundChild = ipc::BackgroundChild::GetForCurrentThread();
-  if (!existingBackgroundChild) {
-    existingBackgroundChild =
-      ipc::BackgroundChild::SynchronouslyCreateForCurrentThread();
-  }
-  if (!existingBackgroundChild) {
-    LOG(("Failed to get existing PBackgroundChild"));
+  auto pbackgroundChild = EnsurePBackgroundChildForCurrentThread();
+  if (!pbackgroundChild->SendPCamerasConstructor(this)) {
     return NS_ERROR_FAILURE;
   }
-
-  if(!existingBackgroundChild->SendPCamerasConstructor(aPCamerasChild)) {
-    return NS_ERROR_FAILURE;
-  }
-
   return NS_OK;
 }
 
-CamerasFuzzer::CamerasFuzzer()
+bool CamerasFuzzer::SendOneIPCMessage()
 {
-  mTimer = do_CreateInstance("@mozilla.org/timer;1");
-}
-
-nsresult
-CamerasFuzzer::Start()
-{
-  // We don't mind blocking the main thread since we are fuzzing :)
-  nsresult rv = CreatePCamerasParentActor(this);
-  if (NS_FAILED(rv)) {
-    LOG(("Failed to create PCameras parent side actor."));
-    return rv;
-  }
-
-  mIPCIsAlive = true;
-
-  rv = mTimer->InitWithCallback(this, 100, nsITimer::TYPE_REPEATING_SLACK);
-  if (NS_FAILED(rv)) {
-    LOG(("Failed to init timer for fuzzing."));
-  }
-
-  return rv;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// nsITimerCallback implementation
-NS_IMETHODIMP
-CamerasFuzzer::Notify(nsITimer *timer)
-{
-  if (!mIPCIsAlive) {
-    LOG(("IPC has been closed."));
-    timer->Cancel();
-    return NS_OK;
-  }
-
-  bool callRet = true;
   int callIndex = mCallIndex++ % kParentMessageNum;
   switch (callIndex) {
-  case 0:  callRet = FUZZY_CALL1(NumberOfCaptureDevices, CaptureEngine); break;
-  case 1:  callRet = FUZZY_CALL2(NumberOfCapabilities, CaptureEngine, nsCString); break;
-  case 2:  callRet = FUZZY_CALL3(GetCaptureCapability, CaptureEngine, nsCString, int); break;
-  case 3:  callRet = FUZZY_CALL2(GetCaptureDevice, CaptureEngine, int); break;
-  case 4:  callRet = FUZZY_CALL3(AllocateCaptureDevice, CaptureEngine, nsCString, PrincipalInfo); break;
-  case 5:  callRet = FUZZY_CALL2(ReleaseCaptureDevice, CaptureEngine, int); break;
-  case 6:  callRet = FUZZY_CALL3(StartCapture, CaptureEngine, int, VideoCaptureCapability); break;
-  case 7:  callRet = FUZZY_CALL2(StopCapture, CaptureEngine, int); break;
+  case 0:  return FUZZY_CALL1(NumberOfCaptureDevices, CaptureEngine);
+  case 1:  return FUZZY_CALL2(NumberOfCapabilities, CaptureEngine, nsCString);
+  case 2:  return FUZZY_CALL3(GetCaptureCapability, CaptureEngine, nsCString, int);
+  case 3:  return FUZZY_CALL2(GetCaptureDevice, CaptureEngine, int);
+  case 4:  return FUZZY_CALL3(AllocateCaptureDevice, CaptureEngine, nsCString, PrincipalInfo);
+  case 5:  return FUZZY_CALL2(ReleaseCaptureDevice, CaptureEngine, int);
+  case 6:  return FUZZY_CALL3(StartCapture, CaptureEngine, int, VideoCaptureCapability);
+  case 7:  return FUZZY_CALL2(StopCapture, CaptureEngine, int);
   //case 8:  callRet = FUZZY_CALL1(ReleaseFrame, Shmem); break;
-  case 9:  callRet = FUZZY_CALL0(AllDone); break;
-  case 10: callRet = FUZZY_CALL1(EnsureInitialized, CaptureEngine); break;
-  default: LOG(("Unknown call index: %d", callIndex)); break;
+  case 9:  return FUZZY_CALL0(AllDone);
+  case 10: return FUZZY_CALL1(EnsureInitialized, CaptureEngine);
+  default: LOG(("Unknown call index: %d", callIndex));
   }
 
-  if (!callRet) {
-    LOG(("Failed to call %d", callIndex));
-    timer->Cancel();
-  }
-
-  return NS_OK;
+  return true;
 }
 
-}
-}
+} // end of namespace camera
+} // end of namespace mozilla

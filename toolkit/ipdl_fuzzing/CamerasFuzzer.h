@@ -13,7 +13,7 @@
 #include "mozilla/camera/PCamerasChild.h"
 //#include "mozilla/Mutex.h"
 //#include "base/singleton.h"
-#include "nsCOMPtr.h"
+#include "FuzzerBase.h"
 
 // conflicts with #include of scoped_ptr.h
 //#undef FF
@@ -21,24 +21,20 @@
 //#include "webrtc/video_renderer.h"
 //#include "webrtc/modules/video_capture/video_capture_defines.h"
 
-#include "nsITimer.h"
-
 namespace mozilla {
 namespace camera {
 
 class CamerasFuzzer final : public PCamerasChild
-                          , public nsITimerCallback
+                          , public FuzzerBase
 {
 public:
-  CamerasFuzzer();
-
-  nsresult Start();
-
-  NS_DECL_ISUPPORTS
-  NS_DECL_NSITIMERCALLBACK
+  CamerasFuzzer() = default;
 
 private:
-  virtual ~CamerasFuzzer() {}
+  virtual ~CamerasFuzzer() {};
+
+  virtual nsresult CreateParentActor() override;
+  virtual bool SendOneIPCMessage() override;
 
   // IPC messages recevied, received on the PBackground thread
   // these are the actual callbacks with data
@@ -66,9 +62,7 @@ private:
     mIPCIsAlive = false;
   }
 
-  nsCOMPtr<nsITimer> mTimer;
   uint32_t mCallIndex = 0;
-  bool mIPCIsAlive = false;
   const uint32_t kParentMessageNum = 11;
 };
 
