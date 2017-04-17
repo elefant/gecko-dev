@@ -7,9 +7,9 @@
 
 namespace mozilla {
 
-namespace ipc {
-    class PBackgroundChild;
-}
+namespace ipc { class PBackgroundChild; }
+namespace dom { class PContentChild; }
+namespace net { class PNeckoChild; }
 
 class FuzzerBase : public nsITimerCallback
 {
@@ -35,7 +35,10 @@ protected:
 protected:
   virtual ~FuzzerBase() {};
 
+  // Utilities for parent protocols (not only top level ones.)
   ipc::PBackgroundChild* EnsurePBackgroundChildForCurrentThread();
+  dom::PContentChild* EnsurePContentChild();
+  net::PNeckoChild* EnsurePNeckoChild();
 
 private:
   // parentProtocol->SendPFooConstructor().

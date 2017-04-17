@@ -39,17 +39,17 @@ bool CamerasFuzzer::SendOneIPCMessage()
 {
   int callIndex = mCallIndex++ % kParentMessageNum;
   switch (callIndex) {
-  case 0:  return FUZZY_CALL1(NumberOfCaptureDevices, CaptureEngine);
-  case 1:  return FUZZY_CALL2(NumberOfCapabilities, CaptureEngine, nsCString);
-  case 2:  return FUZZY_CALL3(GetCaptureCapability, CaptureEngine, nsCString, int);
-  case 3:  return FUZZY_CALL2(GetCaptureDevice, CaptureEngine, int);
-  case 4:  return FUZZY_CALL3(AllocateCaptureDevice, CaptureEngine, nsCString, PrincipalInfo);
-  case 5:  return FUZZY_CALL2(ReleaseCaptureDevice, CaptureEngine, int);
-  case 6:  return FUZZY_CALL3(StartCapture, CaptureEngine, int, VideoCaptureCapability);
-  case 7:  return FUZZY_CALL2(StopCapture, CaptureEngine, int);
+  case 0:  return FUZZY_CALL1(this, NumberOfCaptureDevices, CaptureEngine);
+  case 1:  return FUZZY_CALL2(this, NumberOfCapabilities, CaptureEngine, nsCString);
+  case 2:  return FUZZY_CALL3(this, GetCaptureCapability, CaptureEngine, nsCString, int);
+  case 3:  return FUZZY_CALL2(this, GetCaptureDevice, CaptureEngine, int);
+  case 4:  return FUZZY_CALL3(this, AllocateCaptureDevice, CaptureEngine, nsCString, PrincipalInfo);
+  case 5:  return FUZZY_CALL2(this, ReleaseCaptureDevice, CaptureEngine, int);
+  case 6:  return FUZZY_CALL3(this, StartCapture, CaptureEngine, int, VideoCaptureCapability);
+  case 7:  return FUZZY_CALL2(this, StopCapture, CaptureEngine, int);
   //case 8:  callRet = FUZZY_CALL1(ReleaseFrame, Shmem); break;
-  case 9:  return FUZZY_CALL0(AllDone);
-  case 10: return FUZZY_CALL1(EnsureInitialized, CaptureEngine);
+  case 9:  return FUZZY_CALL0(this, AllDone);
+  case 10: return FUZZY_CALL1(this, EnsureInitialized, CaptureEngine);
   default: LOG(("Unknown call index: %d", callIndex));
   }
 

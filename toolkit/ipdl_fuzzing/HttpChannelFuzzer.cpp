@@ -104,23 +104,23 @@ HttpChannelFuzzer::SendOneIPCMessage()
 {
   int callIndex = mCallIndex++ % kParentMessageNum;
   switch (callIndex) {
-  case 0:  return FUZZY_CALL1(SetClassOfService, uint32_t);
-  case 1:  return FUZZY_CALL1(SetCacheTokenCachedCharset, nsCString);
-  case 2:  return FUZZY_CALL2(UpdateAssociatedContentSecurity, int32_t, int32_t);
-  case 3:  return FUZZY_CALL0(Suspend);
-  case 4:  return FUZZY_CALL0(Resume);
-  case 5:  return FUZZY_CALL1(Cancel, nsresult);
-  case 6:  return FUZZY_CALL10(Redirect2Verify, nsresult, RequestHeaderTuples, uint32_t, uint32_t, OptionalURIParams, OptionalURIParams, OptionalCorsPreflightArgs, bool, bool, bool);
-  case 7:  return FUZZY_CALL0(DocumentChannelCleanup);
-  case 8:  return FUZZY_CALL0(MarkOfflineCacheEntryAsForeign);
+  case 0:  return FUZZY_CALL1(this, SetClassOfService, uint32_t);
+  case 1:  return FUZZY_CALL1(this, SetCacheTokenCachedCharset, nsCString);
+  case 2:  return FUZZY_CALL2(this, UpdateAssociatedContentSecurity, int32_t, int32_t);
+  case 3:  return FUZZY_CALL0(this, Suspend);
+  case 4:  return FUZZY_CALL0(this, Resume);
+  case 5:  return FUZZY_CALL1(this, Cancel, nsresult);
+  case 6:  return FUZZY_CALL10(this, Redirect2Verify, nsresult, RequestHeaderTuples, uint32_t, uint32_t, OptionalURIParams, OptionalURIParams, OptionalCorsPreflightArgs, bool, bool, bool);
+  case 7:  return FUZZY_CALL0(this, DocumentChannelCleanup);
+  case 8:  return FUZZY_CALL0(this, MarkOfflineCacheEntryAsForeign);
   //case 9:  return FUZZY_CALL3(DivertOnDataAvailable, nsCString, uint64_t, uint32_t);
   //case 10: return = FUZZY_CALL1(DivertOnStopRequest, nsresult);
   //case 11: return FUZZY_CALL0(DivertComplete);
-  case 12: return FUZZY_CALL2(RemoveCorsPreflightCacheEntry, URIParams, PrincipalInfo);
-  case 13: return FUZZY_CALL0(DeletingChannel);
+  case 12: return FUZZY_CALL2(this, RemoveCorsPreflightCacheEntry, URIParams, PrincipalInfo);
+  case 13: return FUZZY_CALL0(this, DeletingChannel);
   //case 14: return FUZZY_CALL(__delete__, this);
-  case 15: return FUZZY_CALL0(FinishInterceptedRedirect);
-  case 16: return FUZZY_CALL1(SetPriority, int16_t);
+  case 15: return FUZZY_CALL0(this, FinishInterceptedRedirect);
+  case 16: return FUZZY_CALL1(this, SetPriority, int16_t);
   default: LOG(("Unknown call index: %d", callIndex));
   }
 

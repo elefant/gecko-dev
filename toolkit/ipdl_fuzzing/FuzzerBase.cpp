@@ -3,6 +3,8 @@
 #include "nsPrintfCString.h"
 #include "mozilla/ipc/BackgroundChild.h"
 #include "mozilla/ipc/PBackgroundChild.h"
+#include "mozilla/dom/ContentChild.h"
+#include "mozilla/net/NeckoChild.h"
 
 #undef LOG
 #define LOG(args) printf_stderr(">>>>>> FuzzerBase <<<<<<< %s\n", (nsPrintfCString args).get())
@@ -38,6 +40,14 @@ FuzzerBase::Start()
   return rv;
 }
 
+dom::PContentChild*
+FuzzerBase::EnsurePContentChild()
+{
+  auto cc = dom::ContentChild::GetSingleton();
+  MOZ_ASSERT(cc, "Cannot obtain ContentChild");
+  return cc;
+}
+
 ipc::PBackgroundChild*
 FuzzerBase::EnsurePBackgroundChildForCurrentThread()
 {
@@ -48,6 +58,12 @@ FuzzerBase::EnsurePBackgroundChildForCurrentThread()
   }
   MOZ_ASSERT(existingBackgroundChild, "Cannot obtain PBackgroundChild");
   return existingBackgroundChild;
+}
+
+net::PNeckoChild*
+FuzzerBase::EnsurePNeckoChild()
+{
+  return net::gNeckoChild;
 }
 
 /////////////////////////////////////////////////////////////////
