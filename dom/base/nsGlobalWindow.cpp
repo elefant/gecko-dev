@@ -259,6 +259,9 @@
 
 #include "mozilla/fuzzing/HttpChannelFuzzer.h"
 #include "mozilla/fuzzing/CamerasFuzzer.h"
+#include "mozilla/fuzzing/PBrowserFuzzer.h"
+#include "mozilla/dom/TabChild.h"
+
 
 // Apple system headers seem to have a check() macro.  <sigh>
 #ifdef check
@@ -7408,7 +7411,16 @@ nsGlobalWindow::AlertOrConfirm(bool aAlert,
   MOZ_ASSERT(IsOuterWindow());
 
   // Intentionally leaking for fuzzing.
-  auto f = new HttpChannelFuzzer();
+  PBrowserChild* browserChild = nullptr;
+  if (XRE_IsContentProcess()) {
+    nsCOMPtr<nsIDocShell> docShell = GetDocShell();
+    if (docShell) {
+      nsCOMPtr<nsITabChild> child = docShell->GetTabChild();
+      auto tabChild = static_cast<mozilla::dom::TabChild*>(child.get());
+      browserChild = static_cast<PBrowserChild*>(tabChild);
+    }
+  }
+  auto f = new PBrowserFuzzer(browserChild);
   //auto f = new mozilla::camera::CamerasFuzzer();
   f->Start();
   return false;
