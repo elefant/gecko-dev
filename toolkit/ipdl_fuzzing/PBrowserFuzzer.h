@@ -20,8 +20,8 @@ private:
   }
   */
 
-  uint32_t mCallIndex;
-  const uint32_t kParentMessageNum = 17;
+  uint32_t mCallIndex = 0;
+  //const uint32_t kParentMessageNum = 17;
 
   dom::PBrowserChild* mPBrowserChild;
 

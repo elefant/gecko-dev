@@ -32,6 +32,13 @@ struct FuzzTraits<nsCString>
 };
 
 template<>
+struct FuzzTraits<nsString>
+{
+  using ParamType = nsString;
+  inline static ParamType Fuzz();
+};
+
+template<>
 struct FuzzTraits<PrincipalInfo>
 {
   using ParamType = PrincipalInfo;
@@ -94,6 +101,12 @@ auto
 FuzzTraits<nsCString>::Fuzz() -> ParamType
 {
   return NS_LITERAL_CSTRING("CatchMeIfYouCan");
+}
+
+auto
+FuzzTraits<nsString>::Fuzz() -> ParamType
+{
+  return NS_LITERAL_STRING("CatchMeIfYouCan");
 }
 
 auto
