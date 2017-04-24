@@ -3,6 +3,7 @@
 
 #include "FuzzTraitsPrimitives.h"
 #include "FuzzTraitsCommon.h"
+#include "FuzzTraitsPBrowser.h"
 
 #undef LOG
 #define LOG(args) printf_stderr(">>>>>> PBrowserFuzzer <<<<<<< %s\n", (nsPrintfCString args).get())
@@ -41,12 +42,12 @@ PBrowserFuzzer::SendOneIPCMessage()
   //case 10: return FUZZY_CALL1(mPBrowserChild, Event, RemoteDOMEvent);
   //case 11: return FUZZY_CALL1(mPBrowserChild, SyncMessage, nsString, ClonedMessageData, CpowEntry[], Principal, &StructuredCloneData[]);
   //case 12: return FUZZY_CALL3(mPBrowserChild, NotifyIMEFocus, ContentCache, IMENotification, &nsIMEUpdatePreference);
-  //case 13: return FUZZY_CALL2(mPBrowserChild, NotifyIMETextChange, ContentCache, IMENotification);
-  //case 14: return FUZZY_CALL2(mPBrowserChild, NotifyIMECompositionUpdate, ContentCache, IMENotification);
-  //case 15: return FUZZY_CALL2(mPBrowserChild, NotifyIMESelection, ContentCache, IMENotification);
-  //case 16: return FUZZY_CALL2(mPBrowserChild, UpdateContentCache, ContentCache);
-  //case 17: return FUZZY_CALL2(mPBrowserChild, NotifyIMEMouseButtonEvent, IMENotification, &bool);
-  //case 18: return FUZZY_CALL2(mPBrowserChild, NotifyIMEPositionChange, ContentCache, IMENotification);
+  case 13: return FUZZY_CALL2(mPBrowserChild, NotifyIMETextChange, ContentCache, IMENotification);
+  case 14: return FUZZY_CALL2(mPBrowserChild, NotifyIMECompositionUpdate, ContentCache, IMENotification);
+  case 15: return FUZZY_CALL2(mPBrowserChild, NotifyIMESelection, ContentCache, IMENotification);
+  case 16: return FUZZY_CALL1(mPBrowserChild, UpdateContentCache, ContentCache);
+  case 17: return FUZZY_CALL2(mPBrowserChild, NotifyIMEMouseButtonEvent, IMENotification, bool&);
+  case 18: return FUZZY_CALL2(mPBrowserChild, NotifyIMEPositionChange, ContentCache, IMENotification);
   case 19: return FUZZY_CALL3(mPBrowserChild, RequestIMEToCommitComposition, bool, bool&, nsString&);
   //case 20: return FUZZY_CALL2(mPBrowserChild, OnEventNeedingAckHandled, EventMessage);
   //case 21: return FUZZY_CALL2(mPBrowserChild, StartPluginIME, WidgetKeyboardEvent, int32_t, int32_t, nsString&);

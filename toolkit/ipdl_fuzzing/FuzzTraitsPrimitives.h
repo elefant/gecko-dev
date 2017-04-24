@@ -19,6 +19,7 @@ struct FuzzTraits
     auto p = FuzzTraits<ParamTypeNoRef>::Fuzz();
     // The use of this Fuzz() function is managed so it wouldn't
     // be abused.
+    // TODO: Fix the "-Wreturn-stack-address" warning.
     return &p;
   }
 };
